@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
   # Event Ordering App UI Flow
 
@@ -9,3 +10,6 @@
 
   Run `npm run dev` to start the development server.
   
+=======
+# QueueFest
+>>>>>>> 00abe5e559df12fc83068aa054151c9ab00a2030
