@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { BottomNav } from '../components/BottomNav';
 import { VendorCard } from '../components/VendorCard';
 import { foodTrucks, bars } from '../data/mockData';
-import { Search } from 'lucide-react';
+import { Search, ChevronLeft } from 'lucide-react';
+import { useNavigate } from '../utils/navigation';
 
 export function HomeScreen() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const service = localStorage.getItem('selectedService') || 'food trucks';
   const vendors = service === 'bars' ? bars : foodTrucks;
@@ -18,7 +20,15 @@ export function HomeScreen() {
     <div className="min-h-screen bg-gray-50 pb-24">
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="p-4">
-          <h1 className="text-2xl font-bold mb-4 capitalize">{service}</h1>
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={() => navigate('/selection')}
+              className="w-10 h-10 -ml-2 rounded-full flex items-center justify-center hover:bg-gray-100"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <h1 className="text-2xl font-bold capitalize m-0">{service}</h1>
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
