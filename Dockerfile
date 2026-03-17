@@ -4,9 +4,9 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy dependency files first for better cache utilization
-COPY package.json package-lock.json* ./
+COPY package.json ./
 
-RUN npm ci --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
