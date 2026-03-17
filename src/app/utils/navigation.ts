@@ -2,7 +2,15 @@ import { useState, useEffect } from 'react';
 
 // Simple navigation helper for the app
 export function useNavigate() {
-  return (path: string) => {
+  return (path: string | number) => {
+    if (typeof path === 'number') {
+      window.history.go(path);
+      setTimeout(() => {
+        window.dispatchEvent(new Event('popstate'));
+        window.dispatchEvent(new Event('navigation'));
+      }, 50);
+      return;
+    }
     if ((window as any).navigateTo) {
       (window as any).navigateTo(path);
     } else {
