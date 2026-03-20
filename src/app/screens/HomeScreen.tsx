@@ -21,6 +21,7 @@ export function HomeScreen() {
     try {
       const data = await getPuestos();
       setPuestos(data);
+      localStorage.setItem('puestos', JSON.stringify(data));
     } catch (err) {
       console.error(err);
     } finally {
