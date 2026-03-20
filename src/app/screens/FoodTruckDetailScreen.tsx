@@ -1,117 +1,111 @@
-import { useState } from 'react';
+// FoodTruckDetailScreen.tsx
+// Pantalla de detalle de un food truck
+// Carga los productos reales desde la BD via API
+// El usuario puede añadir productos al carrito y ver el tiempo de espera real
+
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from '../utils/navigation';
-import { ChevronLeft, Clock, Tag } from 'lucide-react';
-import { foodTrucks } from '../data/mockData';
+import { ChevronLeft, Clock } from 'lucide-react';
 import { MenuItem } from '../components/MenuItem';
 import { StickyBottomCTA } from '../components/StickyBottomCTA';
 import { useCart } from '../context/CartContext';
-import { StatusBadge } from '../components/StatusBadge';
+import { getProductos } from '../api';
 
 export function FoodTruckDetailScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addItem, getTotal, getItemCount } = useCart();
-  const [localTotal, setLocalTotal] = useState(0);
-  const [localCount, setLocalCount] = useState(0);
+  const [productos, setProductos] = useState<any[]>([]);
+  const [puesto, setPuesto] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const truck = foodTrucks.find(t => t.id === id);
+  useEffect(() => {
+    const cargar = async () => {
+      try {
+        const prods = await getProductos(Number(id));
+        setProductos(prods);
+        const puestosGuardados = JSON.parse(localStorage.getItem('puestos') || '[]');
+        const p = puestosGuardados.find((p: any) => String(p.id) === String(id));
+        setPuesto(p || { nombre: 'Food Truck', tiempo_servicio_medio: 0, abierto: true });
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    cargar();
+  }, [id]);
 
-  if (!truck) {
-    return <div>Food truck not found</div>;
-  }
+const handleAddItem = (item: any) => {
+  addItem({
+    id: String(item.id),
+    name: item.name,
+    price: Number(item.price),
+    quantity: 1,
+    vendorId: String(id),
+    vendorName: puesto?.nombre || 'Food Truck',
+    vendorType: 'food-truck'
+  });
+};
 
-  const queueStatus = truck.waitTime < 10 ? 'fast' : truck.waitTime > 25 ? 'saturated' : null;
-
-  const handleAddItem = (item: any) => {
-    addItem({
-      ...item,
-      vendorId: truck.id,
-      vendorName: truck.name,
-      vendorType: 'food-truck'
-    });
-    setLocalTotal(prev => prev + item.price);
-    setLocalCount(prev => prev + 1);
-  };
-
-  const handleViewCart = () => {
-    navigate('/cart');
-  };
-
-  const totalItems = getItemCount() + localCount;
-  const totalPrice = getTotal() + localTotal;
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-gray-500">Cargando...</p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 pb-28">
-      <div className="relative h-64">
-        <img src={truck.image} alt={truck.name} className="w-full h-full object-cover" />
+      <div className="relative h-48 bg-gradient-to-br from-orange-500 to-red-500">
         <button
           onClick={() => navigate(-1)}
           className="absolute top-4 left-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg"
         >
           <ChevronLeft className="w-6 h-6" />
         </button>
-        <div className="absolute top-4 right-4 flex gap-2">
-          {truck.hasOffer && <StatusBadge type="offer" />}
-          {queueStatus && <StatusBadge type={queueStatus} />}
-        </div>
       </div>
 
       <div className="bg-white rounded-t-3xl -mt-6 relative z-10 p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold mb-1">{truck.name}</h1>
-            <p className="text-gray-600">{truck.cuisine}</p>
+            <h1 className="text-2xl font-bold mb-1">{puesto?.nombre}</h1>
+            <p className="text-gray-600">Food Truck</p>
           </div>
-          <div className={`px-3 py-1 rounded-full text-sm font-medium ${truck.isOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-            {truck.isOpen ? 'Open' : 'Closed'}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 mb-4">
-          <div className="flex items-center gap-2 text-gray-700">
-            <Clock className="w-5 h-5" />
-            <span>{truck.waitTime} min wait</span>
+          <div className={`px-3 py-1 rounded-full text-sm font-medium ${puesto?.abierto ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            {puesto?.abierto ? 'Abierto' : 'Cerrado'}
           </div>
         </div>
 
-        {truck.hasOffer && (
-          <button
-            onClick={() => navigate(`/food-truck/${id}/offers`)}
-            className="w-full mb-6 p-4 bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-xl flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <Tag className="w-5 h-5 text-green-600" />
-              <span className="font-medium text-green-700">View Special Offers</span>
-            </div>
-            <ChevronLeft className="w-5 h-5 rotate-180 text-green-600" />
-          </button>
-        )}
+        <div className="flex items-center gap-2 text-gray-700 mb-6">
+          <Clock className="w-5 h-5" />
+          <span>{puesto?.tiempo_servicio_medio} min de espera</span>
+        </div>
 
-        <div className="space-y-6">
-          {truck.categories.map((category) => (
-            <div key={category.name}>
-              <h2 className="text-xl font-bold mb-3">{category.name}</h2>
-              <div className="bg-white rounded-xl">
-                {category.items.map((item) => (
-                  <MenuItem
-                    key={item.id}
-                    id={item.id}
-                    name={item.name}
-                    description={item.description}
-                    price={item.price}
-                    onAdd={handleAddItem}
-                  />
-                ))}
-              </div>
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold">Carta</h2>
+          {productos.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No hay productos disponibles</p>
+          ) : (
+            <div className="bg-white rounded-xl">
+              {productos.map((item) => (
+                <MenuItem
+                  key={item.id}
+                  id={String(item.id)}
+                  name={item.nombre}
+                  description={item.descripcion}
+                  price={Number(item.precio_dinamico || item.precio)}                  
+                  onAdd={handleAddItem}
+                />
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </div>
 
       <StickyBottomCTA
-        itemCount={totalItems}
-        total={totalPrice}
-        onClick={handleViewCart}
+        itemCount={getItemCount()}
+        total={getTotal()}
+        onClick={() => navigate('/cart')}
       />
     </div>
   );

@@ -40,14 +40,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const addItem = (item: CartItem) => {
+    // Forzar precio a número por si viene como string desde MySQL
+    const sanitizedItem = {
+      ...item,
+      price: Number(item.price),
+      quantity: item.quantity || 1
+    };
     setItems((prev) => {
-      const existingIndex = prev.findIndex((i) => i.id === item.id && i.vendorId === item.vendorId);
+      const existingIndex = prev.findIndex((i) => i.id === sanitizedItem.id && i.vendorId === sanitizedItem.vendorId);
       if (existingIndex >= 0) {
         const updated = [...prev];
-        updated[existingIndex].quantity += item.quantity;
+        updated[existingIndex].quantity += sanitizedItem.quantity;
         return updated;
       }
-      return [...prev, item];
+      return [...prev, sanitizedItem];
     });
   };
 
