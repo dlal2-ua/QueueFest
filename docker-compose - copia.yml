@@ -1,0 +1,13 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    image: queuefest-frontend:latest
+    container_name: queuefest-frontend
+    ports:
+      - "3000:80"
+    restart: unless-stopped

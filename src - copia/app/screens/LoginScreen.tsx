@@ -1,55 +1,19 @@
-// LoginScreen.tsx
-// Pantalla de inicio de sesión
-// Llama a la API real con email y contraseña
-// Si el login es correcto guarda el token y redirige según el rol:
-// - administrador → /admin
-// - gestor → /gestor  
-// - operador → /operador
-// - usuario → /selection
-
 import { useState } from 'react';
 import { useNavigate } from '../utils/navigation';
-import { useAuth } from '../context/AuthContext';
-import { login as loginApi } from '../api';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'motion/react';
-import { toast } from 'sonner';
 
 export function LoginScreen() {
   const navigate = useNavigate();
-  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
 
- const handleLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
-
-  // Login temporal con usuarios de prueba mientras el puerto 3000 no está abierto
-  // Cuando el backend esté accesible esto se sustituye por la llamada real a la API
-  const usuariosPrueba: Record<string, any> = {
-    'admin@queuefest.com':    { id: 1, email: 'admin@queuefest.com',    nombre: 'Admin QueueFest',  rol: 'administrador' },
-    'gestor@queuefest.com':   { id: 2, email: 'gestor@queuefest.com',   nombre: 'Gestor Operativo', rol: 'gestor' },
-    'operador@queuefest.com': { id: 3, email: 'operador@queuefest.com', nombre: 'Operador Barra 1', rol: 'operador' },
-    'usuario@queuefest.com':  { id: 4, email: 'usuario@queuefest.com',  nombre: 'Usuario Final',    rol: 'usuario' },
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Mock login - just navigate to selection
+    navigate('/selection');
   };
-
-  setTimeout(() => {
-    const user = usuariosPrueba[email];
-    if (user && password === 'password123') {
-      login('token-prueba', user);
-      if (user.rol === 'administrador') navigate('/admin');
-      else if (user.rol === 'gestor') navigate('/gestor');
-      else if (user.rol === 'operador') navigate('/operador');
-      else navigate('/selection');
-    } else {
-      toast.error('Email o contraseña incorrectos');
-    }
-    setLoading(false);
-  }, 500);
-};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 flex items-center justify-center p-6">
@@ -59,8 +23,8 @@ export function LoginScreen() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2">QueueFest</h1>
-          <p className="text-gray-600">Inicia sesión para continuar</p>
+          <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
+          <p className="text-gray-600">Sign in to continue ordering</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
@@ -72,7 +36,7 @@ export function LoginScreen() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@email.com"
+                placeholder="your@email.com"
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
                 required
               />
@@ -80,7 +44,7 @@ export function LoginScreen() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Contraseña</label>
+            <label className="block text-sm font-medium mb-2">Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -102,34 +66,51 @@ export function LoginScreen() {
           </div>
 
           <div className="text-right">
-            <button
-              type="button"
+            <button 
+              type="button" 
               onClick={() => navigate('/forgot-password')}
               className="text-sm text-orange-600 hover:text-orange-700"
             >
-              ¿Olvidaste tu contraseña?
+              Forgot password?
             </button>
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-black text-white py-3 rounded-xl font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
+            className="w-full bg-black text-white py-3 rounded-xl font-medium hover:bg-gray-800 transition-colors"
           >
-            {loading ? 'Entrando...' : 'Iniciar sesión'}
+            Login
           </button>
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-gray-600">
-            ¿No tienes cuenta?{' '}
-            <button
+          <p className="text-gray-600 mb-4">
+            Don't have an account?{' '}
+            <button 
               onClick={() => navigate('/register')}
               className="text-orange-600 font-medium hover:text-orange-700"
             >
-              Regístrate
+              Register
             </button>
           </p>
+          
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-gradient-to-br from-orange-50 to-red-50 text-gray-500">Or continue with</span>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button className="flex-1 py-3 border border-gray-300 rounded-xl font-medium hover:bg-white transition-colors">
+              Google
+            </button>
+            <button className="flex-1 py-3 border border-gray-300 rounded-xl font-medium hover:bg-white transition-colors">
+              Apple
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>
