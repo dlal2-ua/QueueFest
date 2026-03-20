@@ -23,32 +23,21 @@ export function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
- const handleLogin = async (e: React.FormEvent) => {
+const handleLogin = async (e: React.FormEvent) => {
   e.preventDefault();
   setLoading(true);
-
-  // Login temporal con usuarios de prueba mientras el puerto 3000 no está abierto
-  // Cuando el backend esté accesible esto se sustituye por la llamada real a la API
-  const usuariosPrueba: Record<string, any> = {
-    'admin@queuefest.com':    { id: 1, email: 'admin@queuefest.com',    nombre: 'Admin QueueFest',  rol: 'administrador' },
-    'gestor@queuefest.com':   { id: 2, email: 'gestor@queuefest.com',   nombre: 'Gestor Operativo', rol: 'gestor' },
-    'operador@queuefest.com': { id: 3, email: 'operador@queuefest.com', nombre: 'Operador Barra 1', rol: 'operador' },
-    'usuario@queuefest.com':  { id: 4, email: 'usuario@queuefest.com',  nombre: 'Usuario Final',    rol: 'usuario' },
-  };
-
-  setTimeout(() => {
-    const user = usuariosPrueba[email];
-    if (user && password === 'password123') {
-      login('token-prueba', user);
-      if (user.rol === 'administrador') navigate('/admin');
-      else if (user.rol === 'gestor') navigate('/gestor');
-      else if (user.rol === 'operador') navigate('/operador');
-      else navigate('/selection');
-    } else {
-      toast.error('Email o contraseña incorrectos');
-    }
+  try {
+    const data = await loginApi(email, password);
+    login(data.token, data.user);
+    if (data.user.rol === 'administrador') navigate('/admin');
+    else if (data.user.rol === 'gestor') navigate('/gestor');
+    else if (data.user.rol === 'operador') navigate('/operador');
+    else navigate('/selection');
+  } catch (err) {
+    toast.error('Email o contrasena incorrectos');
+  } finally {
     setLoading(false);
-  }, 500);
+  }
 };
 
   return (
