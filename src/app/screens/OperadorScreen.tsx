@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getPedidosPuesto, actualizarEstadoPedido } from '../api';
+import { getPedidosPuesto, cambiarEstadoPedido } from '../api';
 
 export function OperadorScreen() {
   const { user, logout } = useAuth();
@@ -30,7 +30,7 @@ export function OperadorScreen() {
   }, []);
 
   const cambiarEstado = async (pedidoId: number, estado: string) => {
-    await actualizarEstadoPedido(pedidoId, estado);
+    await cambiarEstadoPedido(pedidoId, estado);
     cargarPedidos();
   };
 

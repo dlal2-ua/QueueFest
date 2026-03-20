@@ -68,6 +68,13 @@ export const getMisPedidos = async () => {
     return res.json();
 };
 
+// Obtiene el detalle completo de un pedido (para TrackOrderScreen)
+export const getPedido = async (pedidoId: number) => {
+    const res = await fetch(`${API_URL}/pedidos/${pedidoId}`, { headers: headers() });
+    if (!res.ok) return null; // Return null instead of throwing — TrackOrderScreen handles this as "not found"
+    return res.json();
+};
+
 // Operador: obtiene los pedidos de su puesto
 export const getPedidosPuesto = async (puestoId: number) => {
     const res = await fetch(`${API_URL}/pedidos/puesto/${puestoId}`, { headers: headers() });
@@ -75,12 +82,31 @@ export const getPedidosPuesto = async (puestoId: number) => {
 };
 
 // Operador: actualiza el estado de un pedido (confirmado, preparando, listo...)
-export const actualizarEstadoPedido = async (pedidoId: number, estado: string) => {
+export const cambiarEstadoPedido = async (pedidoId: number, estado: string) => {
     const res = await fetch(`${API_URL}/pedidos/${pedidoId}/estado`, {
         method: 'PATCH',
         headers: headers(),
         body: JSON.stringify({ estado })
     });
+    if (!res.ok) throw new Error('Error actualizando pedido');
+    return res.json();
+};
+
+// ─── PUSH NOTIFICATIONS ───
+export const getVapidPublicKey = async () => {
+    const res = await fetch(`${API_URL}/notifications/public-key`);
+    if (!res.ok) throw new Error('No se pudo obtener VAPID Key');
+    const data = await res.json();
+    return data.publicKey;
+};
+
+export const subscribeToPushNotifications = async (subscription: PushSubscription) => {
+    const res = await fetch(`${API_URL}/notifications/subscribe`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(subscription)
+    });
+    if (!res.ok) throw new Error('Failed to save subscription');
     return res.json();
 };
 

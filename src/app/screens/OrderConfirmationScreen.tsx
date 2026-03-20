@@ -2,48 +2,29 @@ import { useNavigate } from '../utils/navigation';
 import { CheckCircle, Clock } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { motion } from 'motion/react';
+import { useEffect } from 'react';
+import { PickupQR } from '../components/PickupQR';
 
 export function OrderConfirmationScreen() {
   const navigate = useNavigate();
   const { clearCart } = useCart();
-  const orderNumber = Math.floor(1000 + Math.random() * 9000).toFixed(0);
+
+  // Extract the real order ID from the URL: ?order=123
+  const params = new URLSearchParams(window.location.search);
+  const orderNumber = params.get('order') || 'Desconocido';
+
+  useEffect(() => {
+    // We clear the cart here instead of relying on handleContinue
+    clearCart();
+  }, [clearCart]);
 
   const handleContinue = () => {
-    clearCart();
     navigate('/home');
   };
 
   const handleTrackOrder = () => {
-    // Save current order for tracking
-    const currentOrder = {
-      orderNumber: orderNumber,
-      vendor: 'QueueFest Vendor',
-      items: [
-        { name: 'Sample Item 1', quantity: 2 },
-        { name: 'Sample Item 2', quantity: 1 }
-      ],
-      total: 23.40,
-      status: 'in-queue',
-      estimatedTime: 15
-    };
-    localStorage.setItem('currentOrder', JSON.stringify(currentOrder));
-    
-    // Save order to history
-    const existingOrders = localStorage.getItem('orderHistory');
-    const orders = existingOrders ? JSON.parse(existingOrders) : [];
-    
-    const newOrder = {
-      id: Date.now().toString(),
-      orderNumber: orderNumber,
-      date: new Date().toISOString().split('T')[0],
-      vendor: 'QueueFest Vendor',
-      total: 23.40,
-      status: 'preparing'
-    };
-    
-    orders.unshift(newOrder);
-    localStorage.setItem('orderHistory', JSON.stringify(orders));
-    
+    // Navigate directly to the tracking screen with the real order ID 
+    // It will fetch the real data from the backend.
     navigate(`/track-order/${orderNumber}`);
   };
 
@@ -81,12 +62,12 @@ export function OrderConfirmationScreen() {
             </div>
           </div>
 
-          <div className="bg-gray-100 rounded-2xl p-8 mb-6">
-            <div className="w-32 h-32 mx-auto bg-white rounded-xl flex items-center justify-center">
-              <div className="text-6xl">📱</div>
+          {/* QR real de recogida */}
+          {orderNumber !== 'Desconocido' && (
+            <div className="bg-gray-50 rounded-2xl p-6 mb-6">
+              <PickupQR orderId={Number(orderNumber)} />
             </div>
-            <p className="text-sm text-gray-600 mt-4">Show this QR at pickup</p>
-          </div>
+          )}
 
           <div className="space-y-3">
             <button

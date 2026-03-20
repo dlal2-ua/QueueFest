@@ -9,8 +9,10 @@ import { VendorCard } from '../components/VendorCard';
 import { Search, ChevronLeft } from 'lucide-react';
 import { useNavigate } from '../utils/navigation';
 import { getPuestos } from '../api';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 export function HomeScreen() {
+  usePushNotifications();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [puestos, setPuestos] = useState<any[]>([]);

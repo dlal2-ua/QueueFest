@@ -4,20 +4,52 @@ import { ChevronLeft, CreditCard, Smartphone, MapPin, Clock } from 'lucide-react
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../utils/formatPrice';
 import { useLanguage } from '../context/LanguageContext';
+import { crearPedido } from '../api';
+import { toast } from 'sonner';
 
 export function PaymentScreen() {
   const navigate = useNavigate();
   const { getTotal, items } = useCart();
   const [selectedPayment, setSelectedPayment] = useState<'card' | 'apple' | 'google'>('card');
   const [pickupLocation, setPickupLocation] = useState('Main Stage Area');
+  const [loading, setLoading] = useState(false);
 
   const estimatedTime = Math.max(...items.map(item => {
     // Mock wait time based on vendor
     return 15;
   }));
 
-  const handlePay = () => {
-    navigate('/confirmation');
+  const handlePay = async () => {
+    if (items.length === 0) {
+      toast.error('El carrito está vacío');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Tomamos el vendorId del primer item del carrito (asumiendo que el carrito solo permite un puesto a la vez)
+      const puesto_id = parseInt(items[0].vendorId, 10);
+
+      const payload = {
+        puesto_id: isNaN(puesto_id) ? 1 : puesto_id,
+        items: items.map(item => ({
+          producto_id: parseInt(item.id, 10) || 1, // Fallback a 1 si el ID no es numérico
+          cantidad: item.quantity,
+          precio_unitario: item.price
+        })),
+        total: getTotal()
+      };
+
+      const result = await crearPedido(payload);
+
+      // Pasar el ID real al confirmation screen
+      navigate(`/confirmation?order=${result.pedido_id}`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Hubo un error al procesar el pago. Por favor, inténtalo de nuevo.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -37,54 +69,48 @@ export function PaymentScreen() {
           <div className="space-y-3">
             <button
               onClick={() => setSelectedPayment('card')}
-              className={`w-full p-4 border-2 rounded-xl flex items-center gap-3 transition-colors ${
-                selectedPayment === 'card' ? 'border-black bg-gray-50' : 'border-gray-200'
-              }`}
+              className={`w-full p-4 border-2 rounded-xl flex items-center gap-3 transition-colors ${selectedPayment === 'card' ? 'border-black bg-gray-50' : 'border-gray-200'
+                }`}
             >
               <CreditCard className="w-6 h-6" />
               <div className="text-left flex-1">
                 <p className="font-medium">Credit / Debit Card</p>
                 <p className="text-sm text-gray-600">Visa, Mastercard, Amex</p>
               </div>
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                selectedPayment === 'card' ? 'border-black' : 'border-gray-300'
-              }`}>
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === 'card' ? 'border-black' : 'border-gray-300'
+                }`}>
                 {selectedPayment === 'card' && <div className="w-3 h-3 bg-black rounded-full" />}
               </div>
             </button>
 
             <button
               onClick={() => setSelectedPayment('apple')}
-              className={`w-full p-4 border-2 rounded-xl flex items-center gap-3 transition-colors ${
-                selectedPayment === 'apple' ? 'border-black bg-gray-50' : 'border-gray-200'
-              }`}
+              className={`w-full p-4 border-2 rounded-xl flex items-center gap-3 transition-colors ${selectedPayment === 'apple' ? 'border-black bg-gray-50' : 'border-gray-200'
+                }`}
             >
               <Smartphone className="w-6 h-6" />
               <div className="text-left flex-1">
                 <p className="font-medium">Apple Pay</p>
                 <p className="text-sm text-gray-600">Quick & secure</p>
               </div>
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                selectedPayment === 'apple' ? 'border-black' : 'border-gray-300'
-              }`}>
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === 'apple' ? 'border-black' : 'border-gray-300'
+                }`}>
                 {selectedPayment === 'apple' && <div className="w-3 h-3 bg-black rounded-full" />}
               </div>
             </button>
 
             <button
               onClick={() => setSelectedPayment('google')}
-              className={`w-full p-4 border-2 rounded-xl flex items-center gap-3 transition-colors ${
-                selectedPayment === 'google' ? 'border-black bg-gray-50' : 'border-gray-200'
-              }`}
+              className={`w-full p-4 border-2 rounded-xl flex items-center gap-3 transition-colors ${selectedPayment === 'google' ? 'border-black bg-gray-50' : 'border-gray-200'
+                }`}
             >
               <Smartphone className="w-6 h-6" />
               <div className="text-left flex-1">
                 <p className="font-medium">Google Pay</p>
                 <p className="text-sm text-gray-600">Fast checkout</p>
               </div>
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                selectedPayment === 'google' ? 'border-black' : 'border-gray-300'
-              }`}>
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === 'google' ? 'border-black' : 'border-gray-300'
+                }`}>
                 {selectedPayment === 'google' && <div className="w-3 h-3 bg-black rounded-full" />}
               </div>
             </button>
@@ -133,9 +159,16 @@ export function PaymentScreen() {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg">
         <button
           onClick={handlePay}
-          className="w-full bg-black text-white rounded-full py-4 font-medium text-lg hover:bg-gray-800 transition-colors"
+          disabled={loading}
+          className="w-full bg-black text-white rounded-full py-4 font-medium text-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          Pay {formatPrice(getTotal())}
+          {loading ? (
+            <>
+              Processando...
+            </>
+          ) : (
+            `Pay ${formatPrice(getTotal())}`
+          )}
         </button>
       </div>
     </div>
