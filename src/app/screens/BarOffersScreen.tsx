@@ -1,25 +1,53 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from '../utils/navigation';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import { bars } from '../data/mockData';
 import { OfferCard } from '../components/OfferCard';
 import { useCart } from '../context/CartContext';
+import { getPromociones } from '../api';
 
 export function BarOffersScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addItem } = useCart();
 
+  const [offers, setOffers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const bar = bars.find(b => b.id === id);
 
-  if (!bar) {
-    return <div>Bar not found</div>;
-  }
+  useEffect(() => {
+    const fetchOffers = async () => {
+      try {
+        const numericId = !isNaN(Number(id)) ? Number(id) : undefined;
+        const data = await getPromociones(numericId);
+        if (Array.isArray(data) && data.length > 0) {
+          setOffers(data.map(p => ({
+            id: p.id,
+            title: p.titulo,
+            description: p.descripcion,
+            price: p.precio_promo,
+            discount: 'PROMO',
+            originalPrice: undefined
+          })));
+        } else {
+          setOffers(bar?.offers || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch offers:', error);
+        setOffers(bar?.offers || []);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOffers();
+  }, [id, bar]);
 
   const handleAddOffer = (offer: any) => {
     addItem({
       id: offer.id,
-      vendorId: bar.id,
-      vendorName: bar.name,
+      vendorId: id,
+      vendorName: bar?.name || `Bar #${id}`,
       vendorType: 'bar',
       name: offer.title,
       description: offer.description,
@@ -37,23 +65,29 @@ export function BarOffersScreen() {
           </button>
           <div>
             <h1 className="text-xl font-bold">Special Offers</h1>
-            <p className="text-sm text-gray-600">{bar.name}</p>
+            <p className="text-sm text-gray-600">{bar?.name || `Bar #${id}`}</p>
           </div>
         </div>
       </div>
 
       <div className="p-4 space-y-4">
-        {bar.offers.map((offer) => (
-          <OfferCard
-            key={offer.id}
-            title={offer.title}
-            description={offer.description}
-            discount={offer.discount}
-            originalPrice={offer.originalPrice}
-            price={offer.price}
-            onAdd={() => handleAddOffer(offer)}
-          />
-        ))}
+        {loading ? (
+          <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-gray-500" /></div>
+        ) : offers.length > 0 ? (
+          offers.map((offer) => (
+            <OfferCard
+              key={offer.id}
+              title={offer.title}
+              description={offer.description}
+              discount={offer.discount}
+              originalPrice={offer.originalPrice}
+              price={offer.price}
+              onAdd={() => handleAddOffer(offer)}
+            />
+          ))
+        ) : (
+          <p className="text-gray-500 text-center py-8">No offers available at the moment</p>
+        )}
       </div>
     </div>
   );

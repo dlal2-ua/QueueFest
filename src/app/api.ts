@@ -118,3 +118,139 @@ export const crearPuesto = async (data: any) => {
     });
     return res.json();
 };
+
+export const actualizarPuesto = async (id: number, data: any) => {
+    const res = await fetch(`${API_URL}/admin/puestos/${id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    return res.json();
+};
+
+export const crearProducto = async (data: any) => {
+    const res = await fetch(`${API_URL}/admin/productos`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    return res.json();
+};
+
+export const actualizarProducto = async (id: number, data: any) => {
+    const res = await fetch(`${API_URL}/admin/productos/${id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    return res.json();
+};
+
+export const getParametros = async () => {
+    const res = await fetch(`${API_URL}/admin/parametros`, { headers: headers() });
+    return res.json();
+};
+
+export const actualizarParametros = async (data: any) => {
+    const res = await fetch(`${API_URL}/admin/parametros`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    return res.json();
+};
+
+export const getUsuarios = async () => {
+    const res = await fetch(`${API_URL}/admin/usuarios`, { headers: headers() });
+    return res.json();
+};
+
+export const crearUsuario = async (data: any) => {
+    const res = await fetch(`${API_URL}/admin/usuarios`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('Error al crear usuario');
+    return res.json();
+};
+
+export const eliminarPuesto = async (id: number) => {
+    const res = await fetch(`${API_URL}/admin/puestos/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al eliminar puesto');
+    return res.json();
+};
+
+export const eliminarProducto = async (id: number) => {
+    const res = await fetch(`${API_URL}/admin/productos/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al eliminar producto');
+    return res.json();
+};
+
+export const eliminarUsuario = async (id: number) => {
+    const res = await fetch(`${API_URL}/admin/usuarios/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al eliminar usuario');
+    return res.json();
+};
+
+export const getFestivales = async () => {
+    const res = await fetch(`${API_URL}/admin/festivales`, { headers: headers() });
+    return res.json();
+};
+
+export const eliminarFestival = async (id: number) => {
+    const res = await fetch(`${API_URL}/admin/festivales/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al eliminar festival');
+    return res.json();
+};
+
+// ==================== PROMOCIONES (OFERTAS) ====================
+
+export const getPromociones = async (puestoId?: number) => {
+    const query = puestoId ? `?puesto_id=${puestoId}` : '';
+    const res = await fetch(`${API_URL}/admin/promociones${query}`, { headers: headers() });
+    // This allows it to work even without full auth in client screens if the backend allows it, 
+    // though the admin path implies authentication. If it fails, fallback gracefully in UI.
+    return res.json();
+};
+
+export const crearPromocion = async (data: any) => {
+    const res = await fetch(`${API_URL}/admin/promociones`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('Error al crear promocion');
+    return res.json();
+};
+
+export const actualizarPromocion = async (id: number, data: any) => {
+    const res = await fetch(`${API_URL}/admin/promociones/${id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('Error al actualizar promocion');
+    return res.json();
+};
+
+export const eliminarPromocion = async (id: number) => {
+    const res = await fetch(`${API_URL}/admin/promociones/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al eliminar promocion');
+    return res.json();
+};
