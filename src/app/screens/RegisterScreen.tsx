@@ -16,40 +16,35 @@ export function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    // Validation
-    if (!formData.fullName.trim()) {
-      toast.error('Please enter your full name');
-      return;
-    }
+  if (!formData.fullName.trim()) {
+    toast.error('Por favor introduce tu nombre');
+    return;
+  }
+  if (!formData.email.includes('@')) {
+    toast.error('Por favor introduce un email valido');
+    return;
+  }
+  if (formData.password.length < 6) {
+    toast.error('La contrasena debe tener al menos 6 caracteres');
+    return;
+  }
+  if (formData.password !== formData.confirmPassword) {
+    toast.error('Las contrasenas no coinciden');
+    return;
+  }
 
-    if (!formData.email.includes('@')) {
-      toast.error('Please enter a valid email');
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
-      return;
-    }
-
-    // Save user data
-    localStorage.setItem('userProfile', JSON.stringify({
-      name: formData.fullName,
-      email: formData.email
-    }));
-
-    // Navigate to selection screen
-    toast.success('Account created successfully!');
-    navigate('/selection');
-  };
+  try {
+    const { register } = await import('../api');
+    await register(formData.email, formData.password, formData.fullName);
+    toast.success('Cuenta creada correctamente');
+    navigate('/login');
+  } catch (err) {
+    toast.error('Error al crear la cuenta, puede que el email ya exista');
+  }
+};
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">

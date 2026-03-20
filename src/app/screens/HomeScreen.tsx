@@ -1,20 +1,44 @@
-import { useState } from 'react';
+// HomeScreen.tsx
+// Pantalla principal del usuario final
+// Muestra las barras y food trucks disponibles con sus tiempos de espera
+// Los datos vienen de la API real, se refrescan cada 30 segundos
+
+import { useState, useEffect } from 'react';
 import { BottomNav } from '../components/BottomNav';
 import { VendorCard } from '../components/VendorCard';
-import { foodTrucks, bars } from '../data/mockData';
 import { Search, ChevronLeft } from 'lucide-react';
 import { useNavigate } from '../utils/navigation';
+import { getPuestos } from '../api';
 
 export function HomeScreen() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const service = localStorage.getItem('selectedService') || 'food trucks';
-  const vendors = service === 'bars' ? bars : foodTrucks;
+  const [puestos, setPuestos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const service = localStorage.getItem('selectedService') || 'barras';
 
-  const filteredVendors = vendors.filter(v =>
-    v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (('cuisine' in v ? v.cuisine : v.type).toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const cargarPuestos = async () => {
+    try {
+      const data = await getPuestos();
+      setPuestos(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarPuestos();
+    const interval = setInterval(cargarPuestos, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const filteredPuestos = puestos.filter(p => {
+    const matchSearch = p.nombre.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchType = service === 'bars' ? p.tipo === 'barra' : p.tipo === 'foodtruck';
+    return matchSearch && matchType;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -33,7 +57,7 @@ export function HomeScreen() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search..."
+              placeholder="Buscar..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-black"
@@ -43,18 +67,24 @@ export function HomeScreen() {
       </div>
 
       <div className="p-4 space-y-4">
-        {filteredVendors.map((vendor) => (
-          <VendorCard
-            key={vendor.id}
-            id={vendor.id}
-            image={vendor.image}
-            name={vendor.name}
-            cuisine={'cuisine' in vendor ? vendor.cuisine : vendor.type}
-            waitTime={vendor.waitTime}
-            hasOffer={vendor.hasOffer}
-            type={service === 'bars' ? 'bar' : 'food-truck'}
-          />
-        ))}
+        {loading ? (
+          <p className="text-center text-gray-500 mt-10">Cargando puestos...</p>
+        ) : filteredPuestos.length === 0 ? (
+          <p className="text-center text-gray-500 mt-10">No hay puestos disponibles</p>
+        ) : (
+          filteredPuestos.map((puesto) => (
+            <VendorCard
+              key={puesto.id}
+              id={puesto.id}
+              image="https://images.unsplash.com/photo-1555970348-3a10b197f131?w=800"
+              name={puesto.nombre}
+              cuisine={puesto.tipo === 'barra' ? 'Barra de bebidas' : 'Food Truck'}
+              waitTime={puesto.tiempo_servicio_medio}
+              hasOffer={false}
+              type={puesto.tipo === 'barra' ? 'bar' : 'food-truck'}
+            />
+          ))
+        )}
       </div>
 
       <BottomNav />
