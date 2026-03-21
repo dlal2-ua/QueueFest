@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
-import { 
+import {
   crearFestival, getFestivales, eliminarFestival,
   crearPuesto, actualizarPuesto, getPuestos, eliminarPuesto,
   getProductos, crearProducto, actualizarProducto, eliminarProducto,
   getPromociones, crearPromocion, actualizarPromocion, eliminarPromocion,
-  getParametros, actualizarParametros, 
-  getUsuarios, crearUsuario, eliminarUsuario 
+  getParametros, actualizarParametros,
+  getUsuarios, crearUsuario, eliminarUsuario
 } from '../api';
 import { PlusCircle, Calendar, MapPin, Settings, Users, Package, Store, CheckCircle2, XCircle, LogOut, Trash2, Tag } from 'lucide-react';
 
@@ -55,8 +55,26 @@ export function AdminScreen() {
   const loadFestivales = async () => {
     try {
       const data = await getFestivales();
-      if (Array.isArray(data)) setFestivalesList(data);
-    } catch { toast.error('Error al cargar festivales'); }
+      console.log("Respuesta del servidor (Festivales):", data); // 👀 Mira esto en la consola del navegador
+
+      // Verificamos si es un array directo
+      if (Array.isArray(data)) {
+        setFestivalesList(data);
+      }
+      // Verificamos si viene dentro de una propiedad (cambia 'data.festivales' por lo que veas en tu console.log si es distinto)
+      else if (data && data.festivales && Array.isArray(data.festivales)) {
+        setFestivalesList(data.festivales);
+      }
+      else if (data && data.error) {
+        toast.error(`Error del servidor: ${data.error}`);
+      }
+      else {
+        toast.error('El formato de datos no es válido');
+      }
+    } catch (error) {
+      console.error("Error al hacer la petición:", error);
+      toast.error('Error de conexión al cargar festivales');
+    }
   };
 
   const loadPuestos = async () => {
@@ -154,7 +172,7 @@ export function AdminScreen() {
 
   const handleCrearProducto = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(!selectedPuestoId) return toast.error('Selecciona un puesto primero');
+    if (!selectedPuestoId) return toast.error('Selecciona un puesto primero');
     setLoading(true);
     try {
       await crearProducto({ ...producto, puesto_id: selectedPuestoId });
@@ -169,13 +187,13 @@ export function AdminScreen() {
     try {
       await actualizarProducto(prod.id, { ...prod, activo: !prod.activo });
       toast.success(`Producto ${prod.nombre} ${!prod.activo ? 'activado' : 'desactivado'}`);
-      if(selectedPuestoId) loadProductos(Number(selectedPuestoId));
+      if (selectedPuestoId) loadProductos(Number(selectedPuestoId));
     } catch { toast.error('Error actualizando producto'); }
   }
 
   const handleCrearPromocion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(!selectedPuestoIdPromo) return toast.error('Selecciona un puesto primero');
+    if (!selectedPuestoIdPromo) return toast.error('Selecciona un puesto primero');
     setLoading(true);
     try {
       await crearPromocion({ ...promocion, puesto_id: selectedPuestoIdPromo });
@@ -190,7 +208,7 @@ export function AdminScreen() {
     try {
       await actualizarPromocion(promo.id, { ...promo, activa: !promo.activa });
       toast.success(`Promoción ${promo.titulo} ${!promo.activa ? 'activada' : 'desactivada'}`);
-      if(selectedPuestoIdPromo) loadPromociones(Number(selectedPuestoIdPromo));
+      if (selectedPuestoIdPromo) loadPromociones(Number(selectedPuestoIdPromo));
     } catch { toast.error('Error actualizando promoción'); }
   }
 
@@ -248,7 +266,7 @@ export function AdminScreen() {
     try {
       await eliminarPromocion(id);
       toast.success('Promoción eliminada');
-      if(selectedPuestoIdPromo) loadPromociones(Number(selectedPuestoIdPromo));
+      if (selectedPuestoIdPromo) loadPromociones(Number(selectedPuestoIdPromo));
     } catch { toast.error('Error al eliminar promoción'); }
   };
 
@@ -289,9 +307,8 @@ export function AdminScreen() {
           <button
             key={t.id}
             onClick={() => setTab(t.id as any)}
-            className={`flex-none flex items-center gap-1 px-4 py-3 text-sm font-medium transition-colors ${
-              tab === t.id ? 'border-b-2 border-red-600 text-red-600' : 'text-gray-500 hover:text-gray-800'
-            }`}
+            className={`flex-none flex items-center gap-1 px-4 py-3 text-sm font-medium transition-colors ${tab === t.id ? 'border-b-2 border-red-600 text-red-600' : 'text-gray-500 hover:text-gray-800'
+              }`}
           >
             <t.icon className="w-4 h-4" />
             {t.label}
@@ -305,48 +322,53 @@ export function AdminScreen() {
         {/* 1. FESTIVAL */}
         {tab === 'festival' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-          <form onSubmit={handleCrearFestival} className="space-y-4">
-            <div className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-gray-100">
-              <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
-                <Calendar className="w-5 h-5 text-red-600" /> Registrar Evento Global
-              </h2>
-              <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700">Nombre del Evento</label>
-                <input type="text" value={festival.nombre} onChange={e => setFestival({ ...festival, nombre: e.target.value })} placeholder="QueueFest 2026" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-shadow" required />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleCrearFestival} className="space-y-4">
+              <div className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-gray-100">
+                <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
+                  <Calendar className="w-5 h-5 text-red-600" /> Registrar Evento Global
+                </h2>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Fecha de Inicio</label>
-                  <input type="date" value={festival.fecha_inicio} onChange={e => setFestival({ ...festival, fecha_inicio: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" required />
+                  <label className="block text-sm font-medium mb-1 text-gray-700">Nombre del Evento</label>
+                  <input type="text" value={festival.nombre} onChange={e => setFestival({ ...festival, nombre: e.target.value })} placeholder="QueueFest 2026" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-shadow" required />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Fecha de Fin</label>
-                  <input type="date" value={festival.fecha_fin} onChange={e => setFestival({ ...festival, fecha_fin: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" required />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Fecha de Inicio</label>
+                    <input type="date" value={festival.fecha_inicio} onChange={e => setFestival({ ...festival, fecha_inicio: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Fecha de Fin</label>
+                    <input type="date" value={festival.fecha_fin} onChange={e => setFestival({ ...festival, fecha_fin: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" required />
+                  </div>
                 </div>
               </div>
+              <button type="submit" disabled={loading} className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors shadow-md shadow-red-500/20">
+                <PlusCircle className="w-5 h-5" /> {loading ? 'Creando...' : 'Crear Festival'}
+              </button>
+            </form>
+
+            <div className="space-y-3 mt-6">
+              {/* [TODO: ESTÁTICO -> DINÁMICO] El listado a continuación carga datos dinámicos (hace dinámico) del backend, asumiendo su modelo */}
+              <h3 className="font-bold text-gray-700">Eventos Activos <span className="text-xs font-normal text-red-500 bg-red-50 px-2 py-1 rounded">(hace dinámico)</span></h3>
+              {festivalesList.length === 0 ? (
+                <p className="text-gray-500 text-sm italic text-center py-4 bg-gray-100 rounded-lg">No hay eventos registrados aún.</p>
+              ) : festivalesList.map((fest, idx) => (
+                <div key={fest.id} className="flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold text-gray-900 leading-tight">{fest.nombre || 'Festival Sin Nombre'}</h4>
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${fest.activo ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                        {fest.activo ? 'ACTIVO (1)' : 'INACTIVO (0)'}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-500">ID: {fest.id} • Inicio: {fest.fecha_inicio ? new Date(fest.fecha_inicio).toLocaleDateString() : 'N/A'}</span>
+                  </div>
+                  <button onClick={() => handleEliminarFestival(fest.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar Festival">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
             </div>
-            <button type="submit" disabled={loading} className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors shadow-md shadow-red-500/20">
-              <PlusCircle className="w-5 h-5" /> {loading ? 'Creando...' : 'Crear Festival'}
-            </button>
-          </form>
-          
-          <div className="space-y-3 mt-6">
-            {/* [TODO: ESTÁTICO -> DINÁMICO] El listado a continuación carga datos dinámicos (hace dinámico) del backend, asumiendo su modelo */}
-            <h3 className="font-bold text-gray-700">Eventos Activos <span className="text-xs font-normal text-red-500 bg-red-50 px-2 py-1 rounded">(hace dinámico)</span></h3>
-            {festivalesList.length === 0 ? (
-              <p className="text-gray-500 text-sm italic text-center py-4 bg-gray-100 rounded-lg">No hay eventos registrados aún.</p>
-            ) : festivalesList.map((fest, idx) => (
-              <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-gray-100">
-                <div>
-                  <h4 className="font-semibold text-gray-900 leading-tight">{fest.nombre || 'Festival Sin Nombre'}</h4>
-                  <span className="text-xs text-gray-500">ID: {fest.id} • Inicio: {fest.fecha_inicio ? new Date(fest.fecha_inicio).toLocaleDateString() : 'N/A'}</span>
-                </div>
-                <button onClick={() => handleEliminarFestival(fest.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar Festival">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
           </div>
         )}
 
@@ -373,7 +395,7 @@ export function AdminScreen() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Horarios</label>
-                  <input type="text" value={puesto.horarios_apertura} onChange={e => setPuesto({...puesto, horarios_apertura: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500" />
+                  <input type="text" value={puesto.horarios_apertura} onChange={e => setPuesto({ ...puesto, horarios_apertura: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Capacidad Máx (Cola) <span className="text-gray-400 text-xs">(pers)</span></label>
@@ -435,23 +457,23 @@ export function AdminScreen() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-gray-500 uppercase">Nombre Producto</label>
-                      <input type="text" value={producto.nombre} onChange={e=>setProducto({...producto, nombre: e.target.value})} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-medium" required placeholder="Ej. Cerveza doble" />
+                      <input type="text" value={producto.nombre} onChange={e => setProducto({ ...producto, nombre: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-medium" required placeholder="Ej. Cerveza doble" />
                     </div>
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-gray-500 uppercase">Descripción</label>
-                      <input type="text" value={producto.descripcion} onChange={e=>setProducto({...producto, descripcion: e.target.value})} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none text-sm" placeholder="Ingredientes o breve descripción" />
+                      <input type="text" value={producto.descripcion} onChange={e => setProducto({ ...producto, descripcion: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none text-sm" placeholder="Ingredientes o breve descripción" />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-gray-500 uppercase">Precio Base (€)</label>
-                      <input type="number" step="0.5" value={producto.precio} onChange={e=>setProducto({...producto, precio: Number(e.target.value)})} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-bold text-gray-800" required />
+                      <input type="number" step="0.5" value={producto.precio} onChange={e => setProducto({ ...producto, precio: Number(e.target.value) })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-bold text-gray-800" required />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-gray-500 uppercase">Precio Dinámico (€) <span className="text-[10px] lowercase font-normal">(opcional)</span></label>
-                      <input type="number" step="0.5" value={producto.precio_dinamico} onChange={e=>setProducto({...producto, precio_dinamico: Number(e.target.value)})} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-bold text-red-700" />
+                      <input type="number" step="0.5" value={producto.precio_dinamico} onChange={e => setProducto({ ...producto, precio_dinamico: Number(e.target.value) })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-bold text-red-700" />
                     </div>
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-gray-500 uppercase">Unidades Iniciales (Stock)</label>
-                      <input type="number" value={producto.stock} onChange={e=>setProducto({...producto, stock: Number(e.target.value)})} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none" required />
+                      <input type="number" value={producto.stock} onChange={e => setProducto({ ...producto, stock: Number(e.target.value) })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none" required />
                     </div>
                   </div>
                   <button type="submit" className="w-full bg-red-50 text-red-700 py-2.5 rounded-lg border border-red-200 font-semibold text-sm hover:bg-red-100 transition-colors">
@@ -464,14 +486,14 @@ export function AdminScreen() {
                   {productosList.map((prod, i) => (
                     <div key={i} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
                       <div>
-                        <p className={`font-semibold ${prod.activo?'text-gray-900':'text-gray-400 line-through'}`}>{prod.nombre}</p>
+                        <p className={`font-semibold ${prod.activo ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{prod.nombre}</p>
                         <p className="text-xs text-gray-500 font-medium">{prod.precio}€ • Stock: {prod.stock}</p>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button onClick={()=>handleToggleProducto(prod)} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
+                        <button onClick={() => handleToggleProducto(prod)} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
                           {prod.activo ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <XCircle className="w-6 h-6 text-gray-300" />}
                         </button>
-                        <button onClick={()=>handleEliminarProducto(prod.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors" title="Eliminar Producto">
+                        <button onClick={() => handleEliminarProducto(prod.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors" title="Eliminar Producto">
                           <Trash2 className="w-5 h-5" />
                         </button>
                       </div>
@@ -506,15 +528,15 @@ export function AdminScreen() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-gray-500 uppercase">Título de la Oferta</label>
-                      <input type="text" value={promocion.titulo} onChange={e=>setPromocion({...promocion, titulo: e.target.value})} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-medium" required placeholder="Ej. 2x1 en Cervezas" />
+                      <input type="text" value={promocion.titulo} onChange={e => setPromocion({ ...promocion, titulo: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-medium" required placeholder="Ej. 2x1 en Cervezas" />
                     </div>
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-gray-500 uppercase">Descripción</label>
-                      <input type="text" value={promocion.descripcion} onChange={e=>setPromocion({...promocion, descripcion: e.target.value})} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none text-sm" placeholder="Condiciones de la oferta" />
+                      <input type="text" value={promocion.descripcion} onChange={e => setPromocion({ ...promocion, descripcion: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none text-sm" placeholder="Condiciones de la oferta" />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-gray-500 uppercase">Precio Promo (€)</label>
-                      <input type="number" step="0.5" value={promocion.precio_promo} onChange={e=>setPromocion({...promocion, precio_promo: Number(e.target.value)})} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-bold text-red-700" required />
+                      <input type="number" step="0.5" value={promocion.precio_promo} onChange={e => setPromocion({ ...promocion, precio_promo: Number(e.target.value) })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-bold text-red-700" required />
                     </div>
                   </div>
                   <button type="submit" className="w-full bg-red-50 text-red-700 py-2.5 rounded-lg border border-red-200 font-semibold text-sm hover:bg-red-100 transition-colors">
@@ -527,14 +549,14 @@ export function AdminScreen() {
                   {promocionesList.map((promo, i) => (
                     <div key={i} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
                       <div>
-                        <p className={`font-semibold ${promo.activa?'text-gray-900':'text-gray-400 line-through'}`}>{promo.titulo}</p>
+                        <p className={`font-semibold ${promo.activa ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{promo.titulo}</p>
                         <p className="text-xs text-gray-500 font-medium">{promo.precio_promo}€ • {promo.descripcion}</p>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button onClick={()=>handleTogglePromocion(promo)} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
+                        <button onClick={() => handleTogglePromocion(promo)} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
                           {promo.activa ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <XCircle className="w-6 h-6 text-gray-300" />}
                         </button>
-                        <button onClick={()=>handleEliminarPromocion(promo.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors" title="Eliminar Oferta">
+                        <button onClick={() => handleEliminarPromocion(promo.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors" title="Eliminar Oferta">
                           <Trash2 className="w-5 h-5" />
                         </button>
                       </div>
@@ -553,14 +575,14 @@ export function AdminScreen() {
             <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
               <Settings className="w-5 h-5 text-red-600" /> Reglas de Negocio
             </h2>
-            
+
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="font-semibold text-gray-900">Pricing Dinámico</h4>
                 <p className="text-xs text-gray-500 pr-4">Sube precios cuando hay picos de demanda según umbral de cola.</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" checked={parametros.pricing_dinamico_activo} onChange={e=>setParametros({...parametros, pricing_dinamico_activo: e.target.checked})} />
+                <input type="checkbox" className="sr-only peer" checked={parametros.pricing_dinamico_activo} onChange={e => setParametros({ ...parametros, pricing_dinamico_activo: e.target.checked })} />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
               </label>
             </div>
@@ -569,11 +591,11 @@ export function AdminScreen() {
               <div className="grid grid-cols-2 gap-4 bg-red-50 p-4 rounded-lg border border-red-100">
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-red-900">Umbral (Pedidos en cola)</label>
-                  <input type="number" value={parametros.umbral_cola} onChange={e=>setParametros({...parametros, umbral_cola: Number(e.target.value)})} className="w-full p-2 border border-red-200 rounded text-sm text-center font-bold" />
+                  <input type="number" value={parametros.umbral_cola} onChange={e => setParametros({ ...parametros, umbral_cola: Number(e.target.value) })} className="w-full p-2 border border-red-200 rounded text-sm text-center font-bold" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-red-900">Subida de Precio (%)</label>
-                  <input type="number" value={parametros.porcentaje_subida} onChange={e=>setParametros({...parametros, porcentaje_subida: Number(e.target.value)})} className="w-full p-2 border border-red-200 rounded text-sm text-center font-bold" />
+                  <input type="number" value={parametros.porcentaje_subida} onChange={e => setParametros({ ...parametros, porcentaje_subida: Number(e.target.value) })} className="w-full p-2 border border-red-200 rounded text-sm text-center font-bold" />
                 </div>
               </div>
             )}
@@ -586,20 +608,20 @@ export function AdminScreen() {
                 <p className="text-xs text-gray-500 pr-4">Activa happy hours en horas valle detectadas automáticamente.</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" checked={parametros.promociones_activas} onChange={e=>setParametros({...parametros, promociones_activas: e.target.checked})} />
+                <input type="checkbox" className="sr-only peer" checked={parametros.promociones_activas} onChange={e => setParametros({ ...parametros, promociones_activas: e.target.checked })} />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
               </label>
             </div>
 
             <hr className="border-gray-100" />
-            
+
             <div className="pt-2">
               <label className="block text-sm font-semibold mb-2 text-gray-800">Alerta Stock Crítico (Unidades Mínimas)</label>
-              <input type="number" value={parametros.stock_minimo} onChange={e=>setParametros({...parametros, stock_minimo: Number(e.target.value)})} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 font-bold" />
+              <input type="number" value={parametros.stock_minimo} onChange={e => setParametros({ ...parametros, stock_minimo: Number(e.target.value) })} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 font-bold" />
             </div>
 
             <button type="submit" disabled={loading} className="w-full mt-6 bg-gray-900 hover:bg-black text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors">
-               Guardar y Propagar Reglas
+              Guardar y Propagar Reglas
             </button>
           </form>
         )}
@@ -612,21 +634,21 @@ export function AdminScreen() {
                 <Users className="w-5 h-5 text-red-600" /> Control de Acceso (RBAC)
               </h2>
               <div className="space-y-3">
-                <input type="text" placeholder="Nombre completo" value={nuevoUsuario.nombre} onChange={e=>setNuevoUsuario({...nuevoUsuario, nombre: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" required />
-                <input type="email" placeholder="Correo corporativo" value={nuevoUsuario.email} onChange={e=>setNuevoUsuario({...nuevoUsuario, email: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" required />
+                <input type="text" placeholder="Nombre completo" value={nuevoUsuario.nombre} onChange={e => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" required />
+                <input type="email" placeholder="Correo corporativo" value={nuevoUsuario.email} onChange={e => setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" required />
                 <div className="grid grid-cols-2 gap-3">
-                  <input type="password" placeholder="Contraseña inicial" value={nuevoUsuario.password} onChange={e=>setNuevoUsuario({...nuevoUsuario, password: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" required />
+                  <input type="password" placeholder="Contraseña inicial" value={nuevoUsuario.password} onChange={e => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" required />
                   {/* [TODO: ESTÁTICO -> DINÁMICO] Los roles de usuario también podrían solicitarse desde la BD si tu sistema de roles en MySQL puede cambiar mediante migraciones o en el tiempo */}
-                  <select value={nuevoUsuario.rol} onChange={e=>setNuevoUsuario({...nuevoUsuario, rol: e.target.value})} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium">
+                  <select value={nuevoUsuario.rol} onChange={e => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium">
                     <option value="gestor">Gestor (Supervisión)</option>
                     <option value="operador">Operador (Puesto)</option>
                     <option value="administrador">Administrador Total</option>
                   </select>
                 </div>
                 {nuevoUsuario.rol === 'operador' && (
-                  <select value={nuevoUsuario.puesto_id} onChange={e=>setNuevoUsuario({...nuevoUsuario, puesto_id: e.target.value})} className="w-full px-3 py-2 bg-gray-50 border border-red-200 rounded-lg text-sm text-red-900" required>
+                  <select value={nuevoUsuario.puesto_id} onChange={e => setNuevoUsuario({ ...nuevoUsuario, puesto_id: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-red-200 rounded-lg text-sm text-red-900" required>
                     <option value="">-- Asignar a un Puesto --</option>
-                    {puestosList.map((p,i)=><option key={i} value={p.id}>{p.nombre}</option>)}
+                    {puestosList.map((p, i) => <option key={i} value={p.id}>{p.nombre}</option>)}
                   </select>
                 )}
                 <button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg font-semibold text-sm transition-colors mt-2">Crear Credenciales</button>
@@ -644,10 +666,9 @@ export function AdminScreen() {
                     <p className="text-[10px] text-gray-500">{usr.email}</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`px-2 py-0.5 text-[10px] uppercase font-bold rounded-full ${
-                      usr.rol === 'administrador' ? 'bg-black text-white' : 
+                    <span className={`px-2 py-0.5 text-[10px] uppercase font-bold rounded-full ${usr.rol === 'administrador' ? 'bg-black text-white' :
                       usr.rol === 'gestor' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
-                    }`}>
+                      }`}>
                       {usr.rol}
                     </span>
                     <button onClick={() => handleEliminarUsuario(usr.id)} className="text-red-500 hover:text-red-700 transition-colors">
