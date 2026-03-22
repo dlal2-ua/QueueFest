@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from '../utils/navigation';
 import { ChevronLeft, Loader2 } from 'lucide-react';
-import { foodTrucks } from '../data/mockData';
 import { OfferCard } from '../components/OfferCard';
 import { useCart } from '../context/CartContext';
-import { getPromociones } from '../api';
+import { getPromociones, getPuestosByFestival } from '../api';
 
 export function FoodTruckOffersScreen() {
   const { id } = useParams();
@@ -12,42 +11,53 @@ export function FoodTruckOffersScreen() {
   const { addItem } = useCart();
 
   const [offers, setOffers] = useState<any[]>([]);
+  const [truckNombre, setTruckNombre] = useState<string>(`Food Truck #${id}`);
   const [loading, setLoading] = useState(true);
 
-  const truck = foodTrucks.find(t => t.id === id);
+  // Festival elegido en la pantalla anterior
+  const festival = JSON.parse(sessionStorage.getItem('festivalSeleccionado') || '{}');
 
   useEffect(() => {
-    const fetchOffers = async () => {
+    const load = async () => {
       try {
-        const numericId = !isNaN(Number(id)) ? Number(id) : undefined;
-        const data = await getPromociones(numericId);
-        if (Array.isArray(data) && data.length > 0) {
-          setOffers(data.map(p => ({
-            id: p.id,
-            title: p.titulo,
-            description: p.descripcion,
-            price: p.precio_promo,
-            discount: 'PROMO',
-            originalPrice: undefined
-          })));
-        } else {
-          setOffers(truck?.offers || []);
+        // Nombre del puesto
+        if (festival?.id) {
+          const puestos = await getPuestosByFestival(festival.id);
+          const puesto = Array.isArray(puestos)
+            ? puestos.find((p: any) => String(p.id) === String(id))
+            : null;
+          if (puesto) setTruckNombre(puesto.nombre);
         }
-      } catch (error) {
-        console.error('Failed to fetch offers:', error);
-        setOffers(truck?.offers || []);
+
+        // Ofertas del puesto
+        const data = await getPromociones(Number(id));
+        if (Array.isArray(data)) {
+          setOffers(data
+            .filter((p: any) => p.activa)
+            .map((p: any) => ({
+              id: p.id,
+              title: p.titulo,
+              description: p.descripcion,
+              price: p.precio_promo,
+              discount: 'PROMO',
+              originalPrice: undefined
+            }))
+          );
+        }
+      } catch (err) {
+        console.error('Error cargando ofertas de food truck:', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchOffers();
-  }, [id, truck]);
+    load();
+  }, [id, festival?.id]);
 
   const handleAddOffer = (offer: any) => {
     addItem({
       id: offer.id,
-      vendorId: id,
-      vendorName: truck?.name || `Vendor ${id}`,
+      vendorId: String(id),
+      vendorName: truckNombre,
       vendorType: 'food-truck',
       name: offer.title,
       description: offer.description,
@@ -64,17 +74,19 @@ export function FoodTruckOffersScreen() {
             <ChevronLeft className="w-6 h-6" />
           </button>
           <div>
-            <h1 className="text-xl font-bold">Special Offers</h1>
-            <p className="text-sm text-gray-600">{truck?.name || `Food Truck #${id}`}</p>
+            <h1 className="text-xl font-bold">Ofertas Especiales</h1>
+            <p className="text-sm text-gray-500">{truckNombre}{festival?.nombre ? ` · ${festival.nombre}` : ''}</p>
           </div>
         </div>
       </div>
 
       <div className="p-4 space-y-4">
         {loading ? (
-          <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-gray-500" /></div>
+          <div className="flex justify-center p-8">
+            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+          </div>
         ) : offers.length > 0 ? (
-          offers.map((offer) => (
+          offers.map(offer => (
             <OfferCard
               key={offer.id}
               title={offer.title}
@@ -86,7 +98,7 @@ export function FoodTruckOffersScreen() {
             />
           ))
         ) : (
-          <p className="text-gray-500 text-center py-8">No offers available at the moment</p>
+          <p className="text-gray-500 text-center py-8">No hay ofertas disponibles en este momento.</p>
         )}
       </div>
     </div>

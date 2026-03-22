@@ -38,6 +38,7 @@ import { HelpSupportScreen } from './screens/HelpSupportScreen';
 import { LanguageScreen } from './screens/LanguageScreen';
 import { TrackOrderScreen } from './screens/TrackOrderScreen';
 import { SelectionScreen } from './screens/SelectionScreen';
+import { FestivalSelectScreen } from './screens/FestivalSelectScreen';
 
 // Pantallas por rol
 import { OperadorScreen } from './screens/OperadorScreen';
@@ -86,6 +87,7 @@ function AppRoutes() {
   if (user.rol === 'administrador') return <AdminScreen />;
 
   // Rutas del usuario final
+  if (path === '/festival-select') return <FestivalSelectScreen />;
   if (path === '/selection') return <SelectionScreen />;
   if (path === '/home') return <HomeScreen />;
   if (path.startsWith('/food-truck/') && path.endsWith('/offers')) return <FoodTruckOffersScreen />;

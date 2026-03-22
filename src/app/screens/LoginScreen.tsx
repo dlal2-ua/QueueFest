@@ -5,7 +5,7 @@
 // - administrador → /admin
 // - gestor → /gestor  
 // - operador → /operador
-// - usuario → /selection
+// - usuario → /festival-select
 
 import { useState } from 'react';
 import { useNavigate } from '../utils/navigation';
@@ -23,22 +23,22 @@ export function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-const handleLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
-  try {
-    const data = await loginApi(email, password);
-    login(data.token, data.user);
-    if (data.user.rol === 'administrador') navigate('/admin');
-    else if (data.user.rol === 'gestor') navigate('/gestor');
-    else if (data.user.rol === 'operador') navigate('/operador');
-    else navigate('/selection');
-  } catch (err) {
-    toast.error('Email o contrasena incorrectos');
-  } finally {
-    setLoading(false);
-  }
-};
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const data = await loginApi(email, password);
+      login(data.token, data.user);
+      if (data.user.rol === 'administrador') navigate('/admin');
+      else if (data.user.rol === 'gestor') navigate('/gestor');
+      else if (data.user.rol === 'operador') navigate('/operador');
+      else navigate('/festival-select');
+    } catch (err) {
+      toast.error('Email o contrasena incorrectos');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 flex items-center justify-center p-6">

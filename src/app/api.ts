@@ -39,9 +39,24 @@ export const register = async (email: string, password: string, nombre: string) 
 };
 
 // ==================== PUESTOS ====================
-// Obtiene todos los puestos abiertos (barras y food trucks)
+// Obtiene todos los puestos abiertos (barras y food trucks) — sin filtro de festival
 export const getPuestos = async () => {
     const res = await fetch(`${API_URL}/puestos`, { headers: headers() });
+    return res.json();
+};
+
+// Obtiene los puestos de un festival concreto (usado en AdminScreen con contexto de festival)
+export const getPuestosByFestival = async (festivalId: number) => {
+    const res = await fetch(`${API_URL}/admin/puestos?festival_id=${festivalId}`, { headers: headers() });
+    if (!res.ok) throw new Error('Error al cargar puestos del festival');
+    return res.json();
+};
+
+// Obtiene los puestos de un festival filtrados por tipo (barra/foodtruck), sin autenticación
+// Usado en el flujo público: FestivalSelectScreen → SelectionScreen → HomeScreen
+export const getPuestosByFestivalPublico = async (festivalId: number, tipo: string) => {
+    const res = await fetch(`${API_URL}/puestos?festival_id=${festivalId}&tipo=${tipo}`);
+    if (!res.ok) throw new Error('Error al cargar puestos');
     return res.json();
 };
 
@@ -99,6 +114,15 @@ export const getEstadisticas = async () => {
 };
 
 // ==================== ADMIN ====================
+
+// ── Festivales ────────────────────────────────────────────────────────────
+
+// Lista todos los festivales
+export const getFestivales = async () => {
+    const res = await fetch(`${API_URL}/admin/festivales`, { headers: headers() });
+    return res.json();
+};
+
 // Crea un festival nuevo
 export const crearFestival = async (data: any) => {
     const res = await fetch(`${API_URL}/admin/festivales`, {
@@ -108,6 +132,44 @@ export const crearFestival = async (data: any) => {
     });
     return res.json();
 };
+
+// Desactiva un festival: actualiza activo = 0 sin eliminar sus datos
+export const desactivarFestival = async (id: number) => {
+    const res = await fetch(`${API_URL}/admin/festivales/${id}/desactivar`, {
+        method: 'PATCH',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al desactivar el festival');
+    return res.json();
+};
+
+export const eliminarFestival = async (id: number) => {
+    const res = await fetch(`${API_URL}/admin/festivales/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al eliminar festival');
+    return res.json();
+};
+
+// Activa un festival: actualiza activo = 1
+export const activarFestival = async (id: number) => {
+    const res = await fetch(`${API_URL}/admin/festivales/${id}/activar`, {
+        method: 'PATCH',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al activar el festival');
+    return res.json();
+};
+
+// Obtiene festivales activos públicamente (sin auth) — usado en FestivalSelectScreen
+export const getFestivalesPublicos = async () => {
+    const res = await fetch(`${API_URL}/festivales`);
+    if (!res.ok) throw new Error('Error al cargar festivales');
+    return res.json();
+};
+
+// ── Puestos ───────────────────────────────────────────────────────────────
 
 // Crea un puesto (barra o food truck) dentro de un festival
 export const crearPuesto = async (data: any) => {
@@ -128,6 +190,17 @@ export const actualizarPuesto = async (id: number, data: any) => {
     return res.json();
 };
 
+export const eliminarPuesto = async (id: number) => {
+    const res = await fetch(`${API_URL}/admin/puestos/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al eliminar puesto');
+    return res.json();
+};
+
+// ── Productos ─────────────────────────────────────────────────────────────
+
 export const crearProducto = async (data: any) => {
     const res = await fetch(`${API_URL}/admin/productos`, {
         method: 'POST',
@@ -146,6 +219,17 @@ export const actualizarProducto = async (id: number, data: any) => {
     return res.json();
 };
 
+export const eliminarProducto = async (id: number) => {
+    const res = await fetch(`${API_URL}/admin/productos/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al eliminar producto');
+    return res.json();
+};
+
+// ── Parámetros ────────────────────────────────────────────────────────────
+
 export const getParametros = async () => {
     const res = await fetch(`${API_URL}/admin/parametros`, { headers: headers() });
     return res.json();
@@ -160,8 +244,19 @@ export const actualizarParametros = async (data: any) => {
     return res.json();
 };
 
+// ── Usuarios ──────────────────────────────────────────────────────────────
+
+// Obtiene TODOS los usuarios (sin filtro de rol)
 export const getUsuarios = async () => {
     const res = await fetch(`${API_URL}/admin/usuarios`, { headers: headers() });
+    return res.json();
+};
+
+// Obtiene solo el personal de staff: administrador (rol_id 1), gestor (2), operador (3)
+// El backend filtra WHERE rol_id IN (1, 2, 3)
+export const getUsuariosStaff = async () => {
+    const res = await fetch(`${API_URL}/admin/usuarios/staff`, { headers: headers() });
+    if (!res.ok) throw new Error('Error al cargar personal staff');
     return res.json();
 };
 
@@ -175,24 +270,6 @@ export const crearUsuario = async (data: any) => {
     return res.json();
 };
 
-export const eliminarPuesto = async (id: number) => {
-    const res = await fetch(`${API_URL}/admin/puestos/${id}`, {
-        method: 'DELETE',
-        headers: headers()
-    });
-    if (!res.ok) throw new Error('Error al eliminar puesto');
-    return res.json();
-};
-
-export const eliminarProducto = async (id: number) => {
-    const res = await fetch(`${API_URL}/admin/productos/${id}`, {
-        method: 'DELETE',
-        headers: headers()
-    });
-    if (!res.ok) throw new Error('Error al eliminar producto');
-    return res.json();
-};
-
 export const eliminarUsuario = async (id: number) => {
     const res = await fetch(`${API_URL}/admin/usuarios/${id}`, {
         method: 'DELETE',
@@ -202,27 +279,11 @@ export const eliminarUsuario = async (id: number) => {
     return res.json();
 };
 
-export const getFestivales = async () => {
-    const res = await fetch(`${API_URL}/admin/festivales`, { headers: headers() });
-    return res.json();
-};
-
-export const eliminarFestival = async (id: number) => {
-    const res = await fetch(`${API_URL}/admin/festivales/${id}`, {
-        method: 'DELETE',
-        headers: headers()
-    });
-    if (!res.ok) throw new Error('Error al eliminar festival');
-    return res.json();
-};
-
-// ==================== PROMOCIONES (OFERTAS) ====================
+// ── Promociones ───────────────────────────────────────────────────────────
 
 export const getPromociones = async (puestoId?: number) => {
     const query = puestoId ? `?puesto_id=${puestoId}` : '';
     const res = await fetch(`${API_URL}/admin/promociones${query}`, { headers: headers() });
-    // This allows it to work even without full auth in client screens if the backend allows it, 
-    // though the admin path implies authentication. If it fails, fallback gracefully in UI.
     return res.json();
 };
 
@@ -253,4 +314,6 @@ export const eliminarPromocion = async (id: number) => {
     });
     if (!res.ok) throw new Error('Error al eliminar promocion');
     return res.json();
-};
+};
+
+

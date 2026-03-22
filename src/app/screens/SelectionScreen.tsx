@@ -1,3 +1,8 @@
+// SelectionScreen.tsx
+// Pantalla intermedia: el usuario elige entre Food Trucks o Barras
+// Guarda la elección en sessionStorage y navega al listado (HomeScreen)
+// El festival ya fue guardado antes en FestivalSelectScreen
+
 import { useNavigate } from '../utils/navigation';
 import { Truck, Wine } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -9,16 +14,16 @@ export function SelectionScreen() {
     {
       icon: Truck,
       title: 'Food Trucks',
-      description: 'Browse delicious food from local trucks',
+      description: 'Descubre los mejores food trucks del festival',
       color: 'from-orange-500 to-red-500',
-      path: '/home'
+      tipo: 'foodtruck'
     },
     {
       icon: Wine,
-      title: 'Bars',
-      description: 'Discover drinks and cocktails',
+      title: 'Barras',
+      description: 'Encuentra tu barra favorita de copas',
       color: 'from-purple-500 to-pink-500',
-      path: '/home'
+      tipo: 'barra'
     }
   ];
 
@@ -29,8 +34,8 @@ export function SelectionScreen() {
         animate={{ opacity: 1, y: 0 }}
         className="text-center mb-12"
       >
-        <h1 className="text-3xl font-bold mb-2">What are you craving?</h1>
-        <p className="text-gray-600">Choose a service to get started</p>
+        <h1 className="text-3xl font-bold mb-2">¿Qué buscas?</h1>
+        <p className="text-gray-600">Elige el tipo de puesto</p>
       </motion.div>
 
       <div className="w-full max-w-md space-y-4">
@@ -41,8 +46,8 @@ export function SelectionScreen() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: index * 0.1 }}
             onClick={() => {
-              localStorage.setItem('selectedService', option.title.toLowerCase());
-              navigate(option.path);
+              sessionStorage.setItem('tipoSeleccionado', option.tipo);
+              navigate('/home');
             }}
             className="w-full group"
           >

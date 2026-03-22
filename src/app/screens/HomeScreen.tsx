@@ -1,26 +1,36 @@
 // HomeScreen.tsx
-// Pantalla principal del usuario final
-// Muestra las barras y food trucks disponibles con sus tiempos de espera
-// Los datos vienen de la API real, se refrescan cada 30 segundos
+// Pantalla de listado de puestos filtrados por festival y tipo
+// Lee el festival elegido y el tipo (barra/foodtruck) del sessionStorage
+// Si no hay festival seleccionado redirige a /festival-select
 
 import { useState, useEffect } from 'react';
 import { BottomNav } from '../components/BottomNav';
 import { VendorCard } from '../components/VendorCard';
 import { Search, ChevronLeft } from 'lucide-react';
 import { useNavigate } from '../utils/navigation';
-import { getPuestos } from '../api';
+import { getPuestosByFestivalPublico } from '../api';
 
 export function HomeScreen() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [puestos, setPuestos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const service = localStorage.getItem('selectedService') || 'barras';
+
+  // Leer el festival y el tipo seleccionados en los pasos anteriores
+  const festivalRaw = sessionStorage.getItem('festivalSeleccionado');
+  const festival = festivalRaw ? JSON.parse(festivalRaw) : null;
+  const tipo = sessionStorage.getItem('tipoSeleccionado') || 'foodtruck';
+
+  const tipoLabel = tipo === 'barra' ? 'Barras' : 'Food Trucks';
 
   const cargarPuestos = async () => {
+    if (!festival) {
+      navigate('/festival-select');
+      return;
+    }
     try {
-      const data = await getPuestos();
-      setPuestos(data);
+      const data = await getPuestosByFestivalPublico(festival.id, tipo);
+      setPuestos(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -29,16 +39,19 @@ export function HomeScreen() {
   };
 
   useEffect(() => {
+    if (!festival) {
+      navigate('/festival-select');
+      return;
+    }
     cargarPuestos();
     const interval = setInterval(cargarPuestos, 30000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filteredPuestos = puestos.filter(p => {
-    const matchSearch = p.nombre.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchType = service === 'bars' ? p.tipo === 'barra' : p.tipo === 'foodtruck';
-    return matchSearch && matchType;
-  });
+  const filteredPuestos = puestos.filter(p =>
+    p.nombre.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -51,7 +64,12 @@ export function HomeScreen() {
             >
               <ChevronLeft className="w-6 h-6" />
             </button>
-            <h1 className="text-2xl font-bold capitalize m-0">{service}</h1>
+            <div>
+              <h1 className="text-2xl font-bold">{tipoLabel}</h1>
+              {festival && (
+                <p className="text-xs text-gray-500 -mt-0.5">{festival.nombre}</p>
+              )}
+            </div>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />

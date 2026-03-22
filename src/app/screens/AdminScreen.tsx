@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import {
-  crearFestival, getFestivales, eliminarFestival,
-  crearPuesto, actualizarPuesto, getPuestos, eliminarPuesto,
+  crearFestival, getFestivales, eliminarFestival, desactivarFestival, activarFestival,
+  crearPuesto, actualizarPuesto, getPuestosByFestival, eliminarPuesto,
   getProductos, crearProducto, actualizarProducto, eliminarProducto,
   getPromociones, crearPromocion, actualizarPromocion, eliminarPromocion,
   getParametros, actualizarParametros,
-  getUsuarios, crearUsuario, eliminarUsuario
+  getUsuariosStaff, getUsuarios, crearUsuario, eliminarUsuario
 } from '../api';
-import { PlusCircle, Calendar, MapPin, Settings, Users, Package, Store, CheckCircle2, XCircle, LogOut, Trash2, Tag } from 'lucide-react';
+import {
+  PlusCircle, Calendar, Settings, Users, Package,
+  Store, CheckCircle2, XCircle, LogOut, Trash2, Tag, Eye, PowerOff
+} from 'lucide-react';
 
 export function AdminScreen() {
   const { user, logout } = useAuth();
@@ -17,21 +20,41 @@ export function AdminScreen() {
   const [tab, setTab] = useState<'festival' | 'puestos' | 'productos' | 'promociones' | 'parametros' | 'usuarios'>('festival');
   const [loading, setLoading] = useState(false);
 
-  // Datos globales
+  // ── Festival activo en contexto ──────────────────────────────────────────
   const [festivalesList, setFestivalesList] = useState<any[]>([]);
+  // Se persiste en localStorage para sobrevivir re-renders y recargas de página
+  const [festivalActivo, setFestivalActivo] = useState<any | null>(() => {
+    try {
+      const saved = localStorage.getItem('adminFestivalActivo');
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+
+  const persistFestivalActivo = (fest: any | null) => {
+    setFestivalActivo(fest);
+    if (fest) localStorage.setItem('adminFestivalActivo', JSON.stringify(fest));
+    else localStorage.removeItem('adminFestivalActivo');
+  };
+
+  // Datos filtrados por festival activo
   const [puestosList, setPuestosList] = useState<any[]>([]);
 
-  // States: Festival
+  // States: Festival (formulario)
   const [festival, setFestival] = useState({ nombre: '', fecha_inicio: '', fecha_fin: '' });
 
   // States: Puesto
-  // [TODO: ESTÁTICO -> DINÁMICO] El `festival_id` inicial está fijado a 1. Si tu aplicación soporta múltiples festivales creados, esto debería venir de un selector, un contexto o leer la respueta al crear un nuevo festival.
-  const [puesto, setPuesto] = useState({ festival_id: 1, nombre: '', tipo: 'barra', capacidad_max: 50, num_empleados: 3, horarios_apertura: '18:00 - 04:00' });
+  const [puesto, setPuesto] = useState({
+    festival_id: festivalActivo?.id || 0,
+    nombre: '', tipo: 'barra', capacidad_max: 50, num_empleados: 3,
+    horarios_apertura: '18:00 - 04:00'
+  });
 
   // States: Productos
   const [productosList, setProductosList] = useState<any[]>([]);
   const [selectedPuestoId, setSelectedPuestoId] = useState<number | ''>('');
-  const [producto, setProducto] = useState({ nombre: '', descripcion: '', precio: 0, precio_dinamico: 0, stock: 100, activo: true });
+  const [producto, setProducto] = useState({
+    nombre: '', descripcion: '', precio: 0, precio_dinamico: 0, stock: 100, activo: true
+  });
 
   // States: Promociones
   const [promocionesList, setPromocionesList] = useState<any[]>([]);
@@ -40,124 +63,188 @@ export function AdminScreen() {
 
   // States: Parámetros
   const [parametros, setParametros] = useState({
-    pricing_dinamico_activo: false,
-    umbral_cola: 20,
-    porcentaje_subida: 10,
-    promociones_activas: false,
-    stock_minimo: 10
+    pricing_dinamico_activo: false, umbral_cola: 20,
+    porcentaje_subida: 10, promociones_activas: false, stock_minimo: 10
   });
 
-  // States: Usuarios
+  // States: Usuarios staff
   const [usuariosList, setUsuariosList] = useState<any[]>([]);
-  const [nuevoUsuario, setNuevoUsuario] = useState({ email: '', password: '', nombre: '', rol: 'gestor', puesto_id: '' });
+  const [nuevoUsuario, setNuevoUsuario] = useState({
+    email: '', password: '', nombre: '', rol: 'gestor', puesto_id: ''
+  });
 
-  // Loaders
-  const loadFestivales = async () => {
+  // ── Loaders ──────────────────────────────────────────────────────────────
+
+  const loadFestivales = useCallback(async () => {
     try {
       const data = await getFestivales();
-      console.log("Respuesta del servidor (Festivales):", data); // 👀 Mira esto en la consola del navegador
+      if (!Array.isArray(data)) return;
+      setFestivalesList(data);
 
-      // Verificamos si es un array directo
-      if (Array.isArray(data)) {
-        setFestivalesList(data);
-      }
-      // Verificamos si viene dentro de una propiedad (cambia 'data.festivales' por lo que veas en tu console.log si es distinto)
-      else if (data && data.festivales && Array.isArray(data.festivales)) {
-        setFestivalesList(data.festivales);
-      }
-      else if (data && data.error) {
-        toast.error(`Error del servidor: ${data.error}`);
-      }
-      else {
-        toast.error('El formato de datos no es válido');
-      }
-    } catch (error) {
-      console.error("Error al hacer la petición:", error);
-      toast.error('Error de conexión al cargar festivales');
+      setFestivalActivo((prev: any) => {
+        // Si ya hay uno guardado, refrescar sus datos desde la respuesta
+        if (prev?.id) {
+          const actualizado = data.find((f: any) => f.id === prev.id);
+          if (actualizado) {
+            localStorage.setItem('adminFestivalActivo', JSON.stringify(actualizado));
+            return actualizado;
+          }
+        }
+        // Si no había ninguno, auto-seleccionar el primer festival activo
+        const primerActivo = data.find((f: any) => f.activo === 1 || f.activo === true);
+        if (primerActivo) {
+          localStorage.setItem('adminFestivalActivo', JSON.stringify(primerActivo));
+          return primerActivo;
+        }
+        return prev;
+      });
+    } catch { toast.error('Error al cargar festivales'); }
+  }, []);
+
+  // Recibe el festival como argumento para evitar la race condition donde
+  // el estado `festivalActivo` aún no se ha actualizado en el mismo ciclo
+  const loadPuestos = useCallback(async (festivalParam?: any) => {
+    const fest = festivalParam ?? festivalActivo;
+    if (!fest?.id) {
+      setPuestosList([]);
+      return;
     }
-  };
-
-  const loadPuestos = async () => {
     try {
-      const data = await getPuestos();
+      const data = await getPuestosByFestival(fest.id);
       if (Array.isArray(data)) setPuestosList(data);
     } catch { toast.error('Error al cargar puestos'); }
-  };
+  }, [festivalActivo]);
 
-  const loadProductos = async (pid: number) => {
+  const loadProductos = useCallback(async (pid: number) => {
     try {
       const data = await getProductos(pid);
       if (Array.isArray(data)) setProductosList(data);
     } catch { toast.error('Error al cargar productos'); }
-  };
+  }, []);
 
-  const loadPromociones = async (pid: number) => {
+  const loadPromociones = useCallback(async (pid: number) => {
     try {
       const data = await getPromociones(pid);
       if (Array.isArray(data)) setPromocionesList(data);
     } catch { toast.error('Error al cargar promociones'); }
-  };
+  }, []);
 
-  const loadParametros = async () => {
+  const loadParametros = useCallback(async () => {
     try {
       const data = await getParametros();
       if (data && data.id) setParametros(data);
     } catch { toast.error('Error al cargar parámetros'); }
-  };
+  }, []);
 
-  const loadUsuarios = async () => {
+  const loadUsuarios = useCallback(async () => {
+    // Intenta primero el endpoint filtrado /staff
+    // Si falla (aún no desplegado), cae al endpoint general y filtra en cliente
+    try {
+      const data = await getUsuariosStaff();
+      if (Array.isArray(data)) { setUsuariosList(data); return; }
+    } catch { /* fallback silencioso */ }
     try {
       const data = await getUsuarios();
-      if (Array.isArray(data)) setUsuariosList(data);
+      if (Array.isArray(data)) {
+        setUsuariosList(data.filter((u: any) => [1, 2, 3].includes(Number(u.rol_id))));
+      }
     } catch { toast.error('Error al cargar usuarios'); }
-  };
+  }, []);
 
-  useEffect(() => {
-    if (tab === 'festival') loadFestivales();
-    if (tab === 'puestos' || tab === 'productos' || tab === 'promociones' || tab === 'usuarios') loadPuestos();
-    if (tab === 'parametros') loadParametros();
-    if (tab === 'usuarios') loadUsuarios();
-  }, [tab]);
+  // ── Effects ───────────────────────────────────────────────────────────────
 
+  // Cuando cambia el ID del festival activo: sincronizar form y recargar puestos
+  // Pasamos el festival explícitamente para evitar la race condition con el estado
   useEffect(() => {
-    if (selectedPuestoId) {
-      loadProductos(Number(selectedPuestoId));
-    } else {
-      setProductosList([]);
+    if (festivalActivo?.id) {
+      setPuesto(prev => ({ ...prev, festival_id: festivalActivo.id }));
+      setSelectedPuestoId('');
+      setSelectedPuestoIdPromo('');
+      loadPuestos(festivalActivo);
     }
-  }, [selectedPuestoId]);
+  }, [festivalActivo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Al cambiar de tab, cargar lo necesario
+  useEffect(() => {
+    if (tab === 'festival') {
+      loadFestivales();
+    } else if (['puestos', 'productos', 'promociones'].includes(tab)) {
+      if (festivalActivo?.id) {
+        loadPuestos(festivalActivo);
+      } else {
+        // Sin festival activo, cargar la lista para que el usuario pueda elegir
+        loadFestivales();
+      }
+    } else if (tab === 'parametros') {
+      loadParametros();
+    } else if (tab === 'usuarios') {
+      if (festivalActivo?.id) loadPuestos(festivalActivo);
+      loadUsuarios();
+    }
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (selectedPuestoIdPromo) {
-      loadPromociones(Number(selectedPuestoIdPromo));
-    } else {
-      setPromocionesList([]);
-    }
-  }, [selectedPuestoIdPromo]);
+    if (selectedPuestoId) loadProductos(Number(selectedPuestoId));
+    else setProductosList([]);
+  }, [selectedPuestoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (selectedPuestoIdPromo) loadPromociones(Number(selectedPuestoIdPromo));
+    else setPromocionesList([]);
+  }, [selectedPuestoIdPromo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handlers
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
   const handleCrearFestival = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       const data = await crearFestival(festival);
-      toast.success(`Festival registrado correctamente (ID: ${data?.id || 1})`);
+      toast.success(`Festival creado (ID: ${data?.id || '?'})`);
       setFestival({ nombre: '', fecha_inicio: '', fecha_fin: '' });
-      loadFestivales(); // Recargar la lista
+      loadFestivales();
     } catch { toast.error('Error al crear el festival'); }
     finally { setLoading(false); }
   };
 
+  const handleCambiarFestival = (fest: any) => {
+    persistFestivalActivo(fest);
+    setPuestosList([]);
+    loadPuestos(fest); // pasamos el objeto directamente, no esperamos al estado
+    toast.success(`Contexto cambiado a: ${fest.nombre}`);
+  };
+
+  const handleDesactivarFestival = async () => {
+    if (!festivalActivo) return;
+    if (!window.confirm(`¿Desactivar "${festivalActivo.nombre}"?`)) return;
+    try {
+      await desactivarFestival(festivalActivo.id);
+      toast.success('Evento desactivado');
+      persistFestivalActivo({ ...festivalActivo, activo: 0 });
+      loadFestivales();
+    } catch { toast.error('Error al desactivar el evento'); }
+  };
+
+  const handleActivarFestival = async () => {
+    if (!festivalActivo) return;
+    if (!window.confirm(`¿Activar "${festivalActivo.nombre}"?`)) return;
+    try {
+      await activarFestival(festivalActivo.id);
+      toast.success('Evento activado');
+      persistFestivalActivo({ ...festivalActivo, activo: 1 });
+      loadFestivales();
+    } catch { toast.error('Error al activar el evento'); }
+  };
+
   const handleCrearPuesto = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!festivalActivo) return toast.error('Selecciona un festival primero');
     setLoading(true);
     try {
-      await crearPuesto(puesto);
-      toast.success('Puesto guardado exitosamente');
-      // [TODO: ESTÁTICO -> DINÁMICO] Resetear manteniendo el ID dinámico guardado en estado en vez del 1 estático.
-      setPuesto({ festival_id: 1, nombre: '', tipo: 'barra', capacidad_max: 50, num_empleados: 3, horarios_apertura: '18:00 - 04:00' });
-      loadPuestos();
+      await crearPuesto({ ...puesto, festival_id: festivalActivo.id });
+      toast.success('Puesto creado');
+      setPuesto(prev => ({ ...prev, nombre: '', capacidad_max: 50, num_empleados: 3 }));
+      loadPuestos(festivalActivo);
     } catch { toast.error('Error al crear el puesto'); }
     finally { setLoading(false); }
   };
@@ -166,7 +253,7 @@ export function AdminScreen() {
     try {
       await actualizarPuesto(p.id, { ...p, abierto: !p.abierto });
       toast.success(`Puesto ${p.nombre} ${!p.abierto ? 'abierto' : 'cerrado'}`);
-      loadPuestos();
+      loadPuestos(festivalActivo);
     } catch { toast.error('Error al actualizar estado del puesto'); }
   };
 
@@ -176,7 +263,7 @@ export function AdminScreen() {
     setLoading(true);
     try {
       await crearProducto({ ...producto, puesto_id: selectedPuestoId });
-      toast.success('Producto añadido al catálogo');
+      toast.success('Producto añadido');
       setProducto({ nombre: '', descripcion: '', precio: 0, precio_dinamico: 0, stock: 100, activo: true });
       loadProductos(Number(selectedPuestoId));
     } catch { toast.error('Error al crear producto'); }
@@ -186,10 +273,10 @@ export function AdminScreen() {
   const handleToggleProducto = async (prod: any) => {
     try {
       await actualizarProducto(prod.id, { ...prod, activo: !prod.activo });
-      toast.success(`Producto ${prod.nombre} ${!prod.activo ? 'activado' : 'desactivado'}`);
+      toast.success(`${prod.nombre} ${!prod.activo ? 'activado' : 'desactivado'}`);
       if (selectedPuestoId) loadProductos(Number(selectedPuestoId));
     } catch { toast.error('Error actualizando producto'); }
-  }
+  };
 
   const handleCrearPromocion = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,7 +284,7 @@ export function AdminScreen() {
     setLoading(true);
     try {
       await crearPromocion({ ...promocion, puesto_id: selectedPuestoIdPromo });
-      toast.success('Promoción creada con éxito');
+      toast.success('Promoción creada');
       setPromocion({ titulo: '', descripcion: '', precio_promo: 0, activa: true });
       loadPromociones(Number(selectedPuestoIdPromo));
     } catch { toast.error('Error al crear promoción'); }
@@ -207,17 +294,17 @@ export function AdminScreen() {
   const handleTogglePromocion = async (promo: any) => {
     try {
       await actualizarPromocion(promo.id, { ...promo, activa: !promo.activa });
-      toast.success(`Promoción ${promo.titulo} ${!promo.activa ? 'activada' : 'desactivada'}`);
+      toast.success(`${promo.titulo} ${!promo.activa ? 'activada' : 'desactivada'}`);
       if (selectedPuestoIdPromo) loadPromociones(Number(selectedPuestoIdPromo));
     } catch { toast.error('Error actualizando promoción'); }
-  }
+  };
 
   const handleGuardarParametros = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await actualizarParametros(parametros);
-      toast.success('Parámetros globales actualizados');
+      toast.success('Parámetros actualizados');
     } catch { toast.error('Error al actualizar parámetros'); }
     finally { setLoading(false); }
   };
@@ -227,33 +314,34 @@ export function AdminScreen() {
     setLoading(true);
     try {
       await crearUsuario(nuevoUsuario);
-      toast.success('Usuario registrado con éxito');
+      toast.success('Usuario creado');
       setNuevoUsuario({ email: '', password: '', nombre: '', rol: 'gestor', puesto_id: '' });
       loadUsuarios();
-    } catch { toast.error('Error al registrar usuario'); }
+    } catch { toast.error('Error al crear usuario'); }
     finally { setLoading(false); }
   };
 
   const handleEliminarFestival = async (id: number) => {
-    if (!window.confirm('¿Seguro que quieres eliminar este evento? Todo lo relacionado puede perderse.')) return;
+    if (!window.confirm('¿Eliminar este festival? Se perderán todos sus datos.')) return;
     try {
       await eliminarFestival(id);
       toast.success('Festival eliminado');
+      if (festivalActivo?.id === id) persistFestivalActivo(null);
       loadFestivales();
     } catch { toast.error('Error al eliminar festival'); }
   };
 
   const handleEliminarPuesto = async (id: number) => {
-    if (!window.confirm('¿Seguro que quieres eliminar este puesto?')) return;
+    if (!window.confirm('¿Eliminar este puesto?')) return;
     try {
       await eliminarPuesto(id);
       toast.success('Puesto eliminado');
-      loadPuestos();
+      loadPuestos(festivalActivo);
     } catch { toast.error('Error al eliminar puesto'); }
   };
 
   const handleEliminarProducto = async (id: number) => {
-    if (!window.confirm('¿Seguro que quieres eliminar este producto del catálogo?')) return;
+    if (!window.confirm('¿Eliminar este producto?')) return;
     try {
       await eliminarProducto(id);
       toast.success('Producto eliminado');
@@ -262,7 +350,7 @@ export function AdminScreen() {
   };
 
   const handleEliminarPromocion = async (id: number) => {
-    if (!window.confirm('¿Seguro que quieres eliminar esta promoción?')) return;
+    if (!window.confirm('¿Eliminar esta promoción?')) return;
     try {
       await eliminarPromocion(id);
       toast.success('Promoción eliminada');
@@ -271,7 +359,7 @@ export function AdminScreen() {
   };
 
   const handleEliminarUsuario = async (id: number) => {
-    if (!window.confirm('¿Seguro que quieres revocar el acceso a este usuario?')) return;
+    if (!window.confirm('¿Revocar acceso a este usuario?')) return;
     try {
       await eliminarUsuario(id);
       toast.success('Usuario eliminado');
@@ -279,22 +367,57 @@ export function AdminScreen() {
     } catch { toast.error('Error al eliminar usuario'); }
   };
 
+  // ── Helpers UI ────────────────────────────────────────────────────────────
+
+  const rolLabel = (rolId: number) => {
+    if (rolId === 1) return { label: 'Administrador', cls: 'bg-black text-white' };
+    if (rolId === 2) return { label: 'Gestor', cls: 'bg-blue-100 text-blue-700' };
+    return { label: 'Operador', cls: 'bg-red-100 text-red-700' };
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header (Negro/Rojo Admin) */}
-      <div className="bg-gray-900 border-b-4 border-red-600 text-white p-4 flex justify-between items-center shadow-md">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Settings className="text-red-500 w-5 h-5" /> Admin Center
-          </h1>
-          <p className="text-gray-400 text-sm">Sesión: {user?.nombre || 'Administrador'}</p>
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="bg-gray-900 border-b-4 border-red-600 text-white p-4 shadow-md">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              <Settings className="text-red-500 w-5 h-5" /> Admin Center
+            </h1>
+            <p className="text-gray-400 text-sm">Sesión: {user?.nombre || 'Administrador'}</p>
+          </div>
+          <button onClick={logout} className="text-red-400 hover:text-red-300 flex items-center gap-1 text-sm font-medium transition-colors">
+            <LogOut className="w-4 h-4" /> Salir
+          </button>
         </div>
-        <button onClick={logout} className="text-red-400 hover:text-red-300 flex items-center gap-1 text-sm font-medium transition-colors">
-          <LogOut className="w-4 h-4" /> Salir
-        </button>
+
+        {/* Banner festival activo */}
+        {festivalActivo ? (
+          <div className="mt-3 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2 border border-gray-700">
+            <Calendar className="w-4 h-4 text-red-400 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-400 leading-none">Evento en contexto</p>
+              <p className="text-sm font-bold text-white truncate">{festivalActivo.nombre}</p>
+            </div>
+            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border flex-shrink-0 ${festivalActivo.activo ? 'bg-green-900 text-green-300 border-green-700' : 'bg-gray-700 text-gray-400 border-gray-600'
+              }`}>
+              {festivalActivo.activo ? 'ACTIVO' : 'INACTIVO'}
+            </span>
+          </div>
+        ) : (
+          <div className="mt-3 flex items-center gap-2 bg-yellow-900/40 rounded-lg px-3 py-2 border border-yellow-700/50">
+            <Calendar className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+            <p className="text-xs text-yellow-300">
+              Sin evento seleccionado — ve a <strong>Evento</strong> y pulsa <strong>Ver</strong>
+            </p>
+          </div>
+        )}
       </div>
 
-      {/* Navegación Tabs horizontal scrollable */}
+      {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <div className="flex overflow-x-auto border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm hide-scrollbar">
         {[
           { id: 'festival', label: 'Evento', icon: Calendar },
@@ -317,9 +440,8 @@ export function AdminScreen() {
       </div>
 
       <div className="p-4">
-        {/* TABS CONTENT */}
 
-        {/* 1. FESTIVAL */}
+        {/* ── 1. FESTIVAL ─────────────────────────────────────────────── */}
         {tab === 'festival' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
             <form onSubmit={handleCrearFestival} className="space-y-4">
@@ -329,7 +451,13 @@ export function AdminScreen() {
                 </h2>
                 <div>
                   <label className="block text-sm font-medium mb-1 text-gray-700">Nombre del Evento</label>
-                  <input type="text" value={festival.nombre} onChange={e => setFestival({ ...festival, nombre: e.target.value })} placeholder="QueueFest 2026" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-shadow" required />
+                  <input
+                    type="text" value={festival.nombre}
+                    onChange={e => setFestival({ ...festival, nombre: e.target.value })}
+                    placeholder="QueueFest 2026"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    required
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -347,38 +475,62 @@ export function AdminScreen() {
               </button>
             </form>
 
-            <div className="space-y-3 mt-6">
-              {/* [TODO: ESTÁTICO -> DINÁMICO] El listado a continuación carga datos dinámicos (hace dinámico) del backend, asumiendo su modelo */}
-              <h3 className="font-bold text-gray-700">Eventos Activos <span className="text-xs font-normal text-red-500 bg-red-50 px-2 py-1 rounded">(hace dinámico)</span></h3>
+            <div className="space-y-3">
+              <h3 className="font-bold text-gray-700">Todos los Eventos</h3>
               {festivalesList.length === 0 ? (
                 <p className="text-gray-500 text-sm italic text-center py-4 bg-gray-100 rounded-lg">No hay eventos registrados aún.</p>
-              ) : festivalesList.map((fest, idx) => (
-                <div key={fest.id} className="flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-gray-100">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold text-gray-900 leading-tight">{fest.nombre || 'Festival Sin Nombre'}</h4>
-                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${fest.activo ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                        {fest.activo ? 'ACTIVO (1)' : 'INACTIVO (0)'}
+              ) : festivalesList.map((fest) => (
+                <div key={fest.id} className={`flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border ${festivalActivo?.id === fest.id ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-100'
+                  }`}>
+                  <div className="flex-1 min-w-0 mr-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-semibold text-gray-900 leading-tight">{fest.nombre || 'Sin Nombre'}</h4>
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${fest.activo ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'
+                        }`}>
+                        {fest.activo ? 'ACTIVO' : 'INACTIVO'}
                       </span>
+                      {festivalActivo?.id === fest.id && (
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-600 text-white">EN USO</span>
+                      )}
                     </div>
-                    <span className="text-xs text-gray-500">ID: {fest.id} • Inicio: {fest.fecha_inicio ? new Date(fest.fecha_inicio).toLocaleDateString() : 'N/A'}</span>
+                    <span className="text-xs text-gray-500">
+                      ID: {fest.id} • {fest.fecha_inicio ? new Date(fest.fecha_inicio).toLocaleDateString() : 'N/A'}
+                    </span>
                   </div>
-                  <button onClick={() => handleEliminarFestival(fest.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar Festival">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => handleCambiarFestival(fest)}
+                      disabled={festivalActivo?.id === fest.id}
+                      className={`flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${festivalActivo?.id === fest.id
+                          ? 'bg-red-600 text-white cursor-default'
+                          : 'bg-gray-100 text-gray-700 hover:bg-red-50 hover:text-red-700 border border-gray-200'
+                        }`}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      {festivalActivo?.id === fest.id ? 'Activo' : 'Ver'}
+                    </button>
+                    <button onClick={() => handleEliminarFestival(fest.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-
-        {/* 2. PUESTOS */}
+        {/* ── 2. PUESTOS ──────────────────────────────────────────────── */}
         {tab === 'puestos' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+            {!festivalActivo && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800">
+                ⚠️ Selecciona un evento desde la pestaña <strong>Evento → Ver</strong> para gestionar sus puestos.
+              </div>
+            )}
             <form onSubmit={handleCrearPuesto} className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-gray-100">
               <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
-                <Store className="w-5 h-5 text-red-600" /> Configurar Nuevo Puesto
+                <Store className="w-5 h-5 text-red-600" /> Nuevo Puesto
+                {festivalActivo && <span className="text-xs font-normal text-gray-500 ml-auto">en {festivalActivo.nombre}</span>}
               </h2>
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
@@ -387,7 +539,6 @@ export function AdminScreen() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Tipo</label>
-                  {/* [TODO: ESTÁTICO -> DINÁMICO] Esta lista de tipos debería cargarse desde la DB (p.ej GET /api/admin/tipos-puesto) si prevés escalarlo más allá de barra/foodtruck */}
                   <select value={puesto.tipo} onChange={e => setPuesto({ ...puesto, tipo: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500">
                     <option value="barra">Barra Bebidas</option>
                     <option value="foodtruck">Food Truck</option>
@@ -398,34 +549,37 @@ export function AdminScreen() {
                   <input type="text" value={puesto.horarios_apertura} onChange={e => setPuesto({ ...puesto, horarios_apertura: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Capacidad Máx (Cola) <span className="text-gray-400 text-xs">(pers)</span></label>
+                  <label className="block text-sm font-medium mb-1">Capacidad Máx <span className="text-gray-400 text-xs">(pers)</span></label>
                   <input type="number" value={puesto.capacidad_max} onChange={e => setPuesto({ ...puesto, capacidad_max: Number(e.target.value) })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500" required />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Empleados (Staff)</label>
+                  <label className="block text-sm font-medium mb-1">Empleados</label>
                   <input type="number" value={puesto.num_empleados} onChange={e => setPuesto({ ...puesto, num_empleados: Number(e.target.value) })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500" required />
                 </div>
               </div>
-              <button type="submit" disabled={loading} className="w-full bg-gray-900 border border-gray-800 hover:bg-black text-white py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors">
+              <button type="submit" disabled={loading || !festivalActivo} className="w-full bg-gray-900 hover:bg-black text-white py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-40">
                 <PlusCircle className="w-4 h-4" /> Dar de alta Puesto
               </button>
             </form>
 
             <div className="space-y-3">
-              <h3 className="font-bold text-gray-700">Puestos Actuales</h3>
+              <h3 className="font-bold text-gray-700">Puestos de {festivalActivo?.nombre || '—'}</h3>
               {puestosList.length === 0 ? (
-                <p className="text-gray-500 text-sm italic text-center py-4 bg-gray-100 rounded-lg">No hay puestos registrados.</p>
-              ) : puestosList.map((p, i) => (
-                <div key={i} className="flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                <p className="text-gray-500 text-sm italic text-center py-4 bg-gray-100 rounded-lg">
+                  {festivalActivo ? 'No hay puestos en este festival.' : 'Selecciona un festival primero.'}
+                </p>
+              ) : puestosList.map((p) => (
+                <div key={p.id} className="flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-gray-100">
                   <div>
                     <h4 className="font-semibold text-gray-900 leading-tight">{p.nombre}</h4>
                     <span className="text-xs text-gray-500 capitalize">{p.tipo} • Staff: {p.num_empleados}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => handleTogglePuesto(p)} className={`px-3 py-1 text-xs font-bold rounded-full ${p.abierto ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'} transition-colors`}>
+                    <button onClick={() => handleTogglePuesto(p)} className={`px-3 py-1 text-xs font-bold rounded-full ${p.abierto ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'
+                      } transition-colors`}>
                       {p.abierto ? 'ABIERTO' : 'CERRADO'}
                     </button>
-                    <button onClick={() => handleEliminarPuesto(p.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar Puesto">
+                    <button onClick={() => handleEliminarPuesto(p.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -435,19 +589,27 @@ export function AdminScreen() {
           </div>
         )}
 
-        {/* 3. PRODUCTOS */}
+        {/* ── 3. PRODUCTOS ────────────────────────────────────────────── */}
         {tab === 'productos' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
             <div className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-gray-100">
               <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
                 <Package className="w-5 h-5 text-red-600" /> Catálogo por Puesto
+                {festivalActivo && <span className="text-xs font-normal text-gray-500 ml-auto">{festivalActivo.nombre}</span>}
               </h2>
               <div>
-                <label className="block text-sm font-medium mb-1">Selecciona Puesto para editar Catálogo</label>
-                <select value={selectedPuestoId} onChange={(e) => setSelectedPuestoId(e.target.value === '' ? '' : Number(e.target.value))} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg font-medium">
+                <label className="block text-sm font-medium mb-1">Selecciona Puesto</label>
+                <select
+                  value={selectedPuestoId}
+                  onChange={e => setSelectedPuestoId(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg font-medium"
+                >
                   <option value="">-- Seleccionar Puesto --</option>
-                  {puestosList.map((p, i) => <option key={i} value={p.id}>{p.nombre} ({p.tipo})</option>)}
+                  {puestosList.map(p => <option key={p.id} value={p.id}>{p.nombre} ({p.tipo})</option>)}
                 </select>
+                {puestosList.length === 0 && festivalActivo && (
+                  <p className="text-xs text-amber-600 mt-1">Este festival no tiene puestos aún. Créalos en la pestaña Puestos.</p>
+                )}
               </div>
             </div>
 
@@ -461,18 +623,18 @@ export function AdminScreen() {
                     </div>
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-gray-500 uppercase">Descripción</label>
-                      <input type="text" value={producto.descripcion} onChange={e => setProducto({ ...producto, descripcion: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none text-sm" placeholder="Ingredientes o breve descripción" />
+                      <input type="text" value={producto.descripcion} onChange={e => setProducto({ ...producto, descripcion: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none text-sm" placeholder="Ingredientes o descripción breve" />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-gray-500 uppercase">Precio Base (€)</label>
                       <input type="number" step="0.5" value={producto.precio} onChange={e => setProducto({ ...producto, precio: Number(e.target.value) })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-bold text-gray-800" required />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase">Precio Dinámico (€) <span className="text-[10px] lowercase font-normal">(opcional)</span></label>
+                      <label className="text-xs font-medium text-gray-500 uppercase">Precio Dinámico (€)</label>
                       <input type="number" step="0.5" value={producto.precio_dinamico} onChange={e => setProducto({ ...producto, precio_dinamico: Number(e.target.value) })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-bold text-red-700" />
                     </div>
                     <div className="col-span-2">
-                      <label className="text-xs font-medium text-gray-500 uppercase">Unidades Iniciales (Stock)</label>
+                      <label className="text-xs font-medium text-gray-500 uppercase">Stock inicial</label>
                       <input type="number" value={producto.stock} onChange={e => setProducto({ ...producto, stock: Number(e.target.value) })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none" required />
                     </div>
                   </div>
@@ -480,44 +642,49 @@ export function AdminScreen() {
                     + Insertar en Catálogo
                   </button>
                 </form>
-
                 <div className="space-y-2">
-                  <h3 className="font-bold text-gray-700 text-sm mb-3">Productos Configurados</h3>
-                  {productosList.map((prod, i) => (
-                    <div key={i} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-                      <div>
-                        <p className={`font-semibold ${prod.activo ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{prod.nombre}</p>
-                        <p className="text-xs text-gray-500 font-medium">{prod.precio}€ • Stock: {prod.stock}</p>
+                  <h3 className="font-bold text-gray-700 text-sm mb-3">Productos configurados</h3>
+                  {productosList.length === 0
+                    ? <p className="text-xs text-center text-gray-400">Sin productos aún.</p>
+                    : productosList.map(prod => (
+                      <div key={prod.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                        <div>
+                          <p className={`font-semibold ${prod.activo ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{prod.nombre}</p>
+                          <p className="text-xs text-gray-500 font-medium">{prod.precio}€ • Stock: {prod.stock}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => handleToggleProducto(prod)} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
+                            {prod.activo ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <XCircle className="w-6 h-6 text-gray-300" />}
+                          </button>
+                          <button onClick={() => handleEliminarProducto(prod.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors">
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => handleToggleProducto(prod)} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
-                          {prod.activo ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <XCircle className="w-6 h-6 text-gray-300" />}
-                        </button>
-                        <button onClick={() => handleEliminarProducto(prod.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors" title="Eliminar Producto">
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {productosList.length === 0 && <p className="text-xs text-center text-gray-400">Sin productos aún.</p>}
+                    ))}
                 </div>
               </>
             )}
           </div>
         )}
 
-        {/* 3.5. PROMOCIONES / OFERTAS */}
+        {/* ── 3.5 PROMOCIONES ─────────────────────────────────────────── */}
         {tab === 'promociones' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
             <div className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-gray-100">
               <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
                 <Tag className="w-5 h-5 text-red-600" /> Promociones y Ofertas
+                {festivalActivo && <span className="text-xs font-normal text-gray-500 ml-auto">{festivalActivo.nombre}</span>}
               </h2>
               <div>
-                <label className="block text-sm font-medium mb-1">Selecciona Puesto para gestionar Ofertas</label>
-                <select value={selectedPuestoIdPromo} onChange={(e) => setSelectedPuestoIdPromo(e.target.value === '' ? '' : Number(e.target.value))} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg font-medium">
+                <label className="block text-sm font-medium mb-1">Selecciona Puesto</label>
+                <select
+                  value={selectedPuestoIdPromo}
+                  onChange={e => setSelectedPuestoIdPromo(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg font-medium"
+                >
                   <option value="">-- Seleccionar Puesto --</option>
-                  {puestosList.map((p, i) => <option key={i} value={p.id}>{p.nombre} ({p.tipo})</option>)}
+                  {puestosList.map(p => <option key={p.id} value={p.id}>{p.nombre} ({p.tipo})</option>)}
                 </select>
               </div>
             </div>
@@ -527,12 +694,12 @@ export function AdminScreen() {
                 <form onSubmit={handleCrearPromocion} className="bg-white rounded-xl p-4 shadow-sm space-y-4 border border-gray-100">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
-                      <label className="text-xs font-medium text-gray-500 uppercase">Título de la Oferta</label>
+                      <label className="text-xs font-medium text-gray-500 uppercase">Título</label>
                       <input type="text" value={promocion.titulo} onChange={e => setPromocion({ ...promocion, titulo: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-medium" required placeholder="Ej. 2x1 en Cervezas" />
                     </div>
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-gray-500 uppercase">Descripción</label>
-                      <input type="text" value={promocion.descripcion} onChange={e => setPromocion({ ...promocion, descripcion: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none text-sm" placeholder="Condiciones de la oferta" />
+                      <input type="text" value={promocion.descripcion} onChange={e => setPromocion({ ...promocion, descripcion: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none text-sm" placeholder="Condiciones" />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-gray-500 uppercase">Precio Promo (€)</label>
@@ -543,90 +710,131 @@ export function AdminScreen() {
                     + Insertar Oferta Activa
                   </button>
                 </form>
-
                 <div className="space-y-2">
-                  <h3 className="font-bold text-gray-700 text-sm mb-3">Ofertas Vigentes</h3>
-                  {promocionesList.map((promo, i) => (
-                    <div key={i} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-                      <div>
-                        <p className={`font-semibold ${promo.activa ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{promo.titulo}</p>
-                        <p className="text-xs text-gray-500 font-medium">{promo.precio_promo}€ • {promo.descripcion}</p>
+                  <h3 className="font-bold text-gray-700 text-sm mb-3">Ofertas vigentes</h3>
+                  {promocionesList.length === 0
+                    ? <p className="text-xs text-center text-gray-400">Sin ofertas configuradas.</p>
+                    : promocionesList.map(promo => (
+                      <div key={promo.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                        <div>
+                          <p className={`font-semibold ${promo.activa ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{promo.titulo}</p>
+                          <p className="text-xs text-gray-500 font-medium">{promo.precio_promo}€ • {promo.descripcion}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => handleTogglePromocion(promo)} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
+                            {promo.activa ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <XCircle className="w-6 h-6 text-gray-300" />}
+                          </button>
+                          <button onClick={() => handleEliminarPromocion(promo.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors">
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => handleTogglePromocion(promo)} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
-                          {promo.activa ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <XCircle className="w-6 h-6 text-gray-300" />}
-                        </button>
-                        <button onClick={() => handleEliminarPromocion(promo.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors" title="Eliminar Oferta">
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {promocionesList.length === 0 && <p className="text-xs text-center text-gray-400">Sin ofertas configuradas.</p>}
+                    ))}
                 </div>
               </>
             )}
           </div>
         )}
 
-        {/* 4. PARAMETROS / AJUSTES */}
+        {/* ── 4. AJUSTES ──────────────────────────────────────────────── */}
         {tab === 'parametros' && (
-          <form onSubmit={handleGuardarParametros} className="bg-white rounded-xl p-5 shadow-sm space-y-6 border border-gray-100 animate-in fade-in slide-in-from-bottom-2">
-            <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
-              <Settings className="w-5 h-5 text-red-600" /> Reglas de Negocio
-            </h2>
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+            <form onSubmit={handleGuardarParametros} className="bg-white rounded-xl p-5 shadow-sm space-y-6 border border-gray-100">
+              <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
+                <Settings className="w-5 h-5 text-red-600" /> Reglas de Negocio
+              </h2>
 
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="font-semibold text-gray-900">Pricing Dinámico</h4>
-                <p className="text-xs text-gray-500 pr-4">Sube precios cuando hay picos de demanda según umbral de cola.</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" checked={parametros.pricing_dinamico_activo} onChange={e => setParametros({ ...parametros, pricing_dinamico_activo: e.target.checked })} />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
-              </label>
-            </div>
-
-            {parametros.pricing_dinamico_activo && (
-              <div className="grid grid-cols-2 gap-4 bg-red-50 p-4 rounded-lg border border-red-100">
+              <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-semibold mb-1 text-red-900">Umbral (Pedidos en cola)</label>
-                  <input type="number" value={parametros.umbral_cola} onChange={e => setParametros({ ...parametros, umbral_cola: Number(e.target.value) })} className="w-full p-2 border border-red-200 rounded text-sm text-center font-bold" />
+                  <h4 className="font-semibold text-gray-900">Pricing Dinámico</h4>
+                  <p className="text-xs text-gray-500 pr-4">Sube precios cuando hay picos de demanda.</p>
                 </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={parametros.pricing_dinamico_activo} onChange={e => setParametros({ ...parametros, pricing_dinamico_activo: e.target.checked })} />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                </label>
+              </div>
+
+              {parametros.pricing_dinamico_activo && (
+                <div className="grid grid-cols-2 gap-4 bg-red-50 p-4 rounded-lg border border-red-100">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 text-red-900">Umbral (pedidos en cola)</label>
+                    <input type="number" value={parametros.umbral_cola} onChange={e => setParametros({ ...parametros, umbral_cola: Number(e.target.value) })} className="w-full p-2 border border-red-200 rounded text-sm text-center font-bold" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 text-red-900">Subida de precio (%)</label>
+                    <input type="number" value={parametros.porcentaje_subida} onChange={e => setParametros({ ...parametros, porcentaje_subida: Number(e.target.value) })} className="w-full p-2 border border-red-200 rounded text-sm text-center font-bold" />
+                  </div>
+                </div>
+              )}
+
+              <hr className="border-gray-100" />
+
+              <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-semibold mb-1 text-red-900">Subida de Precio (%)</label>
-                  <input type="number" value={parametros.porcentaje_subida} onChange={e => setParametros({ ...parametros, porcentaje_subida: Number(e.target.value) })} className="w-full p-2 border border-red-200 rounded text-sm text-center font-bold" />
+                  <h4 className="font-semibold text-gray-900">Promociones Automáticas</h4>
+                  <p className="text-xs text-gray-500 pr-4">Happy hours en horas valle detectadas.</p>
                 </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={parametros.promociones_activas} onChange={e => setParametros({ ...parametros, promociones_activas: e.target.checked })} />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                </label>
               </div>
-            )}
 
-            <hr className="border-gray-100" />
+              <hr className="border-gray-100" />
 
-            <div className="flex items-center justify-between">
               <div>
-                <h4 className="font-semibold text-gray-900">Promociones Automáticas</h4>
-                <p className="text-xs text-gray-500 pr-4">Activa happy hours en horas valle detectadas automáticamente.</p>
+                <label className="block text-sm font-semibold mb-2 text-gray-800">Alerta Stock Crítico (unidades mínimas)</label>
+                <input type="number" value={parametros.stock_minimo} onChange={e => setParametros({ ...parametros, stock_minimo: Number(e.target.value) })} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 font-bold" />
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" checked={parametros.promociones_activas} onChange={e => setParametros({ ...parametros, promociones_activas: e.target.checked })} />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
-              </label>
+
+              <button type="submit" disabled={loading} className="w-full bg-gray-900 hover:bg-black text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors">
+                Guardar y Propagar Reglas
+              </button>
+            </form>
+
+            {/* Desactivar evento */}
+            <div className="bg-white rounded-xl p-5 shadow-sm border border-red-100 space-y-3">
+              <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
+                <PowerOff className="w-5 h-5 text-red-600" /> Gestión del Evento Activo
+              </h2>
+              {festivalActivo ? (
+                <>
+                  <p className="text-sm text-gray-600">
+                    Evento en curso: <strong>{festivalActivo.nombre}</strong>
+                    <span className={`ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full border ${festivalActivo.activo ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'
+                      }`}>
+                      {festivalActivo.activo ? 'ACTIVO' : 'YA INACTIVO'}
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-500">Desactivar ocultará el evento a los asistentes. Los datos se conservan.</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={handleActivarFestival}
+                      disabled={!!festivalActivo.activo}
+                      className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2.5 rounded-lg font-semibold text-sm transition-colors"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      {festivalActivo.activo ? 'Ya activo' : 'Activar Evento'}
+                    </button>
+                    <button
+                      onClick={handleDesactivarFestival}
+                      disabled={!festivalActivo.activo}
+                      className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2.5 rounded-lg font-semibold text-sm transition-colors"
+                    >
+                      <PowerOff className="w-4 h-4" />
+                      {festivalActivo.activo ? 'Desactivar Evento' : 'Ya desactivado'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500 italic">No hay evento seleccionado. Ve a <strong>Evento → Ver</strong>.</p>
+              )}
             </div>
-
-            <hr className="border-gray-100" />
-
-            <div className="pt-2">
-              <label className="block text-sm font-semibold mb-2 text-gray-800">Alerta Stock Crítico (Unidades Mínimas)</label>
-              <input type="number" value={parametros.stock_minimo} onChange={e => setParametros({ ...parametros, stock_minimo: Number(e.target.value) })} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 font-bold" />
-            </div>
-
-            <button type="submit" disabled={loading} className="w-full mt-6 bg-gray-900 hover:bg-black text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors">
-              Guardar y Propagar Reglas
-            </button>
-          </form>
+          </div>
         )}
 
-        {/* 5. USUARIOS Y PERMISOS */}
+        {/* ── 5. USUARIOS ─────────────────────────────────────────────── */}
         {tab === 'usuarios' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
             <form onSubmit={handleCrearUsuario} className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-gray-100">
@@ -638,45 +846,59 @@ export function AdminScreen() {
                 <input type="email" placeholder="Correo corporativo" value={nuevoUsuario.email} onChange={e => setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" required />
                 <div className="grid grid-cols-2 gap-3">
                   <input type="password" placeholder="Contraseña inicial" value={nuevoUsuario.password} onChange={e => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm" required />
-                  {/* [TODO: ESTÁTICO -> DINÁMICO] Los roles de usuario también podrían solicitarse desde la BD si tu sistema de roles en MySQL puede cambiar mediante migraciones o en el tiempo */}
                   <select value={nuevoUsuario.rol} onChange={e => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium">
-                    <option value="gestor">Gestor (Supervisión)</option>
-                    <option value="operador">Operador (Puesto)</option>
-                    <option value="administrador">Administrador Total</option>
+                    <option value="gestor">Gestor</option>
+                    <option value="operador">Operador</option>
+                    <option value="administrador">Administrador</option>
                   </select>
                 </div>
                 {nuevoUsuario.rol === 'operador' && (
                   <select value={nuevoUsuario.puesto_id} onChange={e => setNuevoUsuario({ ...nuevoUsuario, puesto_id: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-red-200 rounded-lg text-sm text-red-900" required>
                     <option value="">-- Asignar a un Puesto --</option>
-                    {puestosList.map((p, i) => <option key={i} value={p.id}>{p.nombre}</option>)}
+                    {puestosList.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                   </select>
                 )}
-                <button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg font-semibold text-sm transition-colors mt-2">Crear Credenciales</button>
+                <button type="submit" disabled={loading} className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg font-semibold text-sm transition-colors">
+                  Crear Credenciales
+                </button>
               </div>
             </form>
 
-            <div className="space-y-2 mt-6">
-              <h3 className="font-bold text-gray-700 text-sm mb-2">Personal del Sistema <span className="text-[10px] font-normal text-red-500 bg-red-50 px-1.5 py-0.5 rounded">(hace dinámico)</span></h3>
-              {usuariosList.length === 0 ? (
-                <p className="text-gray-500 text-sm italic text-center py-4 bg-gray-100 rounded-lg">No hay usuarios registrados aún.</p>
-              ) : usuariosList.map((usr, i) => (
-                <div key={i} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-                  <div>
-                    <h4 className="font-semibold text-sm text-gray-900 leading-none">{usr.nombre}</h4>
-                    <p className="text-[10px] text-gray-500">{usr.email}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`px-2 py-0.5 text-[10px] uppercase font-bold rounded-full ${usr.rol === 'administrador' ? 'bg-black text-white' :
-                      usr.rol === 'gestor' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                      {usr.rol}
-                    </span>
-                    <button onClick={() => handleEliminarUsuario(usr.id)} className="text-red-500 hover:text-red-700 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+            {/* Listado staff: soporta tanto rol_id numérico como rol string */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-bold text-gray-700 text-sm">Personal del Sistema</h3>
+                <div className="flex gap-1">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-black text-white font-bold">Admin</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">Gestor</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold">Operador</span>
                 </div>
-              ))}
+              </div>
+              {usuariosList.length === 0 ? (
+                <p className="text-gray-500 text-sm italic text-center py-4 bg-gray-100 rounded-lg">No hay personal de staff registrado.</p>
+              ) : usuariosList.map(usr => {
+                // Soporta rol_id numérico (endpoint /staff) y rol string (endpoint general como fallback)
+                const rid = usr.rol_id != null
+                  ? Number(usr.rol_id)
+                  : usr.rol === 'administrador' ? 1 : usr.rol === 'gestor' ? 2 : 3;
+                const { label, cls } = rolLabel(rid);
+                return (
+                  <div key={usr.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                    <div>
+                      <h4 className="font-semibold text-sm text-gray-900 leading-none">{usr.nombre}</h4>
+                      <p className="text-[10px] text-gray-500">{usr.email}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`px-2 py-0.5 text-[10px] uppercase font-bold rounded-full ${cls}`}>
+                        {label}
+                      </span>
+                      <button onClick={() => handleEliminarUsuario(usr.id)} className="text-red-500 hover:text-red-700 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

@@ -1,0 +1,106 @@
+=====================================================================
+  CAMBIOS NECESARIOS EN EL BACKEND DE NODE.JS
+  Archivo: routes/puestos.js  (o similar donde tengas el router de /api/puestos)
+=====================================================================
+
+El frontend ahora llama a:
+  GET /api/puestos?festival_id=X&tipo=Y
+
+Necesitas que esta ruta soporte esos dos query params opcionales para
+filtrar por festival y tipo de puesto.
+
+---------------------------------------------------------------------
+OPCIÓN A — Si usas una sola ruta GET / para puestos (lo más común)
+---------------------------------------------------------------------
+
+Busca tu ruta que tenga algo como:
+
+    router.get('/', async (req, res) => {
+        const [rows] = await pool.query('SELECT * FROM puestos WHERE activo = 1');
+        res.json(rows);
+    });
+
+Y cámbiala por esto:
+
+    router.get('/', async (req, res) => {
+        try {
+            const { festival_id, tipo } = req.query;
+
+            let sql = 'SELECT * FROM puestos WHERE activo = 1';
+            const params = [];
+
+            if (festival_id) {
+                sql += ' AND festival_id = ?';
+                params.push(Number(festival_id));
+            }
+
+            if (tipo) {
+                sql += ' AND tipo = ?';
+                params.push(tipo);  // 'barra' o 'foodtruck'
+            }
+
+            const [rows] = await pool.query(sql, params);
+            res.json(rows);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Error al obtener puestos' });
+        }
+    });
+
+
+---------------------------------------------------------------------
+OPCIÓN B — Si usas Sequelize (ORM)
+---------------------------------------------------------------------
+
+    router.get('/', async (req, res) => {
+        try {
+            const { festival_id, tipo } = req.query;
+            const where = { activo: 1 };
+
+            if (festival_id) where.festival_id = Number(festival_id);
+            if (tipo)       where.tipo = tipo;
+
+            const puestos = await Puesto.findAll({ where });
+            res.json(puestos);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Error al obtener puestos' });
+        }
+    });
+
+
+---------------------------------------------------------------------
+TAMBIÉN: Ruta pública de festivales
+---------------------------------------------------------------------
+
+El frontend ahora llama a:
+  GET /api/festivales
+
+Asegúrate de que esa ruta existe y devuelve los festivales activos
+sin requerir token JWT. Ejemplo:
+
+    // En router/festivales.js (o índex de rutas públicas)
+    router.get('/', async (req, res) => {
+        try {
+            const [rows] = await pool.query(
+                'SELECT * FROM festivales WHERE activo = 1 ORDER BY fecha_inicio ASC'
+            );
+            res.json(rows);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Error al obtener festivales' });
+        }
+    });
+
+    // Y regístrala en tu app.js / index.js SIN middleware de auth:
+    app.use('/api/festivales', festivalesRouter);
+
+
+---------------------------------------------------------------------
+RESUMEN DE RUTAS QUE NECESITAS
+---------------------------------------------------------------------
+
+  GET /api/festivales                          → festivales activos (público)
+  GET /api/puestos?festival_id=X&tipo=Y        → puestos filtrados (público)
+
+=====================================================================
