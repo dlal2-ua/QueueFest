@@ -1,3 +1,9 @@
+
+// ============================================================================
+// En resumen: Sirve para "fotografiar" la estructura de la base de datos 
+// y tenerla documentada localmente en un archivo JSON.
+// ============================================================================
+
 const fs = require('fs');
 const { Client } = require('ssh2');
 const mysql = require('mysql2/promise');
@@ -28,3 +34,6 @@ async function checkSchema() {
     }).connect({ host: '143.47.35.13', port: 22, username: 'ubuntu', privateKey });
 }
 checkSchema();
+
+
+
