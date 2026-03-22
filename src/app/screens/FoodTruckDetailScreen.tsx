@@ -9,7 +9,7 @@ import { ChevronLeft, Clock } from 'lucide-react';
 import { MenuItem } from '../components/MenuItem';
 import { StickyBottomCTA } from '../components/StickyBottomCTA';
 import { useCart } from '../context/CartContext';
-import { getProductos } from '../api';
+import { getProductos, getPuestoEstado } from '../api';
 
 export function FoodTruckDetailScreen() {
   const { id } = useParams();
@@ -24,9 +24,15 @@ export function FoodTruckDetailScreen() {
       try {
         const prods = await getProductos(Number(id));
         setProductos(prods);
-        const puestosGuardados = JSON.parse(localStorage.getItem('puestos') || '[]');
-        const p = puestosGuardados.find((p: any) => String(p.id) === String(id));
-        setPuesto(p || { nombre: 'Food Truck', tiempo_servicio_medio: 0, abierto: true });
+
+        try {
+          const livePuesto = await getPuestoEstado(Number(id));
+          setPuesto(livePuesto);
+        } catch (e) {
+          const puestosGuardados = JSON.parse(localStorage.getItem('puestos') || '[]');
+          const p = puestosGuardados.find((p: any) => String(p.id) === String(id));
+          setPuesto(p || { nombre: 'Food Truck', tiempo_servicio_medio: 0, abierto: 1 });
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -36,18 +42,18 @@ export function FoodTruckDetailScreen() {
     cargar();
   }, [id]);
 
-const handleAddItem = (item: any) => {
-  console.log('item recibido:', item);
-  addItem({
-    id: String(item.id),
-    name: item.name,
-    price: Number(item.price),
-    quantity: 1,
-    vendorId: String(id),
-    vendorName: puesto?.nombre || 'Food Truck',
-    vendorType: 'food-truck'
-  });
-};
+  const handleAddItem = (item: any) => {
+    console.log('item recibido:', item);
+    addItem({
+      id: String(item.id),
+      name: item.name,
+      price: Number(item.price),
+      quantity: 1,
+      vendorId: String(id),
+      vendorName: puesto?.nombre || 'Food Truck',
+      vendorType: 'food-truck'
+    });
+  };
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -73,9 +79,19 @@ const handleAddItem = (item: any) => {
             <p className="text-gray-600">Food Truck</p>
           </div>
           <div className={`px-3 py-1 rounded-full text-sm font-medium ${puesto?.abierto ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-            {puesto?.abierto ? 'Abierto' : 'Cerrado'}
+            {puesto?.abierto ? 'Abierto' : 'Pausado'}
           </div>
         </div>
+
+        {puesto?.abierto === 0 && (
+          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6 shadow-sm flex items-start gap-3">
+            <span className="text-2xl">🔥</span>
+            <div>
+              <h3 className="font-bold text-red-800">Cocina al máximo rendimiento</h3>
+              <p className="text-sm mt-1">Por alta demanda, hemos pausado los pedidos. Volvemos a servir en 5-10 min.</p>
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 text-gray-700 mb-6">
           <Clock className="w-5 h-5" />
@@ -94,7 +110,8 @@ const handleAddItem = (item: any) => {
                   id={String(item.id)}
                   name={item.nombre}
                   description={item.descripcion}
-                  price={Number(item.precio_dinamico || item.precio)}                  
+                  price={Number(item.precio_dinamico || item.precio)}
+                  disabled={puesto?.abierto === 0}
                   onAdd={handleAddItem}
                 />
               ))}

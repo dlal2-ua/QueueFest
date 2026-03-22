@@ -51,6 +51,27 @@ export const getProductos = async (puestoId: number) => {
     return res.json();
 };
 
+// Obtiene el estado actual del puesto (VEND-004)
+export const getPuestoEstado = async (puestoId: number) => {
+    const res = await fetch(`${API_URL}/puestos/${puestoId}/estado`, { headers: headers() });
+    if (!res.ok) throw new Error('Error obteniendo estado');
+    return res.json();
+};
+
+// Llama al botón pánico (pausar, reanudar o llamar camarero) (VEND-004)
+export const triggerPanico = async (puestoId: number, accion: string) => {
+    const res = await fetch(`${API_URL}/puestos/${puestoId}/panico`, {
+        method: 'PATCH',
+        headers: headers(),
+        body: JSON.stringify({ accion })
+    });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error en botón pánico');
+    }
+    return res.json();
+};
+
 // ==================== PEDIDOS ====================
 // Crea un pedido nuevo y suma puntos loyalty automáticamente
 export const crearPedido = async (data: any) => {

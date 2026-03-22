@@ -213,6 +213,14 @@ app.post('/api/pedidos', auth, async (req, res) => {
   const { puesto_id, items, total } = req.body;
   const conn = await db.getConnection();
   try {
+    // ═══ VEND-004: Comprobación Botón Pánico ═══
+    const [puestoCheck] = await conn.query('SELECT abierto FROM puestos WHERE id = ?', [puesto_id]);
+    if (puestoCheck.length > 0 && puestoCheck[0].abierto === 0) {
+      conn.release();
+      return res.status(429).json({ error: 'Cocina saturada temporalmente, inténtalo en unos minutos' });
+    }
+    // ═══ FIN VEND-004 ═══
+
     await conn.beginTransaction();
     const [result] = await conn.query(
       'INSERT INTO pedidos (usuario_id, puesto_id, total) VALUES (?, ?, ?)',
@@ -302,6 +310,61 @@ app.patch('/api/pedidos/:id/estado', auth, async (req, res) => {
     // -- FIN NOTIFICACIÓN PUSH --
 
     res.json({ message: 'Estado actualizado correctamente' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== VEND-004: BOTÓN PÁNICO ====================
+
+// Pausar / Reanudar / Llamar camarero
+app.patch('/api/puestos/:id/panico', auth, async (req, res) => {
+  const puestoId = req.params.id;
+  const { accion } = req.body;
+
+  if (!['pausar', 'reanudar', 'llamar_camarero'].includes(accion)) {
+    return res.status(400).json({ error: 'Acción inválida. Usa: pausar | reanudar | llamar_camarero' });
+  }
+
+  try {
+    if (accion === 'pausar') {
+      await db.query('UPDATE puestos SET abierto = 0 WHERE id = ?', [puestoId]);
+      return res.json({ message: 'Puesto pausado. Ya no se aceptan nuevos pedidos.' });
+    }
+
+    if (accion === 'reanudar') {
+      await db.query('UPDATE puestos SET abierto = 1 WHERE id = ?', [puestoId]);
+      return res.json({ message: 'Puesto reactivado. Se aceptan nuevos pedidos.' });
+    }
+
+    if (accion === 'llamar_camarero') {
+      const [puestos] = await db.query('SELECT num_empleados, capacidad_max FROM puestos WHERE id = ?', [puestoId]);
+      if (puestos.length === 0) return res.status(404).json({ error: 'Puesto no encontrado' });
+
+      const { num_empleados, capacidad_max } = puestos[0];
+      if (num_empleados >= capacidad_max) {
+        return res.status(403).json({
+          error: 'Capacidad máxima de barra alcanzada, debes pausar pedidos',
+          suggerir_pausa: true
+        });
+      }
+      await db.query('UPDATE puestos SET num_empleados = num_empleados + 1 WHERE id = ?', [puestoId]);
+      return res.json({ message: 'Camarero de apoyo llamado.', num_empleados: num_empleados + 1, capacidad_max });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Estado del puesto (para el frontend)
+app.get('/api/puestos/:id/estado', auth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT id, nombre, abierto, num_empleados, capacidad_max, tiempo_servicio_medio FROM puestos WHERE id = ?',
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Puesto no encontrado' });
+    res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

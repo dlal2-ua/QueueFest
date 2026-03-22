@@ -6,11 +6,22 @@ import { CouponInput } from '../components/CouponInput';
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../utils/formatPrice';
 import { useLanguage } from '../context/LanguageContext';
+import { getPuestoEstado } from '../api';
+import { useEffect, useState } from 'react';
 
 export function CartScreen() {
   const navigate = useNavigate();
   const { t, isRTL } = useLanguage();
   const { items, removeItem, updateQuantity, getTotal, applyCoupon, discount, couponCode } = useCart();
+  const [puestoEstado, setPuestoEstado] = useState<any>(null);
+
+  useEffect(() => {
+    if (items.length > 0 && items[0].vendorId) {
+      getPuestoEstado(Number(items[0].vendorId))
+        .then(setPuestoEstado)
+        .catch(console.error);
+    }
+  }, [items]);
 
   const groupedItems = items.reduce((acc, item) => {
     if (!acc[item.vendorId]) {
@@ -61,6 +72,18 @@ export function CartScreen() {
       ) : (
         <>
           <div className="p-4 space-y-6">
+            {puestoEstado?.abierto === 0 && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl shadow-sm">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">🔥</span>
+                  <div>
+                    <h3 className="font-bold text-red-800">Cocina al máximo rendimiento</h3>
+                    <p className="text-sm mt-1">Por alta demanda, hemos pausado los pedidos. Volvemos a servir en 5-10 min. Por favor, espera para continuar.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {Object.entries(groupedItems).map(([vendorId, vendor]) => (
               <div key={vendorId} className="bg-white rounded-2xl p-4 shadow-sm">
                 <h3 className="font-bold text-lg mb-4">{vendor.vendorName}</h3>
@@ -131,7 +154,8 @@ export function CartScreen() {
           <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg">
             <button
               onClick={handleCheckout}
-              className="w-full bg-black text-white rounded-full py-4 font-medium text-lg hover:bg-gray-800 transition-colors"
+              disabled={puestoEstado?.abierto === 0}
+              className="w-full bg-black text-white rounded-full py-4 font-medium text-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t('cart.checkout')}
             </button>
