@@ -133,7 +133,7 @@ export const crearFestival = async (data: any) => {
     return res.json();
 };
 
-// Desactiva un festival: actualiza activo = 0 sin eliminar sus datos
+// Desactiva un festival: actualiza activo = 0 sin eliminar sus datoss
 export const desactivarFestival = async (id: number) => {
     const res = await fetch(`${API_URL}/admin/festivales/${id}/desactivar`, {
         method: 'PATCH',
