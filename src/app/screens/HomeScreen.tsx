@@ -11,6 +11,7 @@ import { useNavigate } from '../utils/navigation';
 import { getPuestosByFestivalPublico } from '../api';
 
 export function HomeScreen() {
+  usePushNotifications();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [puestos, setPuestos] = useState<any[]>([]);
@@ -46,7 +47,7 @@ export function HomeScreen() {
     cargarPuestos();
     const interval = setInterval(cargarPuestos, 30000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredPuestos = puestos.filter(p =>

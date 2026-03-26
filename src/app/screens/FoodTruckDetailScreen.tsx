@@ -57,6 +57,7 @@ export function FoodTruckDetailScreen() {
   }, [id, festival?.id]);
 
   const handleAddItem = (item: any) => {
+    console.log('item recibido:', item);
     addItem({
       id: String(item.id),
       name: item.name,

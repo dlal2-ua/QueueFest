@@ -9,13 +9,15 @@ interface MenuItemProps {
   description: string;
   price: number;
   image?: string;
+  disabled?: boolean;
   onAdd: (item: any) => void;
 }
 
-export function MenuItem({ id, name, description, price, image, onAdd }: MenuItemProps) {
+export function MenuItem({ id, name, description, price, image, disabled, onAdd }: MenuItemProps) {
   const { t } = useLanguage();
 
   const handleAdd = () => {
+    if (disabled) return;
     onAdd({ id, name, description, price, quantity: 1 });
     toast.success(t('cart.addedToCart'), {
       duration: 2000,
@@ -23,7 +25,7 @@ export function MenuItem({ id, name, description, price, image, onAdd }: MenuIte
   };
 
   return (
-    <div className="flex gap-3 py-4 border-b border-gray-100 last:border-b-0">
+    <div className={`flex gap-3 py-4 border-b border-gray-100 last:border-b-0 ${disabled ? 'opacity-60' : ''}`}>
       <div className="flex-1">
         <h4 className="font-medium mb-1">{name}</h4>
         <p className="text-sm text-gray-600 mb-2">{description}</p>
@@ -34,7 +36,8 @@ export function MenuItem({ id, name, description, price, image, onAdd }: MenuIte
       )}
       <button
         onClick={handleAdd}
-        className="self-end w-8 h-8 bg-black text-white rounded-full flex items-center justify-center hover:bg-gray-800 transition-colors"
+        disabled={disabled}
+        className={`self-end w-8 h-8 rounded-full flex items-center justify-center transition-colors ${disabled ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-white hover:bg-gray-800'}`}
       >
         <Plus className="w-5 h-5" />
       </button>
