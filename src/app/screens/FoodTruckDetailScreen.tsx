@@ -5,7 +5,7 @@ import { MenuItem } from '../components/MenuItem';
 import { StickyBottomCTA } from '../components/StickyBottomCTA';
 import { useCart } from '../context/CartContext';
 import { StatusBadge } from '../components/StatusBadge';
-import { getPuestosByFestival, getProductos } from '../api';
+import { getPuestosByFestival, getProductos, getPuestoEstado } from '../api';
 
 export function FoodTruckDetailScreen() {
   const { id } = useParams();          // id del puesto (foodtruck)

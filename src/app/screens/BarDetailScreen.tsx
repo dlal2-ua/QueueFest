@@ -5,7 +5,7 @@ import { MenuItem } from '../components/MenuItem';
 import { StickyBottomCTA } from '../components/StickyBottomCTA';
 import { useCart } from '../context/CartContext';
 import { StatusBadge } from '../components/StatusBadge';
-import { getPuestosByFestival, getProductos } from '../api';
+import { getPuestosByFestival, getProductos, getPuestoEstado } from '../api';
 
 export function BarDetailScreen() {
   const { id } = useParams();          // id del puesto (barra)
@@ -96,43 +96,33 @@ export function BarDetailScreen() {
     <div className="min-h-screen bg-gray-50 pb-28">
       {/* Hero imagen o cabecera de color */}
       <div className="relative h-48 bg-gradient-to-br from-purple-600 to-pink-500 flex items-end">
-        <div className="relative h-48 bg-gradient-to-br from-purple-500 to-pink-500">
-          <button
-            onClick={() => navigate(-1)}
-            className="absolute top-4 left-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
-          <div className="absolute top-4 right-4 flex gap-2">
-            {bar.abierto && <StatusBadge type="offer" />}
-            {queueStatus && <StatusBadge type={queueStatus} />}
+        <button
+          onClick={() => navigate(-1)}
+          className="absolute top-4 left-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg z-20"
+        >
+          <ChevronLeft className="w-6 h-6" />
+        </button>
+        <div className="absolute top-4 right-4 flex gap-2 z-20">
+          {bar.abierto && <StatusBadge type="offer" />}
+          {queueStatus && <StatusBadge type={queueStatus} />}
+        </div>
+        <div className="p-5 pb-6">
+          <p className="text-purple-200 text-xs font-medium uppercase tracking-wide">{festival?.nombre}</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-t-3xl -mt-4 relative z-10 p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold mb-1">{bar.nombre}</h1>
+            <p className="text-gray-500 text-sm capitalize">{bar.tipo} de bebidas</p>
           </div>
-          <div className="p-5 pb-6">
-            <p className="text-purple-200 text-xs font-medium uppercase tracking-wide">{festival?.nombre}</p>
+          <div className={`px-3 py-1 rounded-full text-sm font-medium ${bar.abierto ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            {bar.abierto ? 'Abierto' : 'Pausado'}
           </div>
         </div>
 
-        <div className="bg-white rounded-t-3xl -mt-4 relative z-10 p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold mb-1">{bar.nombre}</h1>
-              <p className="text-gray-500 text-sm capitalize">{bar.tipo}</p>
-              <h1 className="text-2xl font-bold mb-1">{puesto?.nombre}</h1>
-              <p className="text-gray-600">Barra de bebidas</p>
-            </div>
-            <div className={`px-3 py-1 rounded-full text-sm font-medium ${bar.abierto ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-              }`}>
-              {bar.abierto ? 'Abierto' : 'Cerrado'}
-              <div className={`px-3 py-1 rounded-full text-sm font-medium ${puesto?.abierto ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                {puesto?.abierto ? 'Abierto' : 'Pausado'}
-              </div>
-            </div>
-
-            {waitTime > 0 && (
-          <div className="flex items-center gap-2 text-gray-600 mb-4">
-            <Clock className="w-4 h-4" />
-            <span className="text-sm">{waitTime} min de espera</span>
-        {puesto?.abierto === 0 && (
+        {bar.abierto === 0 && (
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6 shadow-sm flex items-start gap-3">
             <span className="text-2xl">🔥</span>
             <div>
@@ -141,11 +131,10 @@ export function BarDetailScreen() {
             </div>
           </div>
         )}
-        )}
 
         <div className="flex items-center gap-2 text-gray-700 mb-6">
           <Clock className="w-5 h-5" />
-          <span>{puesto?.tiempo_servicio_medio} min de espera</span>
+          <span>{waitTime} min de espera</span>
         </div>
 
         {/* Botón ir a ofertas */}
@@ -176,6 +165,7 @@ export function BarDetailScreen() {
                       name={item.nombre}
                       description={item.descripcion}
                       price={item.precio_dinamico > 0 ? item.precio_dinamico : item.precio}
+                      disabled={bar.abierto === 0}
                       onAdd={handleAddItem}
                     />
                   ))}
@@ -184,34 +174,11 @@ export function BarDetailScreen() {
             ))}
           </div>
         )}
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold">Carta</h2>
-          {productos.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No hay productos disponibles</p>
-          ) : (
-            <div className="bg-white rounded-xl">
-              {productos.map((item) => (
-                <MenuItem
-                  key={item.id}
-                  id={String(item.id)}
-                  name={item.nombre}
-                  description={item.descripcion}
-                  price={Number(item.precio_dinamico || item.precio)}
-                  disabled={puesto?.abierto === 0}
-                  onAdd={handleAddItem}
-                />
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       <StickyBottomCTA
         itemCount={getItemCount() + localCount}
         total={getTotal() + localTotal}
-        onClick={() => navigate('/cart')}
-        itemCount={getItemCount()}
-        total={getTotal()}
         onClick={() => navigate('/cart')}
       />
     </div>
