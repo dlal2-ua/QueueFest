@@ -3,19 +3,73 @@ const mysql2 = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const fs = require('fs');
+const { Client } = require('ssh2');
+const net = require('net');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const db = mysql2.createPool({
-  host: '10.0.0.5',
-  port: 3306,
-  user: 'admin',
-  password: 'Proyecto_Seguro2026!',
-  database: 'queuefest'
+let db; // Será inicializado tras establecer el túnel SSH
+
+// ─── TUNEL SSH PARA BASE DE DATOS LOCAL ───
+const sshClient = new Client();
+const privateKeyPath = 'C:\\Users\\Usuario\\Desktop\\Temarios_Universid\\5ºANO\\Gestión de la informacion\\BBDD\\ssh-key-2026-03-03.key';
+let privateKey = '';
+try {
+  privateKey = fs.readFileSync(privateKeyPath, 'utf8').replace(/\r\n/g, '\n');
+} catch (e) {
+  console.error('WARN: No se pudo leer la llave SSH (¿estás en producción?):', e.message);
+}
+
+sshClient.on('ready', () => {
+  console.log('Túnel SSH Listo. Levantando forwarder TCP local...');
+  const forwardServer = net.createServer((socket) => {
+    sshClient.forwardOut(
+      socket.remoteAddress,
+      socket.remotePort,
+      '10.0.0.5',
+      3306,
+      (err, stream) => {
+        if (err) return socket.end();
+        socket.pipe(stream).pipe(socket);
+      }
+    );
+  });
+
+  forwardServer.listen(12345, '127.0.0.1', () => {
+    console.log('MySQL Forwarding escuchando en 127.0.0.1:12345');
+    db = mysql2.createPool({
+      host: '127.0.0.1',
+      port: 12345,
+      user: 'admin',
+      password: 'Proyecto_Seguro2026!',
+      database: 'queuefest'
+    });
+    
+    // Inicializar BD y luego arrancar Express
+    initDB().then(() => {
+      const port = process.env.PORT || 3000;
+      app.listen(port, () => {
+        console.log(`Server Express corriendo localmente en puerto ${port}`);
+      });
+    });
+  });
+}).on('error', (err) => {
+  console.error('Error del Túnel SSH:', err.message);
 });
+
+// Inicia la conexión SSH
+if (privateKey) {
+  sshClient.connect({
+    host: '143.47.35.13',
+    port: 22,
+    username: 'ubuntu',
+    privateKey
+  });
+}
 
 const JWT_SECRET = 'queuefest_secret_2026';
 
@@ -52,7 +106,6 @@ async function initDB() {
     console.error('DB Init push_subscriptions Failed:', err);
   }
 }
-initDB();
 
 // Middleware para verificar tokenn
 const auth = async (req, res, next) => {
@@ -774,8 +827,4 @@ app.post('/api/notifications/subscribe', auth, async (req, res) => {
   }
 });
 
-// Arrancar jbio gouyg
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Server Express (Oracle VM) corriendo en puerto ${port}`);
-});
+// Nota: El app.listen() se ejecuta ahora dentro del callback sshClient.on('ready')
