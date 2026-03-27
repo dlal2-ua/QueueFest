@@ -209,6 +209,17 @@ export const activarFestival = async (id: number) => {
     return res.json();
 };
 
+// Actualiza los datos de un festival existente
+export const actualizarFestival = async (id: number, data: any) => {
+    const res = await fetch(`${API_URL}/admin/festivales/${id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('Error al actualizar festival');
+    return res.json();
+};
+
 // Obtiene festivales activos públicamente (sin auth) — usado en FestivalSelectScreen
 export const getFestivalesPublicos = async () => {
     const res = await fetch(`${API_URL}/festivales`);

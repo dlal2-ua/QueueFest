@@ -584,6 +584,22 @@ app.patch('/api/admin/festivales/:id/activar', auth, async (req, res) => {
   }
 });
 
+app.put('/api/admin/festivales/:id', auth, async (req, res) => {
+  const { nombre, fecha_inicio, fecha_fin } = req.body;
+  try {
+    const [result] = await db.query(
+      'UPDATE festivales SET nombre = ?, fecha_inicio = ?, fecha_fin = ? WHERE id = ?',
+      [nombre, fecha_inicio, fecha_fin, req.params.id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Festival no encontrado' });
+    }
+    res.json({ message: 'Festival actualizado correctamente' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/admin/festivales/:id', auth, async (req, res) => {
   try {
     await db.query('DELETE FROM festivales WHERE id = ?', [req.params.id]);
