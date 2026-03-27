@@ -4,7 +4,8 @@
 // Así si cambia la URL del servidor solo hay que tocarlo en un sitio
 // API_URL apunta al servidor Oracle donde corre el backend Express
 
-const API_URL = 'http://143.47.35.13:3000/api';
+// const API_URL = 'http://143.47.35.13:3000/api';
+const API_URL = 'http://localhost:3000/api';
 
 // Recupera el token JWT guardado en localStorage tras el login
 const getToken = () => localStorage.getItem('token');
