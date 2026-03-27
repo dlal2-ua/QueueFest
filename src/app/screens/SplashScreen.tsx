@@ -27,8 +27,8 @@ export function SplashScreen() {
         >
           <UtensilsCrossed className="w-24 h-24 text-white mx-auto mb-4" />
         </motion.div>
-        <h1 className="text-4xl font-bold text-white mb-2">FoodFest</h1>
-        <p className="text-white/90 text-lg">Order from Food Trucks & Bars</p>
+        <h1 className="text-4xl font-bold text-white mb-2">QueueFest</h1>
+        <p className="text-white/90 text-lg">Pide de Food Trucks & Barras</p>
       </motion.div>
     </div>
   );
