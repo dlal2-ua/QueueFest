@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import {
-  crearFestival, getFestivales, eliminarFestival, desactivarFestival, activarFestival,
+  crearFestival, getFestivales, eliminarFestival, desactivarFestival, activarFestival, actualizarFestival,
   crearPuesto, actualizarPuesto, getPuestosByFestival, eliminarPuesto,
   getProductos, crearProducto, actualizarProducto, eliminarProducto,
   getPromociones, crearPromocion, actualizarPromocion, eliminarPromocion,
@@ -11,7 +11,7 @@ import {
 } from '../api';
 import {
   PlusCircle, Calendar, Settings, Users, Package,
-  Store, CheckCircle2, XCircle, LogOut, Trash2, Tag, Eye, PowerOff
+  Store, CheckCircle2, XCircle, LogOut, Trash2, Tag, Eye, PowerOff, Pencil, X
 } from 'lucide-react';
 
 export function AdminScreen() {
@@ -41,6 +41,8 @@ export function AdminScreen() {
 
   // States: Festival (formulario)
   const [festival, setFestival] = useState({ nombre: '', fecha_inicio: '', fecha_fin: '' });
+  const [editandoFestivalId, setEditandoFestivalId] = useState<number | null>(null);
+  const [festivalEditFormData, setFestivalEditFormData] = useState({ nombre: '', fecha_inicio: '', fecha_fin: '' });
 
   // States: Puesto
   const [puesto, setPuesto] = useState({
@@ -331,6 +333,33 @@ export function AdminScreen() {
     } catch { toast.error('Error al eliminar festival'); }
   };
 
+  const handleEditFestival = (fest: any) => {
+    setEditandoFestivalId(fest.id);
+    setFestivalEditFormData({
+      nombre: fest.nombre,
+      fecha_inicio: fest.fecha_inicio ? fest.fecha_inicio.substring(0, 10) : '',
+      fecha_fin: fest.fecha_fin ? fest.fecha_fin.substring(0, 10) : ''
+    });
+  };
+
+  const handleSaveFestival = async (id: number) => {
+    setLoading(true);
+    try {
+      await actualizarFestival(id, festivalEditFormData);
+      toast.success('Festival actualizado');
+      setEditandoFestivalId(null);
+      // Si el festival editado es el activo, actualizar el estado
+      if (festivalActivo?.id === id) {
+        persistFestivalActivo({ ...festivalActivo, ...festivalEditFormData });
+      }
+      loadFestivales();
+    } catch {
+      toast.error('Error al actualizar el festival');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEliminarPuesto = async (id: number) => {
     if (!window.confirm('¿Eliminar este puesto?')) return;
     try {
@@ -480,39 +509,94 @@ export function AdminScreen() {
               {festivalesList.length === 0 ? (
                 <p className="text-gray-500 text-sm italic text-center py-4 bg-gray-100 rounded-lg">No hay eventos registrados aún.</p>
               ) : festivalesList.map((fest) => (
-                <div key={fest.id} className={`flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border ${festivalActivo?.id === fest.id ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-100'
-                  }`}>
-                  <div className="flex-1 min-w-0 mr-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-semibold text-gray-900 leading-tight">{fest.nombre || 'Sin Nombre'}</h4>
-                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${fest.activo ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'
-                        }`}>
-                        {fest.activo ? 'ACTIVO' : 'INACTIVO'}
-                      </span>
-                      {festivalActivo?.id === fest.id && (
-                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-600 text-white">EN USO</span>
-                      )}
+                <div key={fest.id} className={`bg-white p-3 rounded-xl shadow-sm border ${festivalActivo?.id === fest.id ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-100'}`}>
+                  {editandoFestivalId === fest.id ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-2">
+                        <input
+                          type="text"
+                          value={festivalEditFormData.nombre}
+                          onChange={e => setFestivalEditFormData({ ...festivalEditFormData, nombre: e.target.value })}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+                          placeholder="Nombre"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Inicio</label>
+                            <input
+                              type="date"
+                              value={festivalEditFormData.fecha_inicio}
+                              onChange={e => setFestivalEditFormData({ ...festivalEditFormData, fecha_inicio: e.target.value })}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Fin</label>
+                            <input
+                              type="date"
+                              value={festivalEditFormData.fecha_fin}
+                              onChange={e => setFestivalEditFormData({ ...festivalEditFormData, fecha_fin: e.target.value })}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSaveFestival(fest.id)}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded-lg text-xs font-bold"
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          onClick={() => setEditandoFestivalId(null)}
+                          className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded-lg text-xs font-bold"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-xs text-gray-500">
-                      ID: {fest.id} • {fest.fecha_inicio ? new Date(fest.fecha_inicio).toLocaleDateString() : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={() => handleCambiarFestival(fest)}
-                      disabled={festivalActivo?.id === fest.id}
-                      className={`flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${festivalActivo?.id === fest.id
-                          ? 'bg-red-600 text-white cursor-default'
-                          : 'bg-gray-100 text-gray-700 hover:bg-red-50 hover:text-red-700 border border-gray-200'
-                        }`}
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      {festivalActivo?.id === fest.id ? 'Activo' : 'Ver'}
-                    </button>
-                    <button onClick={() => handleEliminarFestival(fest.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  ) : (
+                    <div className="flex justify-between items-center">
+                      <div className="flex-1 min-w-0 mr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-semibold text-gray-900 leading-tight">{fest.nombre || 'Sin Nombre'}</h4>
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${fest.activo ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'
+                            }`}>
+                            {fest.activo ? 'ACTIVO' : 'INACTIVO'}
+                          </span>
+                          {festivalActivo?.id === fest.id && (
+                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-600 text-white">EN USO</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          ID: {fest.id} • {fest.fecha_inicio ? new Date(fest.fecha_inicio).toLocaleDateString() : 'N/A'}{fest.fecha_fin ? ` al ${new Date(fest.fecha_fin).toLocaleDateString()}` : ''}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => handleCambiarFestival(fest)}
+                          disabled={festivalActivo?.id === fest.id}
+                          className={`flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${festivalActivo?.id === fest.id
+                            ? 'bg-red-600 text-white cursor-default'
+                            : 'bg-gray-100 text-gray-700 hover:bg-red-50 hover:text-red-700 border border-gray-200'
+                            }`}
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          {festivalActivo?.id === fest.id ? 'Activo' : 'Ver'}
+                        </button>
+                        <button
+                          onClick={() => handleEditFestival(fest)}
+                          className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleEliminarFestival(fest.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
