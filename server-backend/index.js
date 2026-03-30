@@ -13,10 +13,9 @@ app.use(cors());
 app.use(express.json());
 
 let db; // Será inicializado tras establecer el túnel SSH
-
 // ─── TUNEL SSH PARA BASE DE DATOS LOCAL ───
 const sshClient = new Client();
-const privateKeyPath = 'C:\\Users\\Usuario\\Desktop\\Temarios_Universid\\5ºANO\\Gestión de la informacion\\BBDD\\ssh-key-2026-03-03.key';
+const privateKeyPath = '/home/kike/Documentos/Gestion_Informacion_App/clave_privada_server/ssh-key-2026-03-03.key';
 let privateKey = '';
 try {
   privateKey = fs.readFileSync(privateKeyPath, 'utf8').replace(/\r\n/g, '\n');
@@ -48,7 +47,7 @@ sshClient.on('ready', () => {
       password: 'Proyecto_Seguro2026!',
       database: 'queuefest'
     });
-    
+
     // Inicializar BD y luego arrancar Express
     initDB().then(() => {
       const port = process.env.PORT || 3000;
@@ -161,25 +160,68 @@ app.post('/api/auth/register', async (req, res) => {
 
 // ==================== PUESTOS ====================
 
+app.get('/api/puestos/esperas', async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT p.id,
+             ROUND((COALESCE(pe.total, 0) * p.tiempo_servicio_medio) / GREATEST(p.num_empleados, 1)) AS espera_calculada_min
+      FROM puestos p
+      LEFT JOIN (
+          SELECT puesto_id, COUNT(*) as total
+          FROM pedidos
+          WHERE estado NOT IN ('entregado', 'cancelado')
+          GROUP BY puesto_id
+      ) pe ON p.id = pe.puesto_id
+      WHERE p.abierto = true
+    `);
+    const result = {};
+    rows.forEach(r => {
+      result[r.id] = Number(r.espera_calculada_min || 0);
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/puestos', async (req, res) => {
   try {
     const { festival_id, tipo } = req.query;
 
-    let query = 'SELECT * FROM puestos WHERE abierto = true';
+    let query = `
+      SELECT p.*,
+             ROUND((COALESCE(pe.total, 0) * p.tiempo_servicio_medio) / GREATEST(p.num_empleados, 1)) AS espera_calculada_min
+      FROM puestos p
+      LEFT JOIN (
+          SELECT puesto_id, COUNT(*) as total
+          FROM pedidos
+          WHERE estado NOT IN ('entregado', 'cancelado')
+          GROUP BY puesto_id
+      ) pe ON p.id = pe.puesto_id
+      WHERE p.abierto = true
+    `;
     const params = [];
 
     if (festival_id) {
-      query += ' AND festival_id = ?';
+      // Usaremos HAVING si filtramos por agregados, pero aquí es un campo de la tabla p
+      query += ' AND p.festival_id = ?';
       params.push(Number(festival_id));
     }
 
     if (tipo) {
-      query += ' AND tipo = ?';
+      query += ' AND p.tipo = ?';
       params.push(tipo); // 'barra' o 'foodtruck'
     }
 
     const [rows] = await db.query(query, params);
-    res.json(rows);
+
+    // Para simplificar al frontend, si no existe map, lo usamos como fallback
+    const result = rows.map(r => ({
+      ...r,
+      tiempo_servicio_medio: Number(r.espera_calculada_min || 0) > 0 ? Number(r.espera_calculada_min) : r.tiempo_servicio_medio
+    }));
+
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -187,8 +229,25 @@ app.get('/api/puestos', async (req, res) => {
 
 app.get('/api/puestos/:id', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM puestos WHERE id = ?', [req.params.id]);
-    res.json(rows[0]);
+    const [rows] = await db.query(`
+      SELECT p.*,
+             ROUND((COALESCE(pe.total, 0) * p.tiempo_servicio_medio) / GREATEST(p.num_empleados, 1)) AS espera_calculada_min
+      FROM puestos p
+      LEFT JOIN (
+          SELECT puesto_id, COUNT(*) as total
+          FROM pedidos
+          WHERE estado NOT IN ('entregado', 'cancelado')
+          GROUP BY puesto_id
+      ) pe ON p.id = pe.puesto_id
+      WHERE p.id = ?
+    `, [req.params.id]);
+
+    if (rows.length === 0) return res.status(404).json({ error: 'Puesto no encontrado' });
+
+    const puesto = rows[0];
+    puesto.tiempo_servicio_medio = Number(puesto.espera_calculada_min || 0) > 0 ? Number(puesto.espera_calculada_min) : puesto.tiempo_servicio_medio;
+
+    res.json(puesto);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -412,6 +471,63 @@ app.post('/api/pedidos', auth, async (req, res) => {
 });
 
 // (Route mis-pedidos moved up)
+
+
+
+// GET /api/gestor/heatmap
+app.get('/api/gestor/heatmap', auth, async (req, res) => {
+  try {
+    // 0. Obtener todos los puestos abiertos para inicializar los vacíos
+    const [puestos] = await db.query('SELECT id FROM puestos WHERE abierto = true');
+    const result = {};
+    puestos.forEach(p => {
+      result[p.id] = { pedidos_activos: 0, espera_actual_min: 0, ingresos_hoy: 0 };
+    });
+
+    // 1. Pedidos activos por puesto
+    const [activeOrders] = await db.query(`
+      SELECT puesto_id,
+             COUNT(*) AS pedidos_activos
+      FROM pedidos
+      WHERE estado NOT IN ('entregado', 'cancelado')
+      GROUP BY puesto_id`
+    );
+
+    // 2. Tiempo de espera estimado (promedio de minutos desde creación)
+    const [waitTimes] = await db.query(`
+      SELECT puesto_id,
+             AVG(TIMESTAMPDIFF(MINUTE, creado_en, NOW())) AS espera_actual_min
+      FROM pedidos
+      WHERE estado NOT IN ('entregado', 'cancelado')
+      GROUP BY puesto_id`
+    );
+
+    // 3. Ingresos de hoy por puesto
+    const [todayRevenue] = await db.query(`
+      SELECT puesto_id,
+             SUM(total) AS ingresos_hoy
+      FROM pedidos
+      WHERE DATE(creado_en) = CURDATE()
+      GROUP BY puesto_id`
+    );
+
+    // Merge results
+    activeOrders.forEach(r => {
+      if (result[r.puesto_id]) result[r.puesto_id].pedidos_activos = r.pedidos_activos;
+    });
+    waitTimes.forEach(r => {
+      if (result[r.puesto_id]) result[r.puesto_id].espera_actual_min = Math.round(r.espera_actual_min || 0);
+    });
+    todayRevenue.forEach(r => {
+      if (result[r.puesto_id]) result[r.puesto_id].ingresos_hoy = Number(r.ingresos_hoy || 0);
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('heatmap error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Operador: ver pedidos de su puesto
 app.get('/api/pedidos/puesto/:id', auth, async (req, res) => {

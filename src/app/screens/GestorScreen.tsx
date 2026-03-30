@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getEstadisticas } from '../api';
 import { BarChart2, Clock, ShoppingBag, Euro } from 'lucide-react';
+import Heatmap from '../components/Heatmap';
 
 export function GestorScreen() {
   const { user, logout } = useAuth();
@@ -99,6 +100,10 @@ export function GestorScreen() {
                 </p>
               </div>
             )}
+
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+              <Heatmap />
+            </div>
           </div>
         )}
       </div>
