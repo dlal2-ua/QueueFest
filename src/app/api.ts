@@ -161,6 +161,13 @@ export const getEstadisticas = async () => {
     return res.json();
 };
 
+// Heatmap data: activity and stats per post
+export const getHeatmap = async () => {
+    const res = await fetch(`${API_URL}/gestor/heatmap`, { headers: headers() });
+    if (!res.ok) throw new Error('Error al cargar heatmap');
+    return res.json();
+};
+
 // ==================== ADMIN ====================
 
 // ── Festivales ────────────────────────────────────────────────────────────
