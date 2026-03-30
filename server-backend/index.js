@@ -16,7 +16,7 @@ let db; // Será inicializado tras establecer el túnel SSH
 
 // ─── TUNEL SSH PARA BASE DE DATOS LOCAL ───
 const sshClient = new Client();
-const privateKeyPath = 'C:\\Users\\Usuario\\Desktop\\Temarios_Universid\\5ºANO\\Gestión de la informacion\\BBDD\\ssh-key-2026-03-03.key';
+const privateKeyPath = 'C:\\Users\\juanj\\Desktop\\UA\\5º Carrera\\Gestión Información\\ssh-key-2026-03-03-ale.key';
 let privateKey = '';
 try {
   privateKey = fs.readFileSync(privateKeyPath, 'utf8').replace(/\r\n/g, '\n');
