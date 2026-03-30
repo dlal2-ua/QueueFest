@@ -16,12 +16,12 @@ let db; // Será inicializado tras establecer el túnel SSH
 
 // ─── TUNEL SSH PARA BASE DE DATOS LOCAL ───
 const sshClient = new Client();
-const privateKeyPath = 'C:\\Users\\juanj\\Desktop\\UA\\5º Carrera\\Gestión Información\\ssh-key-2026-03-03-ale.key';
+const privateKeyPath = process.env.SSH_PRIVATE_KEY_PATH;
 let privateKey = '';
 try {
   privateKey = fs.readFileSync(privateKeyPath, 'utf8').replace(/\r\n/g, '\n');
 } catch (e) {
-  console.error('WARN: No se pudo leer la llave SSH (¿estás en producción?):', e.message);
+  console.error(`WARN: No se pudo leer la llave SSH en la ruta (${privateKeyPath}):`, e.message);
 }
 
 sshClient.on('ready', () => {
@@ -48,7 +48,7 @@ sshClient.on('ready', () => {
       password: 'Proyecto_Seguro2026!',
       database: 'queuefest'
     });
-    
+
     // Inicializar BD y luego arrancar Express
     initDB().then(() => {
       const port = process.env.PORT || 3000;
