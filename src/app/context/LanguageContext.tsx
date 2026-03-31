@@ -53,7 +53,7 @@ const translations: Record<Language, Record<string, string>> = {
     'profile.title': 'Mi Perfil',
     'profile.personalInfo': 'Información Personal',
     'profile.paymentMethods': 'Métodos de Pago',
-    'profile.orderHistory': 'Historial de Pedidos',
+    'profile.orderHistory': 'Mis Pedidos',
     'profile.favorites': 'Favoritos',
     'profile.helpSupport': 'Ayuda y Soporte',
     'profile.language': 'Idioma',
@@ -75,7 +75,7 @@ const translations: Record<Language, Record<string, string>> = {
     'payment.cardRemoved': 'Tarjeta eliminada',
     
     // Order History
-    'orders.title': 'Historial de Pedidos',
+    'orders.title': 'Mis Pedidos',
     'orders.orderNumber': 'Pedido #',
     'orders.date': 'Fecha',
     'orders.total': 'Total',
@@ -165,7 +165,7 @@ const translations: Record<Language, Record<string, string>> = {
     'profile.title': 'My Profile',
     'profile.personalInfo': 'Personal Information',
     'profile.paymentMethods': 'Payment Methods',
-    'profile.orderHistory': 'Order History',
+    'profile.orderHistory': 'My Orders',
     'profile.favorites': 'Favorites',
     'profile.helpSupport': 'Help & Support',
     'profile.language': 'Language',
@@ -187,7 +187,7 @@ const translations: Record<Language, Record<string, string>> = {
     'payment.cardRemoved': 'Card removed',
     
     // Order History
-    'orders.title': 'Order History',
+    'orders.title': 'My Orders',
     'orders.orderNumber': 'Order #',
     'orders.date': 'Date',
     'orders.total': 'Total',
@@ -277,7 +277,7 @@ const translations: Record<Language, Record<string, string>> = {
     'profile.title': 'Mon Profil',
     'profile.personalInfo': 'Informations Personnelles',
     'profile.paymentMethods': 'Modes de Paiement',
-    'profile.orderHistory': 'Historique des Commandes',
+    'profile.orderHistory': 'Mes Commandes',
     'profile.favorites': 'Favoris',
     'profile.helpSupport': 'Aide et Support',
     'profile.language': 'Langue',
@@ -299,7 +299,7 @@ const translations: Record<Language, Record<string, string>> = {
     'payment.cardRemoved': 'Carte supprimée',
     
     // Order History
-    'orders.title': 'Historique des Commandes',
+    'orders.title': 'Mes Commandes',
     'orders.orderNumber': 'Commande #',
     'orders.date': 'Date',
     'orders.total': 'Total',
@@ -389,7 +389,7 @@ const translations: Record<Language, Record<string, string>> = {
     'profile.title': 'Mein Profil',
     'profile.personalInfo': 'Persönliche Informationen',
     'profile.paymentMethods': 'Zahlungsmethoden',
-    'profile.orderHistory': 'Bestellhistorie',
+    'profile.orderHistory': 'Meine Bestellungen',
     'profile.favorites': 'Favoriten',
     'profile.helpSupport': 'Hilfe & Support',
     'profile.language': 'Sprache',
@@ -411,7 +411,7 @@ const translations: Record<Language, Record<string, string>> = {
     'payment.cardRemoved': 'Karte entfernt',
     
     // Order History
-    'orders.title': 'Bestellhistorie',
+    'orders.title': 'Meine Bestellungen',
     'orders.orderNumber': 'Bestellung #',
     'orders.date': 'Datum',
     'orders.total': 'Gesamt',
@@ -501,7 +501,7 @@ const translations: Record<Language, Record<string, string>> = {
     'profile.title': 'ملفي الشخصي',
     'profile.personalInfo': 'المعلومات الشخصية',
     'profile.paymentMethods': 'طرق الدفع',
-    'profile.orderHistory': 'سجل الطلبات',
+    'profile.orderHistory': 'طلباتي',
     'profile.favorites': 'المفضلة',
     'profile.helpSupport': 'المساعدة والدعم',
     'profile.language': 'اللغة',
@@ -523,7 +523,7 @@ const translations: Record<Language, Record<string, string>> = {
     'payment.cardRemoved': 'تمت إزالة البطاقة',
     
     // Order History
-    'orders.title': 'سجل الطلبات',
+    'orders.title': 'طلباتي',
     'orders.orderNumber': 'رقم الطلب',
     'orders.date': 'التاريخ',
     'orders.total': 'الإجمالي',
