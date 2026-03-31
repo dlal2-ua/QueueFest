@@ -1,53 +1,124 @@
 import { useNavigate } from '../utils/navigation';
-import { CheckCircle, Clock } from 'lucide-react';
+import { CheckCircle, Clock, Loader2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { motion } from 'motion/react';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PickupQR } from '../components/PickupQR';
+import { getPaymentSession } from '../api';
 
 export function OrderConfirmationScreen() {
   const navigate = useNavigate();
   const { clearCart } = useCart();
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [paymentProvider, setPaymentProvider] = useState('mock');
+  const [error, setError] = useState<string | null>(null);
 
-  // Extract the real order ID from the URL: ?order=123
-  const params = new URLSearchParams(window.location.search);
-  const orderNumber = params.get('order') || 'Desconocido';
+  const params = useMemo(() => new URLSearchParams(window.location.search), []);
+  const directOrder = params.get('order');
+  const sessionId = params.get('session_id');
+  const provider = params.get('provider') || (sessionId ? 'stripe' : 'mock');
 
   useEffect(() => {
-    // We clear the cart here instead of relying on handleContinue
-    clearCart();
-  }, [clearCart]);
+    let cancelled = false;
+
+    const resolveOrder = async () => {
+      setPaymentProvider(provider);
+
+      if (directOrder) {
+        setOrderNumber(directOrder);
+        clearCart();
+        return;
+      }
+
+      if (!sessionId) {
+        setError('No se ha encontrado información del pago');
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const payment = await getPaymentSession(sessionId);
+        if (cancelled) return;
+
+        if (payment.pedido_id) {
+          setOrderNumber(String(payment.pedido_id));
+          clearCart();
+          return;
+        }
+
+        setError('El pago todavía no ha generado un pedido confirmado.');
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err.message || 'No se pudo validar el pago');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    resolveOrder();
+    return () => {
+      cancelled = true;
+    };
+  }, [clearCart, directOrder, provider, sessionId]);
 
   const handleContinue = () => {
     navigate('/home');
   };
 
   const handleTrackOrder = () => {
-    // Navigate directly to the tracking screen with the real order ID 
-    // It will fetch the real data from the backend.
-    navigate(`/track-order/${orderNumber}`);
+    if (orderNumber) {
+      navigate(`/track-order/${orderNumber}`);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
+        <Loader2 className="w-8 h-8 animate-spin text-black mb-4" />
+        <p className="font-semibold">Confirmando tu pago...</p>
+        <p className="text-sm text-gray-600 mt-2">Estamos esperando a que el backend valide la operación y cree el pedido.</p>
+      </div>
+    );
+  }
+
+  if (error || !orderNumber) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
+        <h1 className="text-2xl font-bold mb-3">Pago no confirmado</h1>
+        <p className="text-gray-600 mb-6">{error || 'No se pudo completar el pedido.'}</p>
+        <button
+          onClick={() => navigate('/payment')}
+          className="bg-black text-white rounded-full px-6 py-3 font-medium"
+        >
+          Volver al pago
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
       <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        transition={{ type: "spring", duration: 0.5 }}
+        transition={{ type: 'spring', duration: 0.5 }}
         className="w-full max-w-md"
       >
         <div className="bg-white rounded-3xl p-8 shadow-lg text-center">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring" }}
+            transition={{ delay: 0.2, type: 'spring' }}
             className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"
           >
             <CheckCircle className="w-16 h-16 text-green-600" />
           </motion.div>
 
           <h1 className="text-2xl font-bold mb-2">Order Confirmed!</h1>
-          <p className="text-gray-600 mb-6">Your order has been placed successfully</p>
+          <p className="text-gray-600 mb-2">Your order has been placed successfully</p>
+          <p className="text-xs text-gray-400 mb-6 uppercase tracking-wide">Payment via {paymentProvider}</p>
 
           <div className="bg-gray-50 rounded-2xl p-6 mb-6">
             <p className="text-sm text-gray-600 mb-1">Order Number</p>
@@ -62,12 +133,10 @@ export function OrderConfirmationScreen() {
             </div>
           </div>
 
-          {/* QR real de recogida */}
-          {orderNumber !== 'Desconocido' && (
-            <div className="bg-gray-50 rounded-2xl p-6 mb-6">
-              <PickupQR orderId={Number(orderNumber)} />
-            </div>
-          )}
+          <div className="bg-gray-50 rounded-2xl p-6 mb-6">
+            <p className="text-sm text-gray-600 mb-4">QR y numero de pedido para recogida</p>
+            <PickupQR orderId={Number(orderNumber)} />
+          </div>
 
           <div className="space-y-3">
             <button

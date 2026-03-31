@@ -6,10 +6,21 @@ const cors = require('cors');
 const fs = require('fs');
 const { Client } = require('ssh2');
 const net = require('net');
+const { createPaymentsModule } = require('./payments');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
+
+const paymentsModule = createPaymentsModule({
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  paymentProvider: process.env.PAYMENT_PROVIDER || 'mock',
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY,
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET
+});
+
+paymentsModule.registerWebhookRoute(app, () => db);
+
 app.use(express.json());
 
 let db; // Será inicializado tras establecer el túnel SSH
@@ -101,8 +112,10 @@ async function initDB() {
       )
     `);
     console.log('SQL Migration push_subscriptions checked.');
+
+    await paymentsModule.initDb(db);
   } catch (err) {
-    console.error('DB Init push_subscriptions Failed:', err);
+    console.error('DB Init Failed:', err);
   }
 }
 
@@ -117,6 +130,8 @@ const auth = async (req, res, next) => {
     res.status(401).json({ error: 'Token inválido' });
   }
 };
+
+paymentsModule.registerRoutes(app, auth, () => db);
 
 // ==================== AUTH ====================
 
