@@ -40,3 +40,27 @@ cd server-backend
 npm install
 npx web-push generate-vapid-keys --format dotenv > .env
 node index.js
+
+### 3. Pagos del rol usuario
+El proyecto soporta ahora dos modos de pago para desarrollo:
+
+- `PAYMENT_PROVIDER=mock`: crea pedidos gratis sin salir de la app.
+- `PAYMENT_PROVIDER=stripe`: usa Stripe Checkout.
+
+Para que Stripe siga siendo gratuito en desarrollo, usa siempre claves `test`:
+
+```env
+PAYMENT_PROVIDER=stripe
+FRONTEND_URL=http://localhost:5173
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+```
+
+Si no quieres depender de Stripe mientras desarrollas, deja:
+
+```env
+PAYMENT_PROVIDER=mock
+FRONTEND_URL=http://localhost:5173
+```
+
+Con Stripe en modo test puedes hacer pedidos completos sin cobros reales.

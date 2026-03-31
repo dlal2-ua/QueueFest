@@ -1,20 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '../utils/navigation';
-import { ChevronLeft, CreditCard, Smartphone, MapPin, Clock } from 'lucide-react';
+import { ChevronLeft, CreditCard, FlaskConical, MapPin, Clock } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../utils/formatPrice';
-import { useLanguage } from '../context/LanguageContext';
-import { crearPedido, getPuestoEstado } from '../api';
+import { createPayment, getPaymentConfig, getPuestoEstado } from '../api';
 import { toast } from 'sonner';
-import { useEffect } from 'react';
+
+type PaymentMethod = 'mock' | 'stripe';
 
 export function PaymentScreen() {
   const navigate = useNavigate();
   const { getTotal, items } = useCart();
-  const [selectedPayment, setSelectedPayment] = useState<'card' | 'apple' | 'google'>('card');
+  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('mock');
   const [pickupLocation, setPickupLocation] = useState('Main Stage Area');
   const [loading, setLoading] = useState(false);
   const [puestoEstado, setPuestoEstado] = useState<any>(null);
+  const [paymentConfig, setPaymentConfig] = useState<{ provider: string; stripe_enabled: boolean; mock_enabled: boolean } | null>(null);
+
+  useEffect(() => {
+    getPaymentConfig()
+      .then((config) => {
+        setPaymentConfig(config);
+        if (config.stripe_enabled) {
+          setSelectedPayment('stripe');
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (items.length > 0 && items[0].vendorId) {
@@ -24,10 +36,34 @@ export function PaymentScreen() {
     }
   }, [items]);
 
-  const estimatedTime = Math.max(...items.map(item => {
-    // Mock wait time based on vendor
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkout_cancelled') === '1') {
+      toast.error('Has cancelado el pago de Stripe y tu pedido no se ha creado.');
+    }
+  }, []);
+
+  const estimatedTime = useMemo(() => {
+    if (items.length === 0) return 0;
     return 15;
-  }));
+  }, [items]);
+
+  const paymentOptions = [
+    {
+      id: 'stripe' as PaymentMethod,
+      enabled: paymentConfig?.stripe_enabled ?? false,
+      icon: CreditCard,
+      title: 'Stripe Checkout',
+      description: 'Modo test: integra pago real sin cobrar dinero real'
+    },
+    {
+      id: 'mock' as PaymentMethod,
+      enabled: paymentConfig?.mock_enabled ?? true,
+      icon: FlaskConical,
+      title: 'Pago Simulado',
+      description: 'Crea el pedido gratis sin pasar por una pasarela externa'
+    }
+  ].filter((option) => option.enabled);
 
   const handlePay = async () => {
     if (items.length === 0) {
@@ -37,26 +73,32 @@ export function PaymentScreen() {
 
     setLoading(true);
     try {
-      // Tomamos el vendorId del primer item del carrito (asumiendo que el carrito solo permite un puesto a la vez)
-      const puesto_id = parseInt(items[0].vendorId, 10);
-
+      const puestoId = parseInt(items[0].vendorId, 10);
       const payload = {
-        puesto_id: isNaN(puesto_id) ? 1 : puesto_id,
-        items: items.map(item => ({
-          producto_id: parseInt(item.id, 10) || 1, // Fallback a 1 si el ID no es numérico
-          cantidad: item.quantity,
-          precio_unitario: item.price
-        })),
-        total: getTotal()
+        provider: selectedPayment,
+        puesto_id: isNaN(puestoId) ? 1 : puestoId,
+        items: items.map((item) => ({
+          producto_id: parseInt(item.id, 10) || 1,
+          cantidad: item.quantity
+        }))
       };
 
-      const result = await crearPedido(payload);
+      const result = await createPayment(payload);
 
-      // Pasar el ID real al confirmation screen
-      navigate(`/confirmation?order=${result.pedido_id}`);
-    } catch (err) {
+      if (result.provider === 'stripe' && result.checkout_url) {
+        window.location.href = result.checkout_url;
+        return;
+      }
+
+      if (result.pedido_id) {
+        navigate(`/confirmation?order=${result.pedido_id}&provider=${result.provider || 'mock'}`);
+        return;
+      }
+
+      throw new Error('No se pudo completar el pago');
+    } catch (err: any) {
       console.error(err);
-      toast.error('Hubo un error al procesar el pago. Por favor, inténtalo de nuevo.');
+      toast.error(err.message || 'Hubo un error al procesar el pago');
     } finally {
       setLoading(false);
     }
@@ -76,66 +118,42 @@ export function PaymentScreen() {
       <div className="p-4 space-y-4">
         {puestoEstado?.abierto === 0 && (
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl shadow-sm">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">🔥</span>
-              <div>
-                <h3 className="font-bold text-red-800">Cocina al máximo rendimiento</h3>
-                <p className="text-sm mt-1">Por alta demanda, hemos pausado los pedidos. Volvemos a servir en 5-10 min. Por favor, espera unos minutos para realizar el pago.</p>
-              </div>
-            </div>
+            <h3 className="font-bold text-red-800">Cocina al máximo rendimiento</h3>
+            <p className="text-sm mt-1">Por alta demanda, hemos pausado los pedidos. Vuelve a intentarlo en unos minutos.</p>
           </div>
         )}
 
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-2xl shadow-sm">
+          <h3 className="font-bold">Entorno gratuito de desarrollo</h3>
+          <p className="text-sm mt-1">
+            Stripe se usará en modo test y también tienes un pago simulado. Ninguna de estas opciones debe cobrar dinero real mientras mantengáis claves de prueba.
+          </p>
+        </div>
+
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <h2 className="font-bold mb-4">Payment Method</h2>
+          <h2 className="font-bold mb-4">Método de pago</h2>
           <div className="space-y-3">
-            <button
-              onClick={() => setSelectedPayment('card')}
-              className={`w-full p-4 border-2 rounded-xl flex items-center gap-3 transition-colors ${selectedPayment === 'card' ? 'border-black bg-gray-50' : 'border-gray-200'
-                }`}
-            >
-              <CreditCard className="w-6 h-6" />
-              <div className="text-left flex-1">
-                <p className="font-medium">Credit / Debit Card</p>
-                <p className="text-sm text-gray-600">Visa, Mastercard, Amex</p>
-              </div>
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === 'card' ? 'border-black' : 'border-gray-300'
-                }`}>
-                {selectedPayment === 'card' && <div className="w-3 h-3 bg-black rounded-full" />}
-              </div>
-            </button>
+            {paymentOptions.map((option) => {
+              const Icon = option.icon;
+              const isSelected = selectedPayment === option.id;
 
-            <button
-              onClick={() => setSelectedPayment('apple')}
-              className={`w-full p-4 border-2 rounded-xl flex items-center gap-3 transition-colors ${selectedPayment === 'apple' ? 'border-black bg-gray-50' : 'border-gray-200'
-                }`}
-            >
-              <Smartphone className="w-6 h-6" />
-              <div className="text-left flex-1">
-                <p className="font-medium">Apple Pay</p>
-                <p className="text-sm text-gray-600">Quick & secure</p>
-              </div>
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === 'apple' ? 'border-black' : 'border-gray-300'
-                }`}>
-                {selectedPayment === 'apple' && <div className="w-3 h-3 bg-black rounded-full" />}
-              </div>
-            </button>
-
-            <button
-              onClick={() => setSelectedPayment('google')}
-              className={`w-full p-4 border-2 rounded-xl flex items-center gap-3 transition-colors ${selectedPayment === 'google' ? 'border-black bg-gray-50' : 'border-gray-200'
-                }`}
-            >
-              <Smartphone className="w-6 h-6" />
-              <div className="text-left flex-1">
-                <p className="font-medium">Google Pay</p>
-                <p className="text-sm text-gray-600">Fast checkout</p>
-              </div>
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === 'google' ? 'border-black' : 'border-gray-300'
-                }`}>
-                {selectedPayment === 'google' && <div className="w-3 h-3 bg-black rounded-full" />}
-              </div>
-            </button>
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => setSelectedPayment(option.id)}
+                  className={`w-full p-4 border-2 rounded-xl flex items-center gap-3 transition-colors ${isSelected ? 'border-black bg-gray-50' : 'border-gray-200'}`}
+                >
+                  <Icon className="w-6 h-6" />
+                  <div className="text-left flex-1">
+                    <p className="font-medium">{option.title}</p>
+                    <p className="text-sm text-gray-600">{option.description}</p>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-black' : 'border-gray-300'}`}>
+                    {isSelected && <div className="w-3 h-3 bg-black rounded-full" />}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -169,11 +187,9 @@ export function PaymentScreen() {
 
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <h2 className="font-bold mb-4">Order Summary</h2>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total Amount</span>
-              <span className="font-bold text-xl">{formatPrice(getTotal())}</span>
-            </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">Total Amount</span>
+            <span className="font-bold text-xl">{formatPrice(getTotal())}</span>
           </div>
         </div>
       </div>
@@ -182,15 +198,9 @@ export function PaymentScreen() {
         <button
           onClick={handlePay}
           disabled={loading || puestoEstado?.abierto === 0}
-          className="w-full bg-black text-white rounded-full py-4 font-medium text-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full bg-black text-white rounded-full py-4 font-medium text-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? (
-            <>
-              Processando...
-            </>
-          ) : (
-            `Pay ${formatPrice(getTotal())}`
-          )}
+          {loading ? 'Procesando...' : `Pagar ${formatPrice(getTotal())}`}
         </button>
       </div>
     </div>

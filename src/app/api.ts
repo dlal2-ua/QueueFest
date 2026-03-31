@@ -98,6 +98,32 @@ export const crearPedido = async (data: any) => {
     });
     return res.json();
 };
+// ============= <Stripe> ===============
+export const getPaymentConfig = async () => {
+    const res = await fetch(`${API_URL}/payments/config`, { headers: headers() });
+    if (!res.ok) throw new Error('Error cargando configuración de pagos');
+    return res.json();
+};
+
+export const createPayment = async (data: any) => {
+    const res = await fetch(`${API_URL}/payments/create`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+
+    const responseData = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(responseData.error || 'Error creando el pago');
+    return responseData;
+};
+
+export const getPaymentSession = async (sessionId: string) => {
+    const res = await fetch(`${API_URL}/payments/session/${sessionId}`, { headers: headers() });
+    const responseData = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(responseData.error || 'Error consultando el pago');
+    return responseData;
+};
+// ============= </Stripe> ===============
 
 // Obtiene el historial de pedidos del usuario logueado
 export const getMisPedidos = async () => {
