@@ -99,15 +99,15 @@ export function CartScreen() {
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         <button
-                          onClick={() => removeItem(item.id)}
+                          onClick={() => removeItem(item.id, item.vendorId)}
                           className="text-red-500 hover:text-red-700"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
                         <QuantitySelector
                           quantity={item.quantity}
-                          onIncrease={() => updateQuantity(item.id, item.quantity + 1)}
-                          onDecrease={() => updateQuantity(item.id, item.quantity - 1)}
+                          onIncrease={() => updateQuantity(item.id, item.quantity + 1, item.vendorId)}
+                          onDecrease={() => updateQuantity(item.id, item.quantity - 1, item.vendorId)}
                         />
                       </div>
                     </div>

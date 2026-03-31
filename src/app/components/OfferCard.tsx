@@ -2,6 +2,7 @@ import { Tag, Plus } from 'lucide-react';
 import { formatPrice } from '../utils/formatPrice';
 import { toast } from 'sonner';
 import { useLanguage } from '../context/LanguageContext';
+import type { AddItemResult } from '../context/CartContext';
 
 interface OfferCardProps {
   title: string;
@@ -9,14 +10,18 @@ interface OfferCardProps {
   discount?: string;
   originalPrice?: number;
   price: number;
-  onAdd: () => void;
+  onAdd: () => AddItemResult;
 }
 
 export function OfferCard({ title, description, discount, originalPrice, price, onAdd }: OfferCardProps) {
   const { t } = useLanguage();
 
   const handleAdd = () => {
-    onAdd();
+    const result = onAdd();
+    if (!result.ok) {
+      toast.error('Solo puedes pedir de un puesto cada vez');
+      return;
+    }
     toast.success(t('cart.addedToCart'), {
       duration: 2000,
     });

@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react';
 import { formatPrice } from '../utils/formatPrice';
 import { toast } from 'sonner';
 import { useLanguage } from '../context/LanguageContext';
+import type { AddItemResult } from '../context/CartContext';
 
 interface MenuItemProps {
   id: string;
@@ -10,7 +11,7 @@ interface MenuItemProps {
   price: number;
   image?: string;
   disabled?: boolean;
-  onAdd: (item: any) => void;
+  onAdd: (item: any) => AddItemResult;
 }
 
 export function MenuItem({ id, name, description, price, image, disabled, onAdd }: MenuItemProps) {
@@ -18,7 +19,11 @@ export function MenuItem({ id, name, description, price, image, disabled, onAdd 
 
   const handleAdd = () => {
     if (disabled) return;
-    onAdd({ id, name, description, price, quantity: 1 });
+    const result = onAdd({ id, name, description, price, quantity: 1 });
+    if (!result.ok) {
+      toast.error('Solo puedes pedir de un puesto cada vez');
+      return;
+    }
     toast.success(t('cart.addedToCart'), {
       duration: 2000,
     });

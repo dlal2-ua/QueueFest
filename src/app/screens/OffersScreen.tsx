@@ -63,7 +63,7 @@ export function OffersScreen() {
   }, [festival?.id]);
 
   const handleAddOffer = (offer: any) => {
-    addItem({
+    return addItem({
       id: offer.id,
       vendorId: offer.vendorId,
       vendorName: offer.vendorName,
