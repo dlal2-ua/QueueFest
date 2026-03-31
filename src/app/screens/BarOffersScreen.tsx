@@ -3,7 +3,7 @@ import { useParams, useNavigate } from '../utils/navigation';
 import { ChevronLeft, Loader2 } from 'lucide-react';
 import { OfferCard } from '../components/OfferCard';
 import { useCart } from '../context/CartContext';
-import { getPromociones, getPuestosByFestival } from '../api';
+import { getPromociones, getPuesto } from '../api';
 
 export function BarOffersScreen() {
   const { id } = useParams();
@@ -20,13 +20,11 @@ export function BarOffersScreen() {
   useEffect(() => {
     const load = async () => {
       try {
-        // Nombre del puesto
-        if (festival?.id) {
-          const puestos = await getPuestosByFestival(festival.id);
-          const puesto = Array.isArray(puestos)
-            ? puestos.find((p: any) => String(p.id) === String(id))
-            : null;
-          if (puesto) setBarNombre(puesto.nombre);
+        const puesto = await getPuesto(Number(id));
+        if (puesto?.tipo === 'barra') {
+          if (!festival?.id || Number(puesto.festival_id) === Number(festival.id)) {
+            setBarNombre(puesto.nombre);
+          }
         }
 
         // Ofertas del puesto
@@ -54,7 +52,7 @@ export function BarOffersScreen() {
   }, [id, festival?.id]);
 
   const handleAddOffer = (offer: any) => {
-    addItem({
+    return addItem({
       id: offer.id,
       vendorId: String(id),
       vendorName: barNombre,

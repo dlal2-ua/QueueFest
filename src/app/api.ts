@@ -67,6 +67,13 @@ export const getProductos = async (puestoId: number) => {
     return res.json();
 };
 
+// Obtiene el detalle publico de un puesto concreto, con espera calculada si existe
+export const getPuesto = async (puestoId: number) => {
+    const res = await fetch(`${API_URL}/puestos/${puestoId}`);
+    if (!res.ok) throw new Error('Error cargando el puesto');
+    return res.json();
+};
+
 // Obtiene el estado actual del puesto (VEND-004)
 export const getPuestoEstado = async (puestoId: number) => {
     const res = await fetch(`${API_URL}/puestos/${puestoId}/estado`, { headers: headers() });
