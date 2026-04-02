@@ -40,8 +40,14 @@ import { TrackOrderScreen } from './screens/TrackOrderScreen';
 import { SelectionScreen } from './screens/SelectionScreen';
 import { FestivalSelectScreen } from './screens/FestivalSelectScreen';
 
-// Pantallas por rol
-import { OperadorScreen } from './screens/OperadorScreen';
+// Pantallas para operador
+import { OperatorLayout } from './screens/OperadorLayout';
+import { OperadorScreen } from './screens/OperadorPedidosScreen';
+import { OperatorTicketsScreen } from './screens/OperatorTicketsScreen';
+import { OperatorMenuScreen } from './screens/OperatorMenuScreen';
+import { OperatorStockScreen } from './screens/OperatorStockScreen';
+
+
 import { GestorScreen } from './screens/GestorScreen';
 import { AdminScreen } from './screens/AdminScreen';
 
@@ -81,8 +87,22 @@ function AppRoutes() {
     return null;
   }
 
-  // Enrutado por rol
-  if (user.rol === 'operador') return <OperadorScreen />;
+  // Enrutado por rol — operador con subrutas
+  if (user.rol === 'operador') {
+    // Redirigir la raíz del operador a /operador/pedidos
+    if (path === '/' || path === '/login' || path === '/operador' || !path.startsWith('/operador')) {
+      (window as any).navigateTo('/operador/pedidos');
+      return null;
+    }
+    return (
+      <OperatorLayout>
+        {path === '/operador/pedidos' && <OperadorScreen />}
+        {path === '/operador/tickets' && <OperatorTicketsScreen />}
+        {path === '/operador/menu' && <OperatorMenuScreen />}
+        {path === '/operador/stock' && <OperatorStockScreen />}
+      </OperatorLayout>
+    );
+  }
   if (user.rol === 'gestor') return <GestorScreen />;
   if (user.rol === 'administrador') return <AdminScreen />;
 
