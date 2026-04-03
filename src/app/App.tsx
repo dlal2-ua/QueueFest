@@ -1,11 +1,11 @@
 // App.tsx
-// Punto de entrada principal de la aplicación
-// Gestiona el enrutado según el rol del usuario logueado
-// - administrador → pantallas de configuración del festival
-// - gestor → dashboard de supervisión
-// - operador → gestión de pedidos de su barra
-// - usuario → app de pedidos (lo que había antes)
-// Si no hay sesión activa redirige siempre al login
+// Punto de entrada principal de la aplicacion
+// Gestiona el enrutado segun el rol del usuario logueado
+// - administrador -> pantallas de configuracion del festival
+// - gestor -> dashboard de supervision
+// - operador -> gestion de pedidos de su barra
+// - usuario -> app de pedidos
+// Si no hay sesion activa redirige siempre al login
 
 import { useState, useEffect } from 'react';
 import { Toaster } from 'sonner';
@@ -19,7 +19,7 @@ import { LoginScreen } from './screens/LoginScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
 
-// Pantallas usuario final
+// Pantallas para usuarios finales
 import { HomeScreen } from './screens/HomeScreen';
 import { FoodTruckDetailScreen } from './screens/FoodTruckDetailScreen';
 import { FoodTruckOffersScreen } from './screens/FoodTruckOffersScreen';
@@ -36,11 +36,12 @@ import { OrderHistoryScreen } from './screens/OrderHistoryScreen';
 import { FavoritesScreen } from './screens/FavoritesScreen';
 import { HelpSupportScreen } from './screens/HelpSupportScreen';
 import { LanguageScreen } from './screens/LanguageScreen';
+import { RoyaltiesScreen } from './screens/RoyaltiesScreen';
 import { TrackOrderScreen } from './screens/TrackOrderScreen';
 import { SelectionScreen } from './screens/SelectionScreen';
 import { FestivalSelectScreen } from './screens/FestivalSelectScreen';
 
-// Pantallas por rol
+// Pantallas para roles específicos
 import { OperadorScreen } from './screens/OperadorScreen';
 import { GestorScreen } from './screens/GestorScreen';
 import { AdminScreen } from './screens/AdminScreen';
@@ -99,6 +100,7 @@ function AppRoutes() {
   if (path === '/payment') return <PaymentScreen />;
   if (path === '/confirmation') return <OrderConfirmationScreen />;
   if (path === '/profile/info') return <PersonalInfoScreen />;
+  if (path === '/profile/royalties') return <RoyaltiesScreen />;
   if (path === '/profile/payments') return <PaymentMethodsScreen />;
   if (path === '/profile/orders') return <OrderHistoryScreen />;
   if (path === '/profile/favorites') return <FavoritesScreen />;

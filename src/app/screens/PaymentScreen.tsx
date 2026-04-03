@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '../utils/navigation';
-import { ChevronLeft, CreditCard, FlaskConical, MapPin, Clock } from 'lucide-react';
+import { ChevronLeft, CreditCard, FlaskConical, MapPin, Clock, Coins } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../utils/formatPrice';
 import { createPayment, getPaymentConfig, getPuestoEstado } from '../api';
 import { toast } from 'sonner';
+import { calculateRoyaltiesForPurchase } from '../data/profileData';
 
 type PaymentMethod = 'mock' | 'stripe';
 
 export function PaymentScreen() {
   const navigate = useNavigate();
   const { getTotal, items } = useCart();
+  const orderTotal = getTotal();
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('mock');
   const [pickupLocation, setPickupLocation] = useState('Main Stage Area');
   const [loading, setLoading] = useState(false);
@@ -47,6 +49,7 @@ export function PaymentScreen() {
     if (items.length === 0) return 0;
     return 15;
   }, [items]);
+  const estimatedRoyalties = useMemo(() => calculateRoyaltiesForPurchase(orderTotal), [orderTotal]);
 
   const paymentOptions = [
     {
@@ -67,7 +70,7 @@ export function PaymentScreen() {
 
   const handlePay = async () => {
     if (items.length === 0) {
-      toast.error('El carrito está vacío');
+      toast.error('El carrito esta vacio');
       return;
     }
 
@@ -118,7 +121,7 @@ export function PaymentScreen() {
       <div className="p-4 space-y-4">
         {puestoEstado?.abierto === 0 && (
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl shadow-sm">
-            <h3 className="font-bold text-red-800">Cocina al máximo rendimiento</h3>
+            <h3 className="font-bold text-red-800">Cocina al maximo rendimiento</h3>
             <p className="text-sm mt-1">Por alta demanda, hemos pausado los pedidos. Vuelve a intentarlo en unos minutos.</p>
           </div>
         )}
@@ -126,12 +129,12 @@ export function PaymentScreen() {
         <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-2xl shadow-sm">
           <h3 className="font-bold">Entorno gratuito de desarrollo</h3>
           <p className="text-sm mt-1">
-            Stripe se usará en modo test y también tienes un pago simulado. Ninguna de estas opciones debe cobrar dinero real mientras mantengáis claves de prueba.
+            Stripe se usara en modo test y tambien tienes un pago simulado. Ninguna de estas opciones debe cobrar dinero real mientras mantengais claves de prueba.
           </p>
         </div>
 
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <h2 className="font-bold mb-4">Método de pago</h2>
+          <h2 className="font-bold mb-4">Metodo de pago</h2>
           <div className="space-y-3">
             {paymentOptions.map((option) => {
               const Icon = option.icon;
@@ -180,7 +183,7 @@ export function PaymentScreen() {
             <Clock className="w-5 h-5 text-orange-600" />
             <div>
               <p className="font-medium">Ready in {estimatedTime} minutes</p>
-              <p className="text-sm text-gray-600">We'll notify you when it's ready</p>
+              <p className="text-sm text-gray-600">We&apos;ll notify you when it&apos;s ready</p>
             </div>
           </div>
         </div>
@@ -189,7 +192,14 @@ export function PaymentScreen() {
           <h2 className="font-bold mb-4">Order Summary</h2>
           <div className="flex justify-between">
             <span className="text-gray-600">Total Amount</span>
-            <span className="font-bold text-xl">{formatPrice(getTotal())}</span>
+            <span className="font-bold text-xl">{formatPrice(orderTotal)}</span>
+          </div>
+          <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+            <Coins className="w-5 h-5 mt-0.5" />
+            <div>
+              <p className="font-semibold">Esta compra te dara +{estimatedRoyalties} royalties</p>
+              <p className="text-sm text-amber-800 mt-1">Regla base actual: 1 royalty por euro gastado y bonus de 5 por pedido confirmado.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -200,7 +210,7 @@ export function PaymentScreen() {
           disabled={loading || puestoEstado?.abierto === 0}
           className="w-full bg-black text-white rounded-full py-4 font-medium text-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? 'Procesando...' : `Pagar ${formatPrice(getTotal())}`}
+          {loading ? 'Procesando...' : `Pagar ${formatPrice(orderTotal)}`}
         </button>
       </div>
     </div>
