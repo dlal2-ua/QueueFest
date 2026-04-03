@@ -2,15 +2,15 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from '../utils/navigation';
 import { ChevronLeft, Clock, Tag, Loader2 } from 'lucide-react';
 import { MenuItem } from '../components/MenuItem';
-import { StickyBottomCTA } from '../components/StickyBottomCTA';
 import { useCart } from '../context/CartContext';
 import { StatusBadge } from '../components/StatusBadge';
+import { BottomNav } from '../components/BottomNav';
 import { getProductos, getPuesto } from '../api';
 
 export function BarDetailScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { addItem, getTotal, getItemCount } = useCart();
+  const { addItem } = useCart();
 
   const [bar, setBar] = useState<any | null>(null);
   const [categorias, setCategorias] = useState<any[]>([]);
@@ -85,6 +85,10 @@ export function BarDetailScreen() {
     });
   };
 
+  const handleViewItem = (item: any) => {
+    navigate(`/product/${item.id}?vendorId=${id}&vendorType=bar`);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -106,7 +110,7 @@ export function BarDetailScreen() {
   const queueStatus = waitTime < 10 ? 'fast' : waitTime > 25 ? 'saturated' : null;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-28">
+    <div className="min-h-screen bg-gray-50 pb-32">
       <div className="relative h-48 bg-gradient-to-br from-purple-600 to-pink-500 flex items-end">
         <button
           onClick={() => navigate(-1)}
@@ -171,10 +175,11 @@ export function BarDetailScreen() {
                   {cat.items.map((item: any) => (
                     <MenuItem
                       key={item.id}
-                      id={item.id}
+                      id={String(item.id)}
                       name={item.nombre}
                       description={item.descripcion}
                       price={item.precio_dinamico > 0 ? item.precio_dinamico : item.precio}
+                      onView={() => handleViewItem(item)}
                       disabled={bar.abierto === 0}
                       onAdd={handleAddItem}
                     />
@@ -186,11 +191,7 @@ export function BarDetailScreen() {
         )}
       </div>
 
-      <StickyBottomCTA
-        itemCount={getItemCount()}
-        total={getTotal()}
-        onClick={() => navigate('/cart')}
-      />
+      <BottomNav />
     </div>
   );
 }

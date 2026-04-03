@@ -28,6 +28,7 @@ import { BarOffersScreen } from './screens/BarOffersScreen';
 import { OffersScreen } from './screens/OffersScreen';
 import { CartScreen } from './screens/CartScreen';
 import { PaymentScreen } from './screens/PaymentScreen';
+import { ProductDetailScreen } from './screens/ProductDetailScreen';
 import { OrderConfirmationScreen } from './screens/OrderConfirmationScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { PersonalInfoScreen } from './screens/PersonalInfoScreen';
@@ -95,6 +96,7 @@ function AppRoutes() {
   if (path.startsWith('/food-truck/')) return <FoodTruckDetailScreen />;
   if (path.startsWith('/bar/') && path.endsWith('/offers')) return <BarOffersScreen />;
   if (path.startsWith('/bar/')) return <BarDetailScreen />;
+  if (path.startsWith('/product/')) return <ProductDetailScreen />;
   if (path === '/offers') return <OffersScreen />;
   if (path === '/cart') return <CartScreen />;
   if (path === '/payment') return <PaymentScreen />;
@@ -117,7 +119,7 @@ function App() {
     <AuthProvider>
       <LanguageProvider>
         <CartProvider>
-          <Toaster position="bottom-center" />
+          <Toaster position="top-center" />
           <div className="max-w-md mx-auto bg-white min-h-screen">
             <AppRoutes />
           </div>

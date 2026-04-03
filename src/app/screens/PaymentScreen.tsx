@@ -108,7 +108,7 @@ export function PaymentScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#fef3c7,_#fff7ed_25%,_#f8fafc_62%)] pb-40">
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="p-4 flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="w-10 h-10 flex items-center justify-center">
@@ -119,6 +119,21 @@ export function PaymentScreen() {
       </div>
 
       <div className="p-4 space-y-4">
+        <div className="rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-orange-950 p-5 text-white shadow-xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Checkout</p>
+              <p className="mt-3 text-4xl font-black tracking-tight">{formatPrice(orderTotal)}</p>
+              <p className="mt-2 text-sm text-white/75">
+                {items[0]?.vendorName ? `Pedido para ${items[0].vendorName}` : 'Confirma tu pedido y termina el pago'}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/10 p-3 backdrop-blur-sm">
+              <CreditCard className="w-7 h-7" />
+            </div>
+          </div>
+        </div>
+
         {puestoEstado?.abierto === 0 && (
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl shadow-sm">
             <h3 className="font-bold text-red-800">Cocina al maximo rendimiento</h3>
@@ -133,7 +148,7 @@ export function PaymentScreen() {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <div className="bg-white rounded-3xl p-4 shadow-sm border border-white/70">
           <h2 className="font-bold mb-4">Metodo de pago</h2>
           <div className="space-y-3">
             {paymentOptions.map((option) => {
@@ -160,7 +175,7 @@ export function PaymentScreen() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <div className="bg-white rounded-3xl p-4 shadow-sm border border-white/70">
           <h2 className="font-bold mb-4">Pickup Location</h2>
           <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
             <MapPin className="w-5 h-5 text-gray-600" />
@@ -177,7 +192,7 @@ export function PaymentScreen() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <div className="bg-white rounded-3xl p-4 shadow-sm border border-white/70">
           <h2 className="font-bold mb-4">Estimated Time</h2>
           <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-xl">
             <Clock className="w-5 h-5 text-orange-600" />
@@ -188,7 +203,7 @@ export function PaymentScreen() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <div className="bg-white rounded-3xl p-4 shadow-sm border border-white/70">
           <h2 className="font-bold mb-4">Order Summary</h2>
           <div className="flex justify-between">
             <span className="text-gray-600">Total Amount</span>
@@ -204,14 +219,25 @@ export function PaymentScreen() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg">
-        <button
-          onClick={handlePay}
-          disabled={loading || puestoEstado?.abierto === 0}
-          className="w-full bg-black text-white rounded-full py-4 font-medium text-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? 'Procesando...' : `Pagar ${formatPrice(orderTotal)}`}
-        </button>
+      <div className="fixed bottom-4 left-1/2 z-40 w-full max-w-md -translate-x-1/2 px-4">
+        <div className="rounded-[30px] border border-gray-200 bg-white/95 p-3 shadow-2xl backdrop-blur-sm">
+          <div className="mb-3 flex items-center justify-between px-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Importe final</p>
+              <p className="text-2xl font-black text-gray-900">{formatPrice(orderTotal)}</p>
+            </div>
+            <div className="rounded-full bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+              +{estimatedRoyalties} royalties
+            </div>
+          </div>
+          <button
+            onClick={handlePay}
+            disabled={loading || puestoEstado?.abierto === 0}
+            className="w-full bg-black text-white rounded-full py-4 font-medium text-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Procesando...' : `Pagar ${formatPrice(orderTotal)}`}
+          </button>
+        </div>
       </div>
     </div>
   );

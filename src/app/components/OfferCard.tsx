@@ -22,7 +22,7 @@ export function OfferCard({ title, description, discount, originalPrice, price, 
       toast.error('Solo puedes pedir de un puesto cada vez');
       return;
     }
-    toast.success(t('cart.addedToCart'), {
+    toast.success(`${title} - ${t('cart.addedToCart')}`, {
       duration: 2000,
     });
   };

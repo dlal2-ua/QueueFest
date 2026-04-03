@@ -2,15 +2,15 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from '../utils/navigation';
 import { ChevronLeft, Clock, Tag, Loader2 } from 'lucide-react';
 import { MenuItem } from '../components/MenuItem';
-import { StickyBottomCTA } from '../components/StickyBottomCTA';
 import { useCart } from '../context/CartContext';
 import { StatusBadge } from '../components/StatusBadge';
+import { BottomNav } from '../components/BottomNav';
 import { getProductos, getPuesto } from '../api';
 
 export function FoodTruckDetailScreen() {
   const { id } = useParams(); // id del puesto (foodtruck)
   const navigate = useNavigate();
-  const { addItem, getTotal, getItemCount } = useCart();
+  const { addItem } = useCart();
 
   const [truck, setTruck] = useState<any | null>(null);
   const [categorias, setCategorias] = useState<any[]>([]);
@@ -86,6 +86,10 @@ export function FoodTruckDetailScreen() {
     });
   };
 
+  const handleViewItem = (item: any) => {
+    navigate(`/product/${item.id}?vendorId=${id}&vendorType=food-truck`);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -107,7 +111,7 @@ export function FoodTruckDetailScreen() {
   const queueStatus = waitTime < 10 ? 'fast' : waitTime > 25 ? 'saturated' : null;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-28">
+    <div className="min-h-screen bg-gray-50 pb-32">
       <div className="relative h-48 bg-gradient-to-br from-green-500 to-emerald-600 flex items-end">
         <button
           onClick={() => navigate(-1)}
@@ -163,10 +167,11 @@ export function FoodTruckDetailScreen() {
                   {cat.items.map((item: any) => (
                     <MenuItem
                       key={item.id}
-                      id={item.id}
+                      id={String(item.id)}
                       name={item.nombre}
                       description={item.descripcion}
                       price={item.precio_dinamico > 0 ? item.precio_dinamico : item.precio}
+                      onView={() => handleViewItem(item)}
                       onAdd={handleAddItem}
                     />
                   ))}
@@ -177,11 +182,7 @@ export function FoodTruckDetailScreen() {
         )}
       </div>
 
-      <StickyBottomCTA
-        itemCount={getItemCount()}
-        total={getTotal()}
-        onClick={() => navigate('/cart')}
-      />
+      <BottomNav />
     </div>
   );
 }
