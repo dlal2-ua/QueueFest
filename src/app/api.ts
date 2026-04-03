@@ -221,6 +221,19 @@ export const actualizarFestival = async (id: number, data: any) => {
     return res.json();
 };
 
+export const subirFotoFestival = async (id: number, formData: FormData) => {
+    const authHeaders = headers();
+    delete (authHeaders as any)['Content-Type']; // fetch pone el boundary automáticamente
+
+    const res = await fetch(`${API_URL}/admin/festivales/${id}/foto`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: formData
+    });
+    if (!res.ok) throw new Error('Error al subir foto de festival');
+    return res.json();
+};
+
 // Obtiene festivales activos públicamente (sin auth) — usado en FestivalSelectScreen
 export const getFestivalesPublicos = async () => {
     const res = await fetch(`${API_URL}/festivales`);
@@ -258,6 +271,19 @@ export const eliminarPuesto = async (id: number) => {
     return res.json();
 };
 
+export const subirFotoPuesto = async (id: number, formData: FormData) => {
+    const authHeaders = headers();
+    delete (authHeaders as any)['Content-Type'];
+
+    const res = await fetch(`${API_URL}/admin/puestos/${id}/foto`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: formData
+    });
+    if (!res.ok) throw new Error('Error al subir foto de puesto');
+    return res.json();
+};
+
 // ── Productos ─────────────────────────────────────────────────────────────
 
 export const crearProducto = async (data: any) => {
@@ -284,6 +310,19 @@ export const eliminarProducto = async (id: number) => {
         headers: headers()
     });
     if (!res.ok) throw new Error('Error al eliminar producto');
+    return res.json();
+};
+
+export const subirFotoProducto = async (id: number, formData: FormData) => {
+    const authHeaders = headers();
+    delete (authHeaders as any)['Content-Type'];
+
+    const res = await fetch(`${API_URL}/admin/productos/${id}/foto`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: formData
+    });
+    if (!res.ok) throw new Error('Error al subir foto de producto');
     return res.json();
 };
 

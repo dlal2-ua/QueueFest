@@ -51,32 +51,25 @@ export function FestivalSelectScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 shadow-sm">
-        <div className="p-6 pb-4">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 leading-tight">Elige tu Festival</h1>
-              <p className="text-xs text-gray-500">Selecciona el evento al que asistes</p>
-            </div>
-          </div>
+      <div className="bg-transparent pt-10 pb-2">
+        <div className="p-6 pb-2 text-center flex flex-col items-center">
+          <h1 className="text-3xl font-extrabold text-gray-900 leading-tight mb-2">Elige tu Festival</h1>
+          <p className="text-gray-500 font-medium">Selecciona el evento al que asistes</p>
         </div>
 
         {/* Buscador */}
-        <div className="px-4 pb-4">
+        <div className="px-6 pb-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Buscar festival..."
               value={busqueda}
               onChange={e => setBusqueda(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:bg-white focus:border-gray-300 transition-all"
+              className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm shadow-sm focus:outline-none focus:bg-white focus:border-red-300 focus:ring-4 focus:ring-red-50 transition-all placeholder:text-gray-400"
             />
           </div>
         </div>
@@ -105,41 +98,36 @@ export function FestivalSelectScreen() {
           </div>
         ) : (
           <>
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wide px-1">
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider px-2">
               {filtrados.length} evento{filtrados.length !== 1 ? 's' : ''} disponible{filtrados.length !== 1 ? 's' : ''}
             </p>
             {filtrados.map(fest => (
               <button
                 key={fest.id}
                 onClick={() => handleSeleccionar(fest)}
-                className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-4 text-left hover:border-red-200 hover:shadow-md active:scale-[0.98] transition-all"
+                className="group w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-5 flex items-center gap-4 text-left hover:shadow-md hover:border-red-100 active:scale-[0.98] transition-all duration-300 relative overflow-hidden"
               >
-                {/* Icono / inicial */}
-                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-700 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm shadow-red-200">
-                  <span className="text-white text-lg font-bold">
-                    {fest.nombre.charAt(0).toUpperCase()}
-                  </span>
-                </div>
+                {/* Subtle side border on hover */}
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-red-400 to-orange-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-gray-900 truncate">{fest.nombre}</h3>
+                  <h3 className="text-lg font-bold text-gray-900 truncate mb-1 group-hover:text-red-600 transition-colors">{fest.nombre}</h3>
                   {(fest.fecha_inicio || fest.fecha_fin) && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                      <p className="text-xs text-gray-500 truncate">
+                    <div className="flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                      <p className="text-sm text-gray-500 truncate">
                         {fest.fecha_inicio && formatFecha(fest.fecha_inicio)}
                         {fest.fecha_inicio && fest.fecha_fin && ' → '}
                         {fest.fecha_fin && formatFecha(fest.fecha_fin)}
                       </p>
                     </div>
                   )}
-                  <span className="inline-block mt-1.5 px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-full border border-green-100">
-                    ACTIVO
-                  </span>
                 </div>
 
-                <ChevronRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
+                <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-red-50 transition-colors">
+                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-red-500 transition-colors" />
+                </div>
               </button>
             ))}
           </>

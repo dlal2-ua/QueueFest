@@ -4,6 +4,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const { Client } = require('ssh2');
 const net = require('net');
 require('dotenv').config();
@@ -11,6 +13,32 @@ require('dotenv').config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Servir la carpeta de fotos estáticamente
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Configuración de Multer para admitir hasta 5MB y sólo imágenes
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + ext);
+  }
+});
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten imágenes'));
+    }
+  }
+});
 
 let db; // Será inicializado tras establecer el túnel SSH
 
@@ -243,6 +271,18 @@ app.put('/api/admin/puestos/:id', auth, async (req, res) => {
   }
 });
 
+// Foto Upload para Puesto
+app.post('/api/admin/puestos/:id/foto', auth, upload.single('foto'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Falta imagen' });
+  const foto_url = '/uploads/' + req.file.filename;
+  try {
+    await db.query('UPDATE puestos SET foto_url = ? WHERE id = ?', [foto_url, req.params.id]);
+    res.json({ foto_url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/admin/puestos/:id', auth, async (req, res) => {
   try {
     await db.query('DELETE FROM puestos WHERE id = ?', [req.params.id]);
@@ -288,6 +328,18 @@ app.put('/api/admin/productos/:id', auth, async (req, res) => {
       [nombre, descripcion, precio, precio_dinamico, stock, activo, req.params.id]
     );
     res.json({ message: 'Producto actualizado' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Foto Upload para Producto
+app.post('/api/admin/productos/:id/foto', auth, upload.single('foto'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Falta imagen' });
+  const foto_url = '/uploads/' + req.file.filename;
+  try {
+    await db.query('UPDATE productos SET foto_url = ? WHERE id = ?', [foto_url, req.params.id]);
+    res.json({ foto_url });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -593,11 +645,11 @@ app.get('/api/admin/festivales', auth, async (req, res) => {
 });
 
 app.post('/api/admin/festivales', auth, async (req, res) => {
-  const { nombre, fecha_inicio, fecha_fin } = req.body;
+  const { nombre, fecha_inicio, fecha_fin, localizacion } = req.body;
   try {
     const [result] = await db.query(
-      'INSERT INTO festivales (nombre, fecha_inicio, fecha_fin, creado_por) VALUES (?, ?, ?, ?)',
-      [nombre, fecha_inicio, fecha_fin, req.user.id]
+      'INSERT INTO festivales (nombre, fecha_inicio, fecha_fin, localizacion, creado_por) VALUES (?, ?, ?, ?, ?)',
+      [nombre, fecha_inicio, fecha_fin, localizacion || null, req.user.id]
     );
     res.json({ id: result.insertId });
   } catch (err) {
@@ -638,16 +690,28 @@ app.patch('/api/admin/festivales/:id/activar', auth, async (req, res) => {
 });
 
 app.put('/api/admin/festivales/:id', auth, async (req, res) => {
-  const { nombre, fecha_inicio, fecha_fin } = req.body;
+  const { nombre, fecha_inicio, fecha_fin, localizacion } = req.body;
   try {
     const [result] = await db.query(
-      'UPDATE festivales SET nombre = ?, fecha_inicio = ?, fecha_fin = ? WHERE id = ?',
-      [nombre, fecha_inicio, fecha_fin, req.params.id]
+      'UPDATE festivales SET nombre = ?, fecha_inicio = ?, fecha_fin = ?, localizacion = ? WHERE id = ?',
+      [nombre, fecha_inicio, fecha_fin, localizacion || null, req.params.id]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Festival no encontrado' });
     }
     res.json({ message: 'Festival actualizado correctamente' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Foto Upload para Festival
+app.post('/api/admin/festivales/:id/foto', auth, upload.single('foto'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Falta imagen' });
+  const foto_url = '/uploads/' + req.file.filename;
+  try {
+    await db.query('UPDATE festivales SET foto_url = ? WHERE id = ?', [foto_url, req.params.id]);
+    res.json({ foto_url });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

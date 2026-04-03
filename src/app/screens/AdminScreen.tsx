@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import {
-  crearFestival, getFestivales, eliminarFestival, desactivarFestival, activarFestival, actualizarFestival,
-  crearPuesto, actualizarPuesto, getPuestosByFestival, eliminarPuesto,
-  getProductos, crearProducto, actualizarProducto, eliminarProducto,
+  crearFestival, getFestivales, eliminarFestival, desactivarFestival, activarFestival, actualizarFestival, subirFotoFestival,
+  crearPuesto, actualizarPuesto, getPuestosByFestival, eliminarPuesto, subirFotoPuesto,
+  getProductos, crearProducto, actualizarProducto, eliminarProducto, subirFotoProducto,
   getPromociones, crearPromocion, actualizarPromocion, eliminarPromocion,
   getParametros, actualizarParametros,
   getUsuariosStaff, getUsuarios, crearUsuario, eliminarUsuario
@@ -16,6 +16,8 @@ import {
 
 export function AdminScreen() {
   const { user, logout } = useAuth();
+
+  const tabsRef = useRef<HTMLDivElement>(null);
 
   const [tab, setTab] = useState<'festival' | 'puestos' | 'productos' | 'promociones' | 'parametros' | 'usuarios'>('festival');
   const [loading, setLoading] = useState(false);
@@ -40,9 +42,12 @@ export function AdminScreen() {
   const [puestosList, setPuestosList] = useState<any[]>([]);
 
   // States: Festival (formulario)
-  const [festival, setFestival] = useState({ nombre: '', fecha_inicio: '', fecha_fin: '' });
+  const [festival, setFestival] = useState({ nombre: '', fecha_inicio: '', fecha_fin: '', localizacion: '' });
+  const [fotoFestival, setFotoFestival] = useState<File | null>(null);
+  
   const [editandoFestivalId, setEditandoFestivalId] = useState<number | null>(null);
-  const [festivalEditFormData, setFestivalEditFormData] = useState({ nombre: '', fecha_inicio: '', fecha_fin: '' });
+  const [festivalEditFormData, setFestivalEditFormData] = useState({ nombre: '', fecha_inicio: '', fecha_fin: '', localizacion: '', foto_url: '' });
+  const [fotoFestivalEdit, setFotoFestivalEdit] = useState<File | null>(null);
 
   // States: Puesto
   const [puesto, setPuesto] = useState({
@@ -50,6 +55,7 @@ export function AdminScreen() {
     nombre: '', tipo: 'barra', capacidad_max: 50, num_empleados: 3,
     horarios_apertura: '18:00 - 04:00'
   });
+  const [fotoPuesto, setFotoPuesto] = useState<File | null>(null);
 
   // States: Productos
   const [productosList, setProductosList] = useState<any[]>([]);
@@ -57,11 +63,24 @@ export function AdminScreen() {
   const [producto, setProducto] = useState({
     nombre: '', descripcion: '', precio: 0, precio_dinamico: 0, stock: 100, activo: true
   });
+  const [fotoProducto, setFotoProducto] = useState<File | null>(null);
 
   // States: Promociones
   const [promocionesList, setPromocionesList] = useState<any[]>([]);
   const [selectedPuestoIdPromo, setSelectedPuestoIdPromo] = useState<number | ''>('');
   const [promocion, setPromocion] = useState({ titulo: '', descripcion: '', precio_promo: 0, activa: true });
+
+  // States: Edición en línea
+  const [editandoPuestoId, setEditandoPuestoId] = useState<number | null>(null);
+  const [puestoEditFormData, setPuestoEditFormData] = useState({ nombre: '', tipo: 'barra', capacidad_max: 50, num_empleados: 3, horarios_apertura: '', foto_url: '' });
+  const [fotoPuestoEdit, setFotoPuestoEdit] = useState<File | null>(null);
+
+  const [editandoProductoId, setEditandoProductoId] = useState<number | null>(null);
+  const [productoEditFormData, setProductoEditFormData] = useState({ nombre: '', descripcion: '', precio: 0, precio_dinamico: 0, stock: 100, foto_url: '' });
+  const [fotoProductoEdit, setFotoProductoEdit] = useState<File | null>(null);
+
+  const [editandoPromocionId, setEditandoPromocionId] = useState<number | null>(null);
+  const [promocionEditFormData, setPromocionEditFormData] = useState({ titulo: '', descripcion: '', precio_promo: 0 });
 
   // States: Parámetros
   const [parametros, setParametros] = useState({
@@ -139,8 +158,6 @@ export function AdminScreen() {
   }, []);
 
   const loadUsuarios = useCallback(async () => {
-    // Intenta primero el endpoint filtrado /staff
-    // Si falla (aún no desplegado), cae al endpoint general y filtra en cliente
     try {
       const data = await getUsuariosStaff();
       if (Array.isArray(data)) { setUsuariosList(data); return; }
@@ -154,6 +171,17 @@ export function AdminScreen() {
   }, []);
 
   // ── Effects ───────────────────────────────────────────────────────────────
+
+  // Efecto para auto-scrollear a la pestaña activa
+  useEffect(() => {
+    if (tabsRef.current) {
+      const activeTab = tabsRef.current.querySelector<HTMLButtonElement>('.tab-active');
+      if (activeTab) {
+        const scrollLeft = activeTab.offsetLeft - (tabsRef.current.clientWidth / 2) + (activeTab.clientWidth / 2);
+        tabsRef.current.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+      }
+    }
+  }, [tab]);
 
   // Cuando cambia el ID del festival activo: sincronizar form y recargar puestos
   // Pasamos el festival explícitamente para evitar la race condition con el estado
@@ -202,8 +230,14 @@ export function AdminScreen() {
     setLoading(true);
     try {
       const data = await crearFestival(festival);
+      if (fotoFestival) {
+        const fd = new FormData();
+        fd.append('foto', fotoFestival);
+        await subirFotoFestival(data.id, fd);
+      }
       toast.success(`Festival creado (ID: ${data?.id || '?'})`);
-      setFestival({ nombre: '', fecha_inicio: '', fecha_fin: '' });
+      setFestival({ nombre: '', fecha_inicio: '', fecha_fin: '', localizacion: '' });
+      setFotoFestival(null);
       loadFestivales();
     } catch { toast.error('Error al crear el festival'); }
     finally { setLoading(false); }
@@ -243,9 +277,15 @@ export function AdminScreen() {
     if (!festivalActivo) return toast.error('Selecciona un festival primero');
     setLoading(true);
     try {
-      await crearPuesto({ ...puesto, festival_id: festivalActivo.id });
+      const resp = await crearPuesto({ ...puesto, festival_id: festivalActivo.id });
+      if (fotoPuesto) {
+        const fd = new FormData();
+        fd.append('foto', fotoPuesto);
+        await subirFotoPuesto(resp.id, fd);
+      }
       toast.success('Puesto creado');
       setPuesto(prev => ({ ...prev, nombre: '', capacidad_max: 50, num_empleados: 3 }));
+      setFotoPuesto(null);
       loadPuestos(festivalActivo);
     } catch { toast.error('Error al crear el puesto'); }
     finally { setLoading(false); }
@@ -264,9 +304,15 @@ export function AdminScreen() {
     if (!selectedPuestoId) return toast.error('Selecciona un puesto primero');
     setLoading(true);
     try {
-      await crearProducto({ ...producto, puesto_id: selectedPuestoId });
+      const resp = await crearProducto({ ...producto, puesto_id: selectedPuestoId });
+      if (fotoProducto) {
+        const fd = new FormData();
+        fd.append('foto', fotoProducto);
+        await subirFotoProducto(resp.id, fd);
+      }
       toast.success('Producto añadido');
       setProducto({ nombre: '', descripcion: '', precio: 0, precio_dinamico: 0, stock: 100, activo: true });
+      setFotoProducto(null);
       loadProductos(Number(selectedPuestoId));
     } catch { toast.error('Error al crear producto'); }
     finally { setLoading(false); }
@@ -338,14 +384,22 @@ export function AdminScreen() {
     setFestivalEditFormData({
       nombre: fest.nombre,
       fecha_inicio: fest.fecha_inicio ? fest.fecha_inicio.substring(0, 10) : '',
-      fecha_fin: fest.fecha_fin ? fest.fecha_fin.substring(0, 10) : ''
+      fecha_fin: fest.fecha_fin ? fest.fecha_fin.substring(0, 10) : '',
+      localizacion: fest.localizacion || '',
+      foto_url: fest.foto_url || ''
     });
+    setFotoFestivalEdit(null);
   };
 
   const handleSaveFestival = async (id: number) => {
     setLoading(true);
     try {
       await actualizarFestival(id, festivalEditFormData);
+      if (fotoFestivalEdit) {
+        const fd = new FormData();
+        fd.append('foto', fotoFestivalEdit);
+        await subirFotoFestival(id, fd);
+      }
       toast.success('Festival actualizado');
       setEditandoFestivalId(null);
       // Si el festival editado es el activo, actualizar el estado
@@ -355,6 +409,93 @@ export function AdminScreen() {
       loadFestivales();
     } catch {
       toast.error('Error al actualizar el festival');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditPuesto = (p: any) => {
+    setEditandoPuestoId(p.id);
+    setPuestoEditFormData({
+      nombre: p.nombre,
+      tipo: p.tipo,
+      capacidad_max: p.capacidad_max,
+      num_empleados: p.num_empleados,
+      horarios_apertura: p.horarios_apertura,
+      foto_url: p.foto_url || ''
+    });
+    setFotoPuestoEdit(null);
+  };
+
+  const handleSavePuesto = async (id: number) => {
+    setLoading(true);
+    try {
+      await actualizarPuesto(id, puestoEditFormData);
+      if (fotoPuestoEdit) {
+        const fd = new FormData();
+        fd.append('foto', fotoPuestoEdit);
+        await subirFotoPuesto(id, fd);
+      }
+      toast.success('Puesto actualizado');
+      setEditandoPuestoId(null);
+      loadPuestos(festivalActivo);
+    } catch {
+      toast.error('Error al actualizar el puesto');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditProducto = (prod: any) => {
+    setEditandoProductoId(prod.id);
+    setProductoEditFormData({
+      nombre: prod.nombre,
+      descripcion: prod.descripcion,
+      precio: prod.precio,
+      precio_dinamico: prod.precio_dinamico,
+      stock: prod.stock,
+      foto_url: prod.foto_url || ''
+    });
+    setFotoProductoEdit(null);
+  };
+
+  const handleSaveProducto = async (id: number) => {
+    setLoading(true);
+    try {
+      await actualizarProducto(id, productoEditFormData);
+      if (fotoProductoEdit) {
+        const fd = new FormData();
+        fd.append('foto', fotoProductoEdit);
+        await subirFotoProducto(id, fd);
+      }
+      toast.success('Producto actualizado');
+      setEditandoProductoId(null);
+      if (selectedPuestoId) loadProductos(Number(selectedPuestoId));
+    } catch {
+      toast.error('Error al actualizar producto');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditPromocion = (promo: any) => {
+    setEditandoPromocionId(promo.id);
+    setPromocionEditFormData({
+      titulo: promo.titulo,
+      descripcion: promo.descripcion,
+      precio_promo: promo.precio_promo
+    });
+  };
+
+  const handleSavePromocion = async (id: number) => {
+    setLoading(true);
+    try {
+      await actualizarPromocion(id, promocionEditFormData);
+      toast.success('Promoción actualizada');
+      setEditandoPromocionId(null);
+      if (selectedPuestoIdPromo) loadPromociones(Number(selectedPuestoIdPromo));
+    } catch {
+      toast.error('Error al actualizar promoción');
     } finally {
       setLoading(false);
     }
@@ -401,6 +542,7 @@ export function AdminScreen() {
   const rolLabel = (rolId: number) => {
     if (rolId === 1) return { label: 'Administrador', cls: 'bg-black text-white' };
     if (rolId === 2) return { label: 'Gestor', cls: 'bg-blue-100 text-blue-700' };
+    if (rolId === 4) return { label: 'Usuario Básico', cls: 'bg-green-100 text-green-700' };
     return { label: 'Operador', cls: 'bg-red-100 text-red-700' };
   };
 
@@ -447,7 +589,7 @@ export function AdminScreen() {
       </div>
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
-      <div className="flex overflow-x-auto border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm hide-scrollbar">
+      <div ref={tabsRef} className="flex overflow-x-auto border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm hide-scrollbar scroll-smooth">
         {[
           { id: 'festival', label: 'Evento', icon: Calendar },
           { id: 'puestos', label: 'Puestos', icon: Store },
@@ -459,7 +601,7 @@ export function AdminScreen() {
           <button
             key={t.id}
             onClick={() => setTab(t.id as any)}
-            className={`flex-none flex items-center gap-1 px-4 py-3 text-sm font-medium transition-colors ${tab === t.id ? 'border-b-2 border-red-600 text-red-600' : 'text-gray-500 hover:text-gray-800'
+            className={`flex-none flex items-center gap-1 px-4 py-3 text-sm font-medium transition-colors ${tab === t.id ? 'tab-active border-b-2 border-red-600 text-red-600' : 'text-gray-500 hover:text-gray-800'
               }`}
           >
             <t.icon className="w-4 h-4" />
@@ -497,6 +639,26 @@ export function AdminScreen() {
                     <label className="block text-sm font-medium mb-1">Fecha de Fin</label>
                     <input type="date" value={festival.fecha_fin} onChange={e => setFestival({ ...festival, fecha_fin: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" required />
                   </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-gray-700">Localización</label>
+                  <input
+                    type="text" value={festival.localizacion}
+                    onChange={e => setFestival({ ...festival, localizacion: e.target.value })}
+                    placeholder="Ej: Recinto Ferial, Madrid"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-gray-700">Foto del Evento</label>
+                  <input
+                    type="file" accept="image/*"
+                    onChange={e => setFotoFestival(e.target.files?.[0] ?? null)}
+                    className="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
+                  />
+                  {fotoFestival && (
+                    <img src={URL.createObjectURL(fotoFestival)} alt="preview" className="mt-2 h-24 w-full object-cover rounded-lg border border-gray-200" />
+                  )}
                 </div>
               </div>
               <button type="submit" disabled={loading} className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors shadow-md shadow-red-500/20">
@@ -539,6 +701,20 @@ export function AdminScreen() {
                               className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
                             />
                           </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Localización</label>
+                          <input type="text" value={festivalEditFormData.localizacion} onChange={e => setFestivalEditFormData({ ...festivalEditFormData, localizacion: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" placeholder="Ciudad, recinto..." />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Foto</label>
+                          {festivalEditFormData.foto_url && !fotoFestivalEdit && (
+                            <img src={`http://localhost:3000${festivalEditFormData.foto_url}`} alt="actual" className="mb-1 h-16 w-full object-cover rounded-lg border border-gray-200" />
+                          )}
+                          {fotoFestivalEdit && (
+                            <img src={URL.createObjectURL(fotoFestivalEdit)} alt="nueva" className="mb-1 h-16 w-full object-cover rounded-lg border border-red-200" />
+                          )}
+                          <input type="file" accept="image/*" onChange={e => setFotoFestivalEdit(e.target.files?.[0] ?? null)} className="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-red-50 file:text-red-700" />
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -640,6 +816,17 @@ export function AdminScreen() {
                   <label className="block text-sm font-medium mb-1">Empleados</label>
                   <input type="number" value={puesto.num_empleados} onChange={e => setPuesto({ ...puesto, num_empleados: Number(e.target.value) })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500" required />
                 </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium mb-1">Foto del Puesto</label>
+                  <input
+                    type="file" accept="image/*"
+                    onChange={e => setFotoPuesto(e.target.files?.[0] ?? null)}
+                    className="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
+                  />
+                  {fotoPuesto && (
+                    <img src={URL.createObjectURL(fotoPuesto)} alt="preview" className="mt-2 h-20 w-full object-cover rounded-lg border border-gray-200" />
+                  )}
+                </div>
               </div>
               <button type="submit" disabled={loading || !festivalActivo} className="w-full bg-gray-900 hover:bg-black text-white py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-40">
                 <PlusCircle className="w-4 h-4" /> Dar de alta Puesto
@@ -654,19 +841,69 @@ export function AdminScreen() {
                 </p>
               ) : puestosList.map((p) => (
                 <div key={p.id} className="flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-gray-100">
-                  <div>
-                    <h4 className="font-semibold text-gray-900 leading-tight">{p.nombre}</h4>
-                    <span className="text-xs text-gray-500 capitalize">{p.tipo} • Staff: {p.num_empleados}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => handleTogglePuesto(p)} className={`px-3 py-1 text-xs font-bold rounded-full ${p.abierto ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'
-                      } transition-colors`}>
-                      {p.abierto ? 'ABIERTO' : 'CERRADO'}
-                    </button>
-                    <button onClick={() => handleEliminarPuesto(p.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {editandoPuestoId === p.id ? (
+                    <div className="w-full space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Nombre</label>
+                          <input type="text" value={puestoEditFormData.nombre} onChange={e => setPuestoEditFormData({ ...puestoEditFormData, nombre: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Tipo</label>
+                          <select value={puestoEditFormData.tipo} onChange={e => setPuestoEditFormData({ ...puestoEditFormData, tipo: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500">
+                            <option value="barra">Barra Bebidas</option>
+                            <option value="foodtruck">Food Truck</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Horarios</label>
+                          <input type="text" value={puestoEditFormData.horarios_apertura} onChange={e => setPuestoEditFormData({ ...puestoEditFormData, horarios_apertura: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Cap.</label>
+                            <input type="number" value={puestoEditFormData.capacidad_max} onChange={e => setPuestoEditFormData({ ...puestoEditFormData, capacidad_max: Number(e.target.value) })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Staff</label>
+                            <input type="number" value={puestoEditFormData.num_empleados} onChange={e => setPuestoEditFormData({ ...puestoEditFormData, num_empleados: Number(e.target.value) })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Foto</label>
+                          {puestoEditFormData.foto_url && !fotoPuestoEdit && (
+                            <img src={`http://localhost:3000${puestoEditFormData.foto_url}`} alt="actual" className="mb-1 h-14 w-full object-cover rounded-lg border border-gray-200" />
+                          )}
+                          {fotoPuestoEdit && (
+                            <img src={URL.createObjectURL(fotoPuestoEdit)} alt="nueva" className="mb-1 h-14 w-full object-cover rounded-lg border border-red-200" />
+                          )}
+                          <input type="file" accept="image/*" onChange={e => setFotoPuestoEdit(e.target.files?.[0] ?? null)} className="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-red-50 file:text-red-700" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleSavePuesto(p.id)} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded-lg text-xs font-bold">Guardar</button>
+                        <button onClick={() => setEditandoPuestoId(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded-lg text-xs font-bold">Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex-1 min-w-0 mr-2">
+                        <h4 className="font-semibold text-gray-900 leading-tight">{p.nombre}</h4>
+                        <span className="text-xs text-gray-500 capitalize">{p.tipo} • Staff: {p.num_empleados} • Horario: {p.horarios_apertura || 'N/A'}</span>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button onClick={() => handleTogglePuesto(p)} className={`mr-2 px-2 py-1 text-[10px] font-bold rounded-lg border ${p.abierto ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'} transition-colors`}>
+                          {p.abierto ? 'ABIERTO' : 'CERRADO'}
+                        </button>
+                        <button onClick={() => handleEditPuesto(p)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleEliminarPuesto(p.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -721,6 +958,17 @@ export function AdminScreen() {
                       <label className="text-xs font-medium text-gray-500 uppercase">Stock inicial</label>
                       <input type="number" value={producto.stock} onChange={e => setProducto({ ...producto, stock: Number(e.target.value) })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none" required />
                     </div>
+                    <div className="col-span-2">
+                      <label className="text-xs font-medium text-gray-500 uppercase">Foto del Producto</label>
+                      <input
+                        type="file" accept="image/*"
+                        onChange={e => setFotoProducto(e.target.files?.[0] ?? null)}
+                        className="w-full text-sm text-gray-500 file:mr-3 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 mt-1"
+                      />
+                      {fotoProducto && (
+                        <img src={URL.createObjectURL(fotoProducto)} alt="preview" className="mt-2 h-20 w-full object-cover rounded-lg border border-gray-200" />
+                      )}
+                    </div>
                   </div>
                   <button type="submit" className="w-full bg-red-50 text-red-700 py-2.5 rounded-lg border border-red-200 font-semibold text-sm hover:bg-red-100 transition-colors">
                     + Insertar en Catálogo
@@ -732,18 +980,64 @@ export function AdminScreen() {
                     ? <p className="text-xs text-center text-gray-400">Sin productos aún.</p>
                     : productosList.map(prod => (
                       <div key={prod.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-                        <div>
-                          <p className={`font-semibold ${prod.activo ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{prod.nombre}</p>
-                          <p className="text-xs text-gray-500 font-medium">{prod.precio}€ • Stock: {prod.stock}</p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleToggleProducto(prod)} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
-                            {prod.activo ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <XCircle className="w-6 h-6 text-gray-300" />}
-                          </button>
-                          <button onClick={() => handleEliminarProducto(prod.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors">
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        </div>
+                        {editandoProductoId === prod.id ? (
+                          <div className="w-full space-y-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <div className="md:col-span-2">
+                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Nombre</label>
+                                <input type="text" value={productoEditFormData.nombre} onChange={e => setProductoEditFormData({ ...productoEditFormData, nombre: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Descripción</label>
+                                <input type="text" value={productoEditFormData.descripcion} onChange={e => setProductoEditFormData({ ...productoEditFormData, descripcion: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Precio</label>
+                                <input type="number" step="0.5" value={productoEditFormData.precio} onChange={e => setProductoEditFormData({ ...productoEditFormData, precio: Number(e.target.value) })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">P. Dinámico</label>
+                                <input type="number" step="0.5" value={productoEditFormData.precio_dinamico} onChange={e => setProductoEditFormData({ ...productoEditFormData, precio_dinamico: Number(e.target.value) })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Stock</label>
+                                <input type="number" value={productoEditFormData.stock} onChange={e => setProductoEditFormData({ ...productoEditFormData, stock: Number(e.target.value) })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Foto</label>
+                                {productoEditFormData.foto_url && !fotoProductoEdit && (
+                                  <img src={`http://localhost:3000${productoEditFormData.foto_url}`} alt="actual" className="mb-1 h-14 w-full object-cover rounded-lg border border-gray-200" />
+                                )}
+                                {fotoProductoEdit && (
+                                  <img src={URL.createObjectURL(fotoProductoEdit)} alt="nueva" className="mb-1 h-14 w-full object-cover rounded-lg border border-red-200" />
+                                )}
+                                <input type="file" accept="image/*" onChange={e => setFotoProductoEdit(e.target.files?.[0] ?? null)} className="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-red-50 file:text-red-700" />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => handleSaveProducto(prod.id)} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded-lg text-xs font-bold">Guardar</button>
+                              <button onClick={() => setEditandoProductoId(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded-lg text-xs font-bold">Cancelar</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex-1 min-w-0 mr-2">
+                              <p className={`font-semibold ${prod.activo ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{prod.nombre}</p>
+                              <p className="text-xs text-gray-500 font-medium">{prod.precio}€ • Stock: {prod.stock}</p>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button onClick={() => handleToggleProducto(prod)} className="p-1.5 text-gray-400 hover:text-gray-900 transition-colors">
+                                {prod.activo ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <XCircle className="w-5 h-5 text-gray-300" />}
+                              </button>
+                              <button onClick={() => handleEditProducto(prod)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => handleEliminarProducto(prod.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     ))}
                 </div>
@@ -800,18 +1094,46 @@ export function AdminScreen() {
                     ? <p className="text-xs text-center text-gray-400">Sin ofertas configuradas.</p>
                     : promocionesList.map(promo => (
                       <div key={promo.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-                        <div>
-                          <p className={`font-semibold ${promo.activa ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{promo.titulo}</p>
-                          <p className="text-xs text-gray-500 font-medium">{promo.precio_promo}€ • {promo.descripcion}</p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleTogglePromocion(promo)} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
-                            {promo.activa ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <XCircle className="w-6 h-6 text-gray-300" />}
-                          </button>
-                          <button onClick={() => handleEliminarPromocion(promo.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors">
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        </div>
+                        {editandoPromocionId === promo.id ? (
+                          <div className="w-full space-y-3">
+                            <div className="grid grid-cols-1 gap-2">
+                              <div>
+                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Título</label>
+                                <input type="text" value={promocionEditFormData.titulo} onChange={e => setPromocionEditFormData({ ...promocionEditFormData, titulo: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Descripción</label>
+                                <input type="text" value={promocionEditFormData.descripcion} onChange={e => setPromocionEditFormData({ ...promocionEditFormData, descripcion: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Precio Promo</label>
+                                <input type="number" step="0.5" value={promocionEditFormData.precio_promo} onChange={e => setPromocionEditFormData({ ...promocionEditFormData, precio_promo: Number(e.target.value) })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => handleSavePromocion(promo.id)} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded-lg text-xs font-bold">Guardar</button>
+                              <button onClick={() => setEditandoPromocionId(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded-lg text-xs font-bold">Cancelar</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex-1 min-w-0 mr-2">
+                              <p className={`font-semibold ${promo.activa ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{promo.titulo}</p>
+                              <p className="text-xs text-gray-500 font-medium">{promo.precio_promo}€ • {promo.descripcion}</p>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button onClick={() => handleTogglePromocion(promo)} className="p-1.5 text-gray-400 hover:text-gray-900 transition-colors">
+                                {promo.activa ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <XCircle className="w-5 h-5 text-gray-300" />}
+                              </button>
+                              <button onClick={() => handleEditPromocion(promo)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => handleEliminarPromocion(promo.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     ))}
                 </div>
@@ -934,6 +1256,7 @@ export function AdminScreen() {
                     <option value="gestor">Gestor</option>
                     <option value="operador">Operador</option>
                     <option value="administrador">Administrador</option>
+                    <option value="usuario">Usuario Básico</option>
                   </select>
                 </div>
                 {nuevoUsuario.rol === 'operador' && (
@@ -948,7 +1271,7 @@ export function AdminScreen() {
               </div>
             </form>
 
-            {/* Listado staff: soporta tanto rol_id numérico como rol string */}
+            {/* Listado de usuarios */}
             <div className="space-y-2">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-bold text-gray-700 text-sm">Personal del Sistema</h3>
@@ -959,12 +1282,12 @@ export function AdminScreen() {
                 </div>
               </div>
               {usuariosList.length === 0 ? (
-                <p className="text-gray-500 text-sm italic text-center py-4 bg-gray-100 rounded-lg">No hay personal de staff registrado.</p>
+                <p className="text-gray-500 text-sm italic text-center py-4 bg-gray-100 rounded-lg">No hay personal registrado.</p>
               ) : usuariosList.map(usr => {
-                // Soporta rol_id numérico (endpoint /staff) y rol string (endpoint general como fallback)
+                // Soporta rol_id numérico y rol string
                 const rid = usr.rol_id != null
                   ? Number(usr.rol_id)
-                  : usr.rol === 'administrador' ? 1 : usr.rol === 'gestor' ? 2 : 3;
+                  : usr.rol === 'administrador' ? 1 : usr.rol === 'gestor' ? 2 : usr.rol === 'usuario' ? 4 : 3;
                 const { label, cls } = rolLabel(rid);
                 return (
                   <div key={usr.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
