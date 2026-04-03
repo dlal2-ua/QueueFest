@@ -34,15 +34,6 @@ export function ProfileScreen() {
     { icon: HelpCircle, label: t('profile.helpSupport'), path: '/profile/support' }
   ];
 
-  const profileHighlights = [
-    { label: 'Alias', value: userProfile.displayName },
-    { label: 'Telefono', value: userProfile.phone },
-    { label: 'Ciudad', value: userProfile.city },
-    { label: 'Festival favorito', value: userProfile.favoriteFestival },
-    { label: 'Dieta', value: userProfile.dietaryPreferences },
-    { label: 'Miembro desde', value: userProfile.memberSince }
-  ];
-
   const handleLogout = () => {
     logout();
     navigate('/login');
@@ -97,30 +88,6 @@ export function ProfileScreen() {
             </p>
           </div>
         </button>
-
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">Resumen del perfil</h2>
-              <p className="text-sm text-gray-500">Campos de referencia mientras conectamos la BBDD del perfil.</p>
-            </div>
-            <button
-              onClick={() => navigate('/profile/info')}
-              className="text-sm font-semibold text-orange-600 hover:text-orange-700"
-            >
-              Ver todo
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {profileHighlights.map((item) => (
-              <div key={item.label} className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.label}</p>
-                <p className="mt-2 text-sm font-medium text-gray-900">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
 
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           {menuItems.map((item, index) => (
