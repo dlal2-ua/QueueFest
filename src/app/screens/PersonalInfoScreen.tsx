@@ -1,29 +1,59 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useNavigate } from '../utils/navigation';
 import { useLanguage } from '../context/LanguageContext';
-import { toast } from 'sonner';
+import { useAuth } from '../context/AuthContext';
+import { getUserProfile } from '../data/profileData';
+import { BottomNav } from '../components/BottomNav';
 
 export function PersonalInfoScreen() {
   const navigate = useNavigate();
   const { t, isRTL } = useLanguage();
-  const [formData, setFormData] = useState(() => {
-    const saved = localStorage.getItem('userProfile');
-    return saved ? JSON.parse(saved) : {
-      name: 'Juan Pérez',
-      email: 'juan.perez@email.com',
-      phone: '+34 612 345 678'
-    };
-  });
+  const { user } = useAuth();
 
-  const handleSave = () => {
-    localStorage.setItem('userProfile', JSON.stringify(formData));
-    toast.success(t('personalInfo.saved'));
-  };
+  const profile = useMemo(
+    () =>
+      getUserProfile({
+        fullName: user?.nombre,
+        displayName: user?.nombre,
+        email: user?.email
+      }),
+    [user?.email, user?.nombre]
+  );
+
+  const sections = [
+    {
+      title: 'Identidad y contacto',
+      fields: [
+        { label: t('personalInfo.name'), value: profile.fullName },
+        { label: 'Alias en la app', value: profile.displayName },
+        { label: t('personalInfo.email'), value: profile.email },
+        { label: t('personalInfo.phone'), value: profile.phone },
+        { label: 'Fecha de nacimiento', value: profile.birthDate },
+        { label: 'Ciudad de referencia', value: profile.city }
+      ]
+    },
+    {
+      title: 'Experiencia en el festival',
+      fields: [
+        { label: 'Festival favorito', value: profile.favoriteFestival },
+        { label: 'Idioma preferido', value: profile.preferredLanguage },
+        { label: 'Preferencias dieteticas', value: profile.dietaryPreferences },
+        { label: 'Alergias o restricciones', value: profile.allergies }
+      ]
+    },
+    {
+      title: 'Permisos y comunicacion',
+      fields: [
+        { label: 'Notificaciones', value: profile.notifications },
+        { label: 'Consentimiento comercial', value: profile.marketingConsent },
+        { label: 'Miembro desde', value: profile.memberSince }
+      ]
+    }
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
+    <div className="min-h-screen bg-gray-50 pb-24">
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="flex items-center gap-3 px-4 py-4">
           <button
@@ -36,53 +66,33 @@ export function PersonalInfoScreen() {
         </div>
       </div>
 
-      {/* Form */}
       <div className="p-4 space-y-4">
-        <div className="bg-white rounded-2xl p-6 shadow-sm space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {t('personalInfo.name')}
-            </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {t('personalInfo.email')}
-            </label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {t('personalInfo.phone')}
-            </label>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+        <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">
+          Estos campos se muestran como placeholders funcionales hasta que conectemos la edicion real con la base de datos.
         </div>
 
-        <button
-          onClick={handleSave}
-          className="w-full bg-black text-white py-4 rounded-2xl font-semibold shadow-lg hover:bg-gray-800 transition-colors"
-        >
-          {t('personalInfo.saveChanges')}
-        </button>
+        {sections.map((section) => (
+          <section key={section.title} className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">{section.title}</h2>
+              <p className="text-sm text-gray-500">Vista previa de los atributos recomendados para el perfil de usuario.</p>
+            </div>
+
+            <div className="space-y-4">
+              {section.fields.map((field) => (
+                <div key={field.label}>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{field.label}</label>
+                  <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900">
+                    {field.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
+
+      <BottomNav />
     </div>
   );
 }

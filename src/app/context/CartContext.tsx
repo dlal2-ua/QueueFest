@@ -12,11 +12,16 @@ export interface CartItem {
   extras?: string[];
 }
 
+export interface AddItemResult {
+  ok: boolean;
+  reason?: 'different_vendor';
+}
+
 interface CartContextType {
   items: CartItem[];
-  addItem: (item: CartItem) => void;
-  removeItem: (id: string) => void;
-  updateQuantity: (id: string, quantity: number) => void;
+  addItem: (item: CartItem) => AddItemResult;
+  removeItem: (id: string, vendorId?: string) => void;
+  updateQuantity: (id: string, quantity: number, vendorId?: string) => void;
   clearCart: () => void;
   getTotal: () => number;
   getItemCount: () => number;
@@ -39,35 +44,54 @@ export function CartProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('cart', JSON.stringify(items));
   }, [items]);
 
-  const addItem = (item: CartItem) => {
-    // Forzar precio a número por si viene como string desde MySQL
+  const addItem = (item: CartItem): AddItemResult => {
     const sanitizedItem = {
       ...item,
       price: Number(item.price),
       quantity: item.quantity || 1
     };
+
+    let result: AddItemResult = { ok: true };
+
     setItems((prev) => {
-      const existingIndex = prev.findIndex((i) => i.id === sanitizedItem.id && i.vendorId === sanitizedItem.vendorId);
+      // El flujo actual de pago procesa un solo puesto por pedido.
+      if (prev.length > 0 && prev.some((existingItem) => existingItem.vendorId !== sanitizedItem.vendorId)) {
+        result = { ok: false, reason: 'different_vendor' };
+        return prev;
+      }
+
+      const existingIndex = prev.findIndex((existingItem) =>
+        existingItem.id === sanitizedItem.id && existingItem.vendorId === sanitizedItem.vendorId
+      );
+
       if (existingIndex >= 0) {
         const updated = [...prev];
         updated[existingIndex].quantity += sanitizedItem.quantity;
         return updated;
       }
+
       return [...prev, sanitizedItem];
     });
+
+    return result;
   };
 
-  const removeItem = (id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
+  const removeItem = (id: string, vendorId?: string) => {
+    setItems((prev) => prev.filter((item) => !(item.id === id && (!vendorId || item.vendorId === vendorId))));
   };
 
-  const updateQuantity = (id: string, quantity: number) => {
+  const updateQuantity = (id: string, quantity: number, vendorId?: string) => {
     if (quantity <= 0) {
-      removeItem(id);
+      removeItem(id, vendorId);
       return;
     }
+
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, quantity } : item))
+      prev.map((item) =>
+        item.id === id && (!vendorId || item.vendorId === vendorId)
+          ? { ...item, quantity }
+          : item
+      )
     );
   };
 
@@ -93,7 +117,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       'WELCOME': 5,
       'FIRSTORDER': 15
     };
-    
+
     const discountAmount = coupons[code.toUpperCase()];
     if (discountAmount) {
       setDiscount(discountAmount);
