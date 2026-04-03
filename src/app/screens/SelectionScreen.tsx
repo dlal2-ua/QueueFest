@@ -4,7 +4,7 @@
 // El festival ya fue guardado antes en FestivalSelectScreen
 
 import { useNavigate } from '../utils/navigation';
-import { Truck, Wine } from 'lucide-react';
+import { Truck, Wine, ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export function SelectionScreen() {
@@ -28,11 +28,18 @@ export function SelectionScreen() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col items-center justify-center p-6 relative">
+      <button 
+        onClick={() => navigate('/festival-select')} 
+        className="absolute top-6 left-6 w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+      >
+        <ArrowLeft className="w-5 h-5" />
+      </button>
+
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-12"
+        className="text-center mb-12 mt-10"
       >
         <h1 className="text-3xl font-bold mb-2">¿Qué buscas?</h1>
         <p className="text-gray-600">Elige el tipo de puesto</p>
