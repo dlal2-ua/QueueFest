@@ -42,17 +42,29 @@ export function FoodTruckDetailScreen() {
         if (Array.isArray(productos)) {
           const grupos: Record<string, any[]> = {};
           productos.forEach((producto: any) => {
-            const categoria = producto.categoria || 'Menu';
+            const normalizedProduct = {
+              ...producto,
+              nombre: producto?.nombre ?? 'Producto sin nombre',
+              descripcion: producto?.descripcion ?? '',
+              precio: Number(producto?.precio ?? 0),
+              precio_dinamico: Number(producto?.precio_dinamico ?? 0),
+              categoria: producto?.categoria || 'Menu'
+            };
+
+            const categoria = normalizedProduct.categoria;
             if (!grupos[categoria]) grupos[categoria] = [];
-            grupos[categoria].push(producto);
+            grupos[categoria].push(normalizedProduct);
           });
           setCategorias(
             Object.entries(grupos).map(([nombre, items]) => ({ nombre, items }))
           );
+        } else {
+          setCategorias([]);
         }
       } catch (err) {
         console.error('Error cargando food truck:', err);
         setTruck(null);
+        setCategorias([]);
       } finally {
         setLoading(false);
       }
