@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import {
   crearFestival, getFestivales, eliminarFestival, desactivarFestival, activarFestival, actualizarFestival, subirFotoFestival,
   crearPuesto, actualizarPuesto, getPuestosByFestival, eliminarPuesto, subirFotoPuesto,
-  getProductos, crearProducto, actualizarProducto, eliminarProducto, subirFotoProducto,
+  getProductos, getAdminProductos, crearProducto, actualizarProducto, eliminarProducto, subirFotoProducto,
   getPromociones, crearPromocion, actualizarPromocion, eliminarPromocion,
   getParametros, actualizarParametros,
   getUsuariosStaff, getUsuarios, crearUsuario, eliminarUsuario
@@ -138,7 +138,7 @@ export function AdminScreen() {
 
   const loadProductos = useCallback(async (pid: number) => {
     try {
-      const data = await getProductos(pid);
+      const data = await getAdminProductos(pid);
       if (Array.isArray(data)) setProductosList(data);
     } catch { toast.error('Error al cargar productos'); }
   }, []);
@@ -321,7 +321,7 @@ export function AdminScreen() {
   const handleToggleProducto = async (prod: any) => {
     try {
       await actualizarProducto(prod.id, { ...prod, activo: !prod.activo });
-      toast.success(`${prod.nombre} ${!prod.activo ? 'activado' : 'desactivado'}`);
+      toast.success('Producto actualizado');
       if (selectedPuestoId) loadProductos(Number(selectedPuestoId));
     } catch { toast.error('Error actualizando producto'); }
   };
@@ -342,9 +342,9 @@ export function AdminScreen() {
   const handleTogglePromocion = async (promo: any) => {
     try {
       await actualizarPromocion(promo.id, { ...promo, activa: !promo.activa });
-      toast.success(`${promo.titulo} ${!promo.activa ? 'activada' : 'desactivada'}`);
+      toast.success('Oferta actualizada');
       if (selectedPuestoIdPromo) loadPromociones(Number(selectedPuestoIdPromo));
-    } catch { toast.error('Error actualizando promoción'); }
+    } catch { toast.error('Error actualizando oferta'); }
   };
 
   const handleGuardarParametros = async (e: React.FormEvent) => {
@@ -979,7 +979,7 @@ export function AdminScreen() {
                   {productosList.length === 0
                     ? <p className="text-xs text-center text-gray-400">Sin productos aún.</p>
                     : productosList.map(prod => (
-                      <div key={prod.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                      <div key={prod.id} className={`flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border transition-colors ${prod.activo ? 'border-gray-100' : 'border-red-100 bg-red-50/30'}`}>
                         {editandoProductoId === prod.id ? (
                           <div className="w-full space-y-3">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -1026,8 +1026,14 @@ export function AdminScreen() {
                               <p className="text-xs text-gray-500 font-medium">{prod.precio}€ • Stock: {prod.stock}</p>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
-                              <button onClick={() => handleToggleProducto(prod)} className="p-1.5 text-gray-400 hover:text-gray-900 transition-colors">
-                                {prod.activo ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <XCircle className="w-5 h-5 text-gray-300" />}
+                              <button
+                                onClick={() => handleToggleProducto(prod)}
+                                title={prod.activo ? 'Desactivar producto' : 'Activar producto'}
+                                className="p-1.5 rounded-full transition-colors hover:bg-gray-100"
+                              >
+                                {prod.activo
+                                  ? <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                  : <XCircle className="w-5 h-5 text-red-500" />}
                               </button>
                               <button onClick={() => handleEditProducto(prod)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
                                 <Pencil className="w-4 h-4" />
@@ -1093,7 +1099,7 @@ export function AdminScreen() {
                   {promocionesList.length === 0
                     ? <p className="text-xs text-center text-gray-400">Sin ofertas configuradas.</p>
                     : promocionesList.map(promo => (
-                      <div key={promo.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                      <div key={promo.id} className={`flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border transition-colors ${promo.activa ? 'border-gray-100' : 'border-red-100 bg-red-50/30'}`}>
                         {editandoPromocionId === promo.id ? (
                           <div className="w-full space-y-3">
                             <div className="grid grid-cols-1 gap-2">
@@ -1122,8 +1128,14 @@ export function AdminScreen() {
                               <p className="text-xs text-gray-500 font-medium">{promo.precio_promo}€ • {promo.descripcion}</p>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
-                              <button onClick={() => handleTogglePromocion(promo)} className="p-1.5 text-gray-400 hover:text-gray-900 transition-colors">
-                                {promo.activa ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <XCircle className="w-5 h-5 text-gray-300" />}
+                              <button
+                                onClick={() => handleTogglePromocion(promo)}
+                                title={promo.activa ? 'Desactivar oferta' : 'Activar oferta'}
+                                className="p-1.5 rounded-full transition-colors hover:bg-gray-100"
+                              >
+                                {promo.activa
+                                  ? <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                  : <XCircle className="w-5 h-5 text-red-500" />}
                               </button>
                               <button onClick={() => handleEditPromocion(promo)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
                                 <Pencil className="w-4 h-4" />

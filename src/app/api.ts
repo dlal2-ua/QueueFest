@@ -326,6 +326,12 @@ export const subirFotoPuesto = async (id: number, formData: FormData) => {
 
 // ── Productos ─────────────────────────────────────────────────────────────
 
+export const getAdminProductos = async (puestoId: number) => {
+    const res = await fetch(`${API_URL}/admin/productos?puesto_id=${puestoId}`, { headers: headers() });
+    if (!res.ok) throw new Error('Error al cargar productos del admin');
+    return res.json();
+};
+
 export const crearProducto = async (data: any) => {
     const res = await fetch(`${API_URL}/admin/productos`, {
         method: 'POST',
