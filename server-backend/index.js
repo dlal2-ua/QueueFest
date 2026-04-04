@@ -381,6 +381,22 @@ app.get('/api/puestos/:id/productos', async (req, res) => {
   }
 });
 
+app.get('/api/admin/productos', auth, async (req, res) => {
+  try {
+    const { puesto_id } = req.query;
+    let query = 'SELECT * FROM productos';
+    const params = [];
+    if (puesto_id) {
+        query += ' WHERE puesto_id = ?';
+        params.push(Number(puesto_id));
+    }
+    const [rows] = await db.query(query, params);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/admin/productos', auth, async (req, res) => {
   const { puesto_id, nombre, descripcion, precio, precio_dinamico, stock } = req.body;
   try {
