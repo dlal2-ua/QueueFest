@@ -160,6 +160,51 @@ export const getEstadisticas = async () => {
     return res.json();
 };
 
+// Lee el modo auto/manual del festival
+export const getModoAuto = async (festivalId: number) => {
+    const res = await fetch(`${API_URL}/gestor/modo-auto?festival_id=${festivalId}`, { headers: headers() });
+    if (!res.ok) throw new Error('Error al obtener modo automático');
+    return res.json();
+};
+
+// Cambia el modo auto/manual del festival
+export const setModoAuto = async (festivalId: number, activo: boolean) => {
+    const res = await fetch(`${API_URL}/gestor/modo-auto`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify({ festival_id: festivalId, activo })
+    });
+    if (!res.ok) throw new Error('Error al cambiar modo automático');
+    return res.json();
+};
+
+// Obtiene (y genera) las decisiones automáticas de un festival
+export const getDecisiones = async (festivalId: number) => {
+    const res = await fetch(`${API_URL}/gestor/decisiones?festival_id=${festivalId}`, { headers: headers() });
+    if (!res.ok) throw new Error('Error al cargar decisiones');
+    return res.json();
+};
+
+// El gestor aprueba (y ejecuta) una decisión pendiente
+export const aprobarDecision = async (id: number) => {
+    const res = await fetch(`${API_URL}/gestor/decisiones/${id}/aprobar`, {
+        method: 'POST',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al aprobar decisión');
+    return res.json();
+};
+
+// El gestor rechaza una decisión pendiente
+export const rechazarDecision = async (id: number) => {
+    const res = await fetch(`${API_URL}/gestor/decisiones/${id}/rechazar`, {
+        method: 'POST',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error('Error al rechazar decisión');
+    return res.json();
+};
+
 // ==================== ADMIN ====================
 
 // ── Festivales ────────────────────────────────────────────────────────────
