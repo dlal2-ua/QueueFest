@@ -17,6 +17,7 @@ export interface Decision {
   descripcion: string;
   estado: DecisionEstado;
   creado_en: string;
+  minutos_desde_creacion?: number;
 }
 
 interface DecisionCardProps {
@@ -61,8 +62,27 @@ const ESTADO_BADGE: Record<DecisionEstado, { label: string; cls: string }> = {
   ejecutada: { label: 'Auto-ejecutada', cls: 'bg-blue-100 text-blue-700 border-blue-200' },
 };
 
-function formatRelative(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
+function formatRelative(dateStr: string, minutesFromServer?: number): string {
+  if (typeof minutesFromServer === 'number' && Number.isFinite(minutesFromServer)) {
+    const mins = Math.max(0, Math.floor(minutesFromServer));
+    if (mins < 1) return 'Ahora mismo';
+    if (mins < 60) return `Hace ${mins} min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `Hace ${hours}h`;
+    const days = Math.floor(hours / 24);
+    return `Hace ${days} día${days === 1 ? '' : 's'}`;
+  }
+
+  // Si no trae zona explícita, lo tratamos como UTC para evitar desfases fijos (p. ej. +2h).
+  const hasExplicitTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(dateStr);
+  const normalized = hasExplicitTz
+    ? dateStr
+    : dateStr.replace(' ', 'T') + 'Z';
+
+  const parsed = new Date(normalized).getTime();
+  if (Number.isNaN(parsed)) return 'Fecha inválida';
+
+  const diff = Date.now() - parsed;
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'Ahora mismo';
   if (mins < 60) return `Hace ${mins} min`;
@@ -103,7 +123,7 @@ export function DecisionCard({ decision, modoAuto, onAprobar, onRechazar, loadin
 
           <div className="flex items-center gap-1 text-xs text-gray-400">
             <Clock className="w-3 h-3" />
-            {formatRelative(decision.creado_en)}
+            {formatRelative(decision.creado_en, decision.minutos_desde_creacion)}
             {decision.puesto_nombre && (
               <span className="ml-1">· {decision.puesto_nombre}</span>
             )}

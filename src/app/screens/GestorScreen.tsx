@@ -6,11 +6,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-<<<<<<< HEAD
-import { getEstadisticas } from '../api';
-import { BarChart2, Clock, ShoppingBag, Euro } from 'lucide-react';
-import Heatmap from '../components/Heatmap';
-=======
 import {
   getEstadisticas,
   getModoAuto, setModoAuto,
@@ -20,7 +15,7 @@ import {
 import { BarChart2, Clock, ShoppingBag, Euro, Zap, Hand, RefreshCw, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { DecisionCard, type Decision } from '../components/DecisionCard';
->>>>>>> main
+import Heatmap from '../components/Heatmap';
 
 export function GestorScreen() {
   const { user, logout } = useAuth();
@@ -155,12 +150,18 @@ export function GestorScreen() {
   };
 
   const handleAprobar = async (id: number) => {
+    const previousDecisiones = decisiones;
     setProcesandoId(id);
+    setDecisiones(curr =>
+      curr.map(d => (d.id === id ? { ...d, estado: 'aprobada' } : d))
+    );
+
     try {
       await aprobarDecision(id);
       toast.success('Decisión aprobada y ejecutada');
       if (festivalId) cargarDecisiones(festivalId);
     } catch {
+      setDecisiones(previousDecisiones);
       toast.error('Error al aprobar la decisión');
     } finally {
       setProcesandoId(null);
@@ -168,12 +169,18 @@ export function GestorScreen() {
   };
 
   const handleRechazar = async (id: number) => {
+    const previousDecisiones = decisiones;
     setProcesandoId(id);
+    setDecisiones(curr =>
+      curr.map(d => (d.id === id ? { ...d, estado: 'rechazada' } : d))
+    );
+
     try {
       await rechazarDecision(id);
       toast.success('Decisión rechazada');
       if (festivalId) cargarDecisiones(festivalId);
     } catch {
+      setDecisiones(previousDecisiones);
       toast.error('Error al rechazar la decisión');
     } finally {
       setProcesandoId(null);

@@ -19,12 +19,26 @@ const headers = () => ({
 // ==================== AUTH ====================
 // Login: devuelve token JWT y datos del usuario con su rol
 export const login = async (email: string, password: string) => {
-    const res = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-    });
-    if (!res.ok) throw new Error('Credenciales incorrectas');
+    let res: Response;
+    try {
+        res = await fetch(`${API_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+    } catch {
+        throw new Error('No se pudo conectar con el servidor. Verifica que el backend esté encendido.');
+    }
+
+    if (!res.ok) {
+        try {
+            const data = await res.json();
+            throw new Error(data?.error || 'Credenciales incorrectas');
+        } catch {
+            throw new Error('Credenciales incorrectas');
+        }
+    }
+
     return res.json();
 };
 
@@ -194,12 +208,13 @@ export const getEstadisticas = async () => {
     return res.json();
 };
 
-<<<<<<< HEAD
 // Heatmap data: activity and stats per post
 export const getHeatmap = async () => {
     const res = await fetch(`${API_URL}/gestor/heatmap`, { headers: headers() });
     if (!res.ok) throw new Error('Error al cargar heatmap');
-=======
+    return res.json();
+};
+
 // Lee el modo auto/manual del festival
 export const getModoAuto = async (festivalId: number) => {
     const res = await fetch(`${API_URL}/gestor/modo-auto?festival_id=${festivalId}`, { headers: headers() });
@@ -242,7 +257,6 @@ export const rechazarDecision = async (id: number) => {
         headers: headers()
     });
     if (!res.ok) throw new Error('Error al rechazar decisión');
->>>>>>> main
     return res.json();
 };
 

@@ -34,7 +34,8 @@ export function LoginScreen() {
       else if (data.user.rol === 'operador') navigate('/operador');
       else navigate('/festival-select');
     } catch (err) {
-      toast.error('Email o contrasena incorrectos');
+      const message = err instanceof Error ? err.message : 'No se pudo iniciar sesión';
+      toast.error(message);
     } finally {
       setLoading(false);
     }

@@ -1053,22 +1053,31 @@ app.post('/api/notifications/subscribe', auth, async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
-// Nota: El app.listen() se ejecuta ahora dentro del callback sshClient.on('ready')
-=======
 // ==================== GESTOR — DECISIONES AUTOMÁTICAS ====================
 
 const UMBRAL_COLA = 5; // Pedidos activos a partir de los cuales se recomienda actuar
 
-// Inserta una decisión solo si no hay ya una pendiente del mismo tipo para ese festival+puesto
+// Inserta una decisión si no existe una equivalente reciente.
+// Evita que, en modo manual, reaparezca instantáneamente tras aprobar/rechazar.
 async function insertarSiNoPendiente(festival_id, tipo, descripcion, puesto_id = null) {
   const [existing] = await db.query(
     `SELECT id FROM decisiones_automaticas
-     WHERE festival_id = ? AND tipo = ? AND estado = 'pendiente'
+     WHERE festival_id = ? AND tipo = ?
      AND (puesto_id = ? OR (puesto_id IS NULL AND ? IS NULL))`,
     [festival_id, tipo, puesto_id, puesto_id]
   );
-  if (existing.length === 0) {
+
+  // Cooldown de 15 min por tipo+puesto+festival
+  const [recent] = await db.query(
+    `SELECT id FROM decisiones_automaticas
+     WHERE festival_id = ? AND tipo = ?
+     AND (puesto_id = ? OR (puesto_id IS NULL AND ? IS NULL))
+     AND creado_en >= (NOW() - INTERVAL 15 MINUTE)
+     LIMIT 1`,
+    [festival_id, tipo, puesto_id, puesto_id]
+  );
+
+  if (existing.length === 0 && recent.length === 0) {
     await db.query(
       `INSERT INTO decisiones_automaticas (festival_id, puesto_id, tipo, descripcion) VALUES (?, ?, ?, ?)`,
       [festival_id, puesto_id, tipo, descripcion]
@@ -1236,7 +1245,8 @@ app.get('/api/gestor/decisiones', auth, async (req, res) => {
 
     // 4. Devolver todas las decisiones (pendientes + historial reciente)
     const [decisiones] = await db.query(
-      `SELECT d.*, p.nombre as puesto_nombre
+      `SELECT d.*, p.nombre as puesto_nombre,
+              TIMESTAMPDIFF(MINUTE, d.creado_en, NOW()) AS minutos_desde_creacion
        FROM decisiones_automaticas d
        LEFT JOIN puestos p ON d.puesto_id = p.id
        WHERE d.festival_id = ?
@@ -1290,9 +1300,4 @@ app.post('/api/gestor/decisiones/:id/rechazar', auth, async (req, res) => {
   }
 });
 
-// Arrancar
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Server Express (Oracle VM) corriendo en puerto ${port}`);
-});
->>>>>>> main
+// Nota: El app.listen() se ejecuta dentro del callback sshClient.on('ready')
