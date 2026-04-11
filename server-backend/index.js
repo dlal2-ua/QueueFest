@@ -124,7 +124,7 @@ if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
   );
 }
 
-// Asegurar que la tabla existe al arrancar
+// Asegurar que las tablas existen al arrancar
 async function initDB() {
   try {
     await db.query(`
@@ -144,6 +144,21 @@ async function initDB() {
     await paymentsModule.initDb(db);
   } catch (err) {
     console.error('DB Init Failed:', err);
+  }
+
+  // Configuración del gestor (modo auto/manual) por festival
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS gestor_config (
+        festival_id INT NOT NULL,
+        modo_auto TINYINT(1) DEFAULT 1,
+        PRIMARY KEY (festival_id),
+        FOREIGN KEY (festival_id) REFERENCES festivales(id) ON DELETE CASCADE
+      )
+    `);
+    console.log('SQL Migration gestor_config checked.');
+  } catch (err) {
+    console.error('DB Init gestor_config Failed:', err);
   }
 }
 
@@ -1038,4 +1053,246 @@ app.post('/api/notifications/subscribe', auth, async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
 // Nota: El app.listen() se ejecuta ahora dentro del callback sshClient.on('ready')
+=======
+// ==================== GESTOR — DECISIONES AUTOMÁTICAS ====================
+
+const UMBRAL_COLA = 5; // Pedidos activos a partir de los cuales se recomienda actuar
+
+// Inserta una decisión solo si no hay ya una pendiente del mismo tipo para ese festival+puesto
+async function insertarSiNoPendiente(festival_id, tipo, descripcion, puesto_id = null) {
+  const [existing] = await db.query(
+    `SELECT id FROM decisiones_automaticas
+     WHERE festival_id = ? AND tipo = ? AND estado = 'pendiente'
+     AND (puesto_id = ? OR (puesto_id IS NULL AND ? IS NULL))`,
+    [festival_id, tipo, puesto_id, puesto_id]
+  );
+  if (existing.length === 0) {
+    await db.query(
+      `INSERT INTO decisiones_automaticas (festival_id, puesto_id, tipo, descripcion) VALUES (?, ?, ?, ?)`,
+      [festival_id, puesto_id, tipo, descripcion]
+    );
+  }
+}
+
+// Evalúa los puestos del festival y genera decisiones si se cumplen las reglas
+async function generarDecisiones(festival_id) {
+  const [puestos] = await db.query(
+    'SELECT * FROM puestos WHERE festival_id = ?', [festival_id]
+  );
+
+  for (const puesto of puestos) {
+    // Pedidos activos (en cola) de este puesto
+    const [[{ pendientes }]] = await db.query(
+      `SELECT COUNT(*) as pendientes FROM pedidos
+       WHERE puesto_id = ? AND estado IN ('pendiente','confirmado','preparando')`,
+      [puesto.id]
+    );
+
+    // Pedidos del día en este puesto
+    const [[{ hoy }]] = await db.query(
+      `SELECT COUNT(*) as hoy FROM pedidos
+       WHERE puesto_id = ? AND DATE(creado_en) = CURDATE()`,
+      [puesto.id]
+    );
+
+    // Regla 1: cerrar_barra — cola desbordada
+    if (puesto.abierto && pendientes >= UMBRAL_COLA) {
+      await insertarSiNoPendiente(
+        festival_id, 'cerrar_barra',
+        `Puesto "${puesto.nombre}" tiene ${pendientes} pedidos en cola (umbral: ${UMBRAL_COLA}). Recomendado: cerrar temporalmente.`,
+        puesto.id
+      );
+    }
+
+    // Regla 2: abrir_barra — puesto cerrado y cola normalizada
+    if (!puesto.abierto && pendientes < Math.floor(UMBRAL_COLA / 2)) {
+      await insertarSiNoPendiente(
+        festival_id, 'abrir_barra',
+        `Puesto "${puesto.nombre}" está cerrado y la cola ha bajado (${pendientes} pedidos). Recomendado: reabrir.`,
+        puesto.id
+      );
+    }
+
+    // Regla 3: activar_promocion — ventas bajas hoy
+    if (hoy < 3) {
+      await insertarSiNoPendiente(
+        festival_id, 'activar_promocion',
+        `Puesto "${puesto.nombre}" tiene pocas ventas hoy (${hoy} pedidos). Recomendado: activar una promoción.`,
+        puesto.id
+      );
+    }
+
+    // Regla 4: ajuste_precio — alta demanda activa
+    if (puesto.abierto && pendientes > Math.floor(UMBRAL_COLA * 0.7)) {
+      await insertarSiNoPendiente(
+        festival_id, 'ajuste_precio',
+        `Alta demanda en "${puesto.nombre}" (${pendientes} pedidos activos). Recomendado: activar precio dinámico (+10%).`,
+        puesto.id
+      );
+    }
+  }
+}
+
+// Ejecuta la lógica real de una decisión aprobada
+async function ejecutarDecision(decision) {
+  switch (decision.tipo) {
+    case 'cerrar_barra':
+      if (decision.puesto_id) {
+        await db.query('UPDATE puestos SET abierto = 0 WHERE id = ?', [decision.puesto_id]);
+      }
+      break;
+
+    case 'abrir_barra':
+      if (decision.puesto_id) {
+        await db.query('UPDATE puestos SET abierto = 1 WHERE id = ?', [decision.puesto_id]);
+      }
+      break;
+
+    case 'activar_promocion':
+      if (decision.puesto_id) {
+        await db.query(
+          `UPDATE promociones SET activa = 1
+           WHERE puesto_id = ? AND activa = 0
+           ORDER BY id ASC LIMIT 1`,
+          [decision.puesto_id]
+        );
+      }
+      break;
+
+    case 'ajuste_precio':
+      if (decision.puesto_id) {
+        await db.query(
+          `UPDATE productos SET precio_dinamico = ROUND(precio * 1.10, 2)
+           WHERE puesto_id = ? AND activo = 1`,
+          [decision.puesto_id]
+        );
+      }
+      break;
+  }
+}
+
+// GET /api/gestor/modo-auto?festival_id=X
+app.get('/api/gestor/modo-auto', auth, async (req, res) => {
+  const { festival_id } = req.query;
+  if (!festival_id) return res.status(400).json({ error: 'festival_id requerido' });
+  try {
+    const [rows] = await db.query(
+      'SELECT modo_auto FROM gestor_config WHERE festival_id = ?', [festival_id]
+    );
+    // Si no existe aún, devolvemos modo_auto = true (automático por defecto)
+    res.json({ modo_auto: rows.length > 0 ? Boolean(rows[0].modo_auto) : true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/gestor/modo-auto
+app.put('/api/gestor/modo-auto', auth, async (req, res) => {
+  const { festival_id, activo } = req.body;
+  if (festival_id === undefined || activo === undefined)
+    return res.status(400).json({ error: 'festival_id y activo requeridos' });
+  try {
+    await db.query(
+      `INSERT INTO gestor_config (festival_id, modo_auto) VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE modo_auto = VALUES(modo_auto)`,
+      [festival_id, activo ? 1 : 0]
+    );
+    res.json({ message: `Modo ${activo ? 'automático' : 'manual'} activado` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/gestor/decisiones?festival_id=X
+// Genera nuevas decisiones según las reglas, y si el modo es auto las ejecuta directamente
+app.get('/api/gestor/decisiones', auth, async (req, res) => {
+  const { festival_id } = req.query;
+  if (!festival_id) return res.status(400).json({ error: 'festival_id requerido' });
+  try {
+    // 1. Generar decisiones nuevas si procede
+    await generarDecisiones(Number(festival_id));
+
+    // 2. Leer el modo del festival
+    const [configRows] = await db.query(
+      'SELECT modo_auto FROM gestor_config WHERE festival_id = ?', [festival_id]
+    );
+    const modoAuto = configRows.length > 0 ? Boolean(configRows[0].modo_auto) : true;
+
+    // 3. Si modo automático: ejecutar todas las pendientes
+    if (modoAuto) {
+      const [pendientes] = await db.query(
+        `SELECT * FROM decisiones_automaticas WHERE festival_id = ? AND estado = 'pendiente'`,
+        [festival_id]
+      );
+      for (const d of pendientes) {
+        await ejecutarDecision(d);
+        await db.query(
+          `UPDATE decisiones_automaticas SET estado = 'ejecutada' WHERE id = ?`, [d.id]
+        );
+      }
+    }
+
+    // 4. Devolver todas las decisiones (pendientes + historial reciente)
+    const [decisiones] = await db.query(
+      `SELECT d.*, p.nombre as puesto_nombre
+       FROM decisiones_automaticas d
+       LEFT JOIN puestos p ON d.puesto_id = p.id
+       WHERE d.festival_id = ?
+       ORDER BY d.creado_en DESC
+       LIMIT 50`,
+      [festival_id]
+    );
+    res.json({ decisiones, modo_auto: modoAuto });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/gestor/decisiones/:id/aprobar
+app.post('/api/gestor/decisiones/:id/aprobar', auth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT * FROM decisiones_automaticas WHERE id = ?', [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Decisión no encontrada' });
+    const decision = rows[0];
+    if (decision.estado !== 'pendiente')
+      return res.status(400).json({ error: 'La decisión ya fue procesada' });
+
+    await ejecutarDecision(decision);
+    await db.query(
+      `UPDATE decisiones_automaticas SET estado = 'aprobada' WHERE id = ?`, [req.params.id]
+    );
+    res.json({ message: 'Decisión aprobada y ejecutada' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/gestor/decisiones/:id/rechazar
+app.post('/api/gestor/decisiones/:id/rechazar', auth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT estado FROM decisiones_automaticas WHERE id = ?', [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Decisión no encontrada' });
+    if (rows[0].estado !== 'pendiente')
+      return res.status(400).json({ error: 'La decisión ya fue procesada' });
+
+    await db.query(
+      `UPDATE decisiones_automaticas SET estado = 'rechazada' WHERE id = ?`, [req.params.id]
+    );
+    res.json({ message: 'Decisión rechazada' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Arrancar
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Server Express (Oracle VM) corriendo en puerto ${port}`);
+});
+>>>>>>> main
