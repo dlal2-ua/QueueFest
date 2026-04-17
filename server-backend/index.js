@@ -32,6 +32,25 @@ app.get('/debug/uploads-check', (req, res) => {
   const files = exists ? fs.readdirSync(uploadsPath).slice(0, 20) : [];
   res.json({ __dirname, uploadsPath, exists, filesCount: files.length, files });
 });
+app.get('/debug/db-info', async (req, res) => {
+  try {
+    const [dbName] = await db.query('SELECT DATABASE() as db');
+    const [hostInfo] = await db.query('SELECT @@hostname as host, @@port as port');
+    const [countPedidos] = await db.query('SELECT COUNT(*) as total FROM pedidos');
+    const [maxPedido] = await db.query('SELECT MAX(id) as max_id FROM pedidos');
+    res.json({
+      database: dbName[0]?.db,
+      host: hostInfo[0]?.host,
+      port: hostInfo[0]?.port,
+      total_pedidos: countPedidos[0]?.total,
+      max_pedido_id: maxPedido[0]?.max_id
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 
 // Servir la carpeta de fotos estáticamente
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
@@ -680,13 +699,13 @@ app.get('/api/pedidos/puesto/:id', auth, async (req, res) => {
 
     const [rows] = await db.query(
       `SELECT p.*, u.nombre as usuario_nombre
-   FROM pedidos p
-   JOIN usuarios u ON p.usuario_id = u.id
-   WHERE p.puesto_id = ?
-     AND p.estado NOT IN ('entregado', 'cancelado')
-   ORDER BY p.creado_en DESC`,
+       FROM pedidos p
+       JOIN usuarios u ON p.usuario_id = u.id
+       WHERE p.puesto_id = ?
+       ORDER BY p.creado_en DESC`,
       [puestoId]
     );
+
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
