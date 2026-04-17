@@ -11,6 +11,7 @@ export function useNavigate() {
       }, 50);
       return;
     }
+
     if ((window as any).navigateTo) {
       (window as any).navigateTo(path);
     } else {
@@ -20,35 +21,43 @@ export function useNavigate() {
 }
 
 export function useParams(): Record<string, string> {
-  const [params, setParams] = useState<Record<string, string>>(() => {
-    const path = window.location.pathname;
-    const segments = path.split('/').filter(Boolean);
-    
-    // Extract ID from path like /food-truck/:id or /bar/:id
-    if (segments.length >= 2) {
-      return { id: segments[1] };
+  const getParams = (): Record<string, string> => {
+    // Ej: "/operador/tickets/12?x=1#top" -> ["operador","tickets","12"]
+    const cleanPath = window.location.pathname.split('?')[0].split('#')[0];
+    const segments = cleanPath.split('/').filter(Boolean);
+
+    // /x/:id (ej: /bar/4, /track-order/99)
+    if (segments.length === 2) {
+      const candidate = segments[1];
+      if (/^\d+$/.test(candidate)) return { id: candidate };
     }
-    
+
+    // /operador/pedidos/:id  o  /operador/tickets/:id
+    if (
+      segments.length >= 3 &&
+      segments[0] === 'operador' &&
+      (segments[1] === 'pedidos' || segments[1] === 'tickets')
+    ) {
+      const candidate = segments[2];
+      if (/^\d+$/.test(candidate)) return { id: candidate };
+    }
+
     return {};
-  });
+  };
+
+  const [params, setParams] = useState<Record<string, string>>(getParams);
 
   useEffect(() => {
-    const updateParams = () => {
-      const path = window.location.pathname;
-      const segments = path.split('/').filter(Boolean);
-      
-      if (segments.length >= 2) {
-        setParams({ id: segments[1] });
-      } else {
-        setParams({});
-      }
-    };
+    const updateParams = () => setParams(getParams());
 
-    window.addEventListener('popstate', updateParams);
+    // Al navegar con pushState custom
     window.addEventListener('navigation', updateParams);
+    // Al usar atrás/adelante
+    window.addEventListener('popstate', updateParams);
+
     return () => {
-      window.removeEventListener('popstate', updateParams);
       window.removeEventListener('navigation', updateParams);
+      window.removeEventListener('popstate', updateParams);
     };
   }, []);
 

@@ -25,13 +25,26 @@ paymentsModule.registerWebhookRoute(app, () => db);
 
 app.use(express.json());
 
-// Servir la carpeta de fotos estáticamente
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+//Debug temporal
+app.get('/debug/uploads-check', (req, res) => {
+  const uploadsPath = path.join(__dirname, 'uploads');
+  const exists = fs.existsSync(uploadsPath);
+  const files = exists ? fs.readdirSync(uploadsPath).slice(0, 20) : [];
+  res.json({ __dirname, uploadsPath, exists, filesCount: files.length, files });
+});
 
+// Servir la carpeta de fotos estáticamente
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.png')) res.setHeader('Content-Type', 'image/png');
+    if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) res.setHeader('Content-Type', 'image/jpeg');
+    if (filePath.endsWith('.webp')) res.setHeader('Content-Type', 'image/webp');
+  }
+}));
 // Configuración de Multer para admitir hasta 5MB y sólo imágenes
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/');
+    cb(null, path.join(__dirname, 'uploads'));
   },
   filename: function (req, file, cb) {
     const ext = path.extname(file.originalname);
@@ -39,7 +52,7 @@ const storage = multer.diskStorage({
     cb(null, uniqueSuffix + ext);
   }
 });
-const upload = multer({ 
+const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
@@ -402,8 +415,8 @@ app.get('/api/admin/productos', auth, async (req, res) => {
     let query = 'SELECT * FROM productos';
     const params = [];
     if (puesto_id) {
-        query += ' WHERE puesto_id = ?';
-        params.push(Number(puesto_id));
+      query += ' WHERE puesto_id = ?';
+      params.push(Number(puesto_id));
     }
     const [rows] = await db.query(query, params);
     res.json(rows);
@@ -488,13 +501,14 @@ app.get('/api/pedidos/:id', auth, async (req, res) => {
     const pedidoId = req.params.id;
     const usuarioId = req.user.id;
 
-    // 1. Obtener pedido junto con información del puesto
+    // 1. Obtener pedido junto con información del puesto y del usuario
     const [pedidos] = await db.query(`
-            SELECT p.*, pu.nombre AS puesto_nombre, pu.tiempo_servicio_medio
-            FROM pedidos p
-            JOIN puestos pu ON p.puesto_id = pu.id
-            WHERE p.id = ?
-        `, [pedidoId]);
+      SELECT p.*, pu.nombre AS puesto_nombre, pu.tiempo_servicio_medio, u.nombre AS usuario_nombre
+      FROM pedidos p
+      JOIN puestos pu ON p.puesto_id = pu.id
+      JOIN usuarios u ON u.id = p.usuario_id
+      WHERE p.id = ?
+    `, [pedidoId]);
 
     if (pedidos.length === 0) {
       return res.status(404).json({ error: 'Pedido no encontrado' });
@@ -506,7 +520,10 @@ app.get('/api/pedidos/:id', auth, async (req, res) => {
     if (req.user.rol === 'usuario' && pedido.usuario_id !== usuarioId) {
       return res.status(403).json({ error: 'No tienes permiso para ver este pedido' });
     } else if (req.user.rol === 'operador') {
-      const [ops] = await db.query('SELECT id FROM puesto_operadores WHERE puesto_id = ? AND usuario_id = ?', [pedido.puesto_id, usuarioId]);
+      const [ops] = await db.query(
+        'SELECT id FROM puesto_operadores WHERE puesto_id = ? AND usuario_id = ?',
+        [pedido.puesto_id, usuarioId]
+      );
       if (ops.length === 0) {
         return res.status(403).json({ error: 'No tienes permiso para ver los pedidos de este puesto' });
       }
@@ -514,11 +531,11 @@ app.get('/api/pedidos/:id', auth, async (req, res) => {
 
     // 2. Obtener items del pedido
     const [items] = await db.query(`
-            SELECT pi.*, pr.nombre AS producto_nombre
-            FROM pedido_items pi
-            JOIN productos pr ON pi.producto_id = pr.id
-            WHERE pi.pedido_id = ?
-        `, [pedidoId]);
+      SELECT pi.*, pr.nombre AS producto_nombre
+      FROM pedido_items pi
+      JOIN productos pr ON pi.producto_id = pr.id
+      WHERE pi.pedido_id = ?
+    `, [pedidoId]);
 
     pedido.items = items;
     res.json(pedido);
@@ -527,7 +544,6 @@ app.get('/api/pedidos/:id', auth, async (req, res) => {
     res.status(500).json({ error: 'Error del servidor' });
   }
 });
-
 app.post('/api/pedidos', auth, async (req, res) => {
   const { puesto_id, items, total } = req.body;
   const conn = await db.getConnection();
@@ -626,71 +642,89 @@ app.get('/api/gestor/heatmap', auth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// Operador: ver sus puestos
+app.get('/api/operador/mis-puestos', auth, async (req, res) => {
+  try {
+    if (req.user.rol !== 'operador') {
+      return res.status(403).json({ error: 'Solo operadores' });
+    }
 
+    const [rows] = await db.query(
+      `SELECT p.*
+       FROM puesto_operadores po
+       JOIN puestos p ON p.id = po.puesto_id
+       WHERE po.usuario_id = ?
+       ORDER BY p.id ASC`,
+      [req.user.id]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // Operador: ver pedidos de su puesto
 app.get('/api/pedidos/puesto/:id', auth, async (req, res) => {
   try {
+    const puestoId = Number(req.params.id);
+
+    if (req.user.rol === 'operador') {
+      const [ops] = await db.query(
+        'SELECT id FROM puesto_operadores WHERE puesto_id = ? AND usuario_id = ?',
+        [puestoId, req.user.id]
+      );
+      if (ops.length === 0) {
+        return res.status(403).json({ error: 'No tienes permiso para ver los pedidos de este puesto' });
+      }
+    }
+
     const [rows] = await db.query(
-      'SELECT p.*, u.nombre as usuario_nombre FROM pedidos p JOIN usuarios u ON p.usuario_id = u.id WHERE p.puesto_id = ? ORDER BY p.creado_en DESC',
-      [req.params.id]
+      `SELECT p.*, u.nombre as usuario_nombre
+   FROM pedidos p
+   JOIN usuarios u ON p.usuario_id = u.id
+   WHERE p.puesto_id = ?
+     AND p.estado NOT IN ('entregado', 'cancelado')
+   ORDER BY p.creado_en DESC`,
+      [puestoId]
     );
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 // Vendedor: actualizar estado del pedido
 app.patch('/api/pedidos/:id/estado', auth, async (req, res) => {
   try {
-    const pedidoId = req.params.id;
+    const pedidoId = Number(req.params.id);
     const nuevo_estado = req.body.estado;
 
-    // (Omitimos validación de rol para pruebas, o asumimos auth de rol Vendedor/Admin)
-    await db.query('UPDATE pedidos SET estado = ? WHERE id = ?', [nuevo_estado, pedidoId]);
+    const [pedidos] = await db.query('SELECT id, puesto_id, estado FROM pedidos WHERE id = ?', [pedidoId]);
+    if (pedidos.length === 0) return res.status(404).json({ error: 'Pedido no encontrado' });
 
-    // -- NOTIFICACIÓN PUSH --
-    if (nuevo_estado === 'listo' && process.env.VAPID_PUBLIC_KEY) {
-      try {
-        const [pedidoTemp] = await db.query('SELECT usuario_id FROM pedidos WHERE id = ?', [pedidoId]);
-        if (pedidoTemp.length > 0) {
-          const ownerId = pedidoTemp[0].usuario_id;
-          const [subs] = await db.query('SELECT * FROM push_subscriptions WHERE usuario_id = ?', [ownerId]);
+    const pedido = pedidos[0];
 
-          if (subs.length > 0) {
-            const payload = JSON.stringify({
-              title: '¡Tu pedido está listo!',
-              body: `Tu pedido #${pedidoId} ya puede ser recogido en el puesto.`,
-              icon: '/favicon.ico',
-              data: { url: `/track-order/${pedidoId}` }
-            });
-
-            const pushPromises = subs.map(sub => {
-              const pushConfig = {
-                endpoint: sub.endpoint,
-                keys: { p256dh: sub.p256dh, auth: sub.auth }
-              };
-              return webpush.sendNotification(pushConfig, payload).catch(err => {
-                if (err.statusCode === 410 || err.statusCode === 404) {
-                  return db.query('DELETE FROM push_subscriptions WHERE id = ?', [sub.id]);
-                }
-              });
-            });
-            await Promise.all(pushPromises);
-          }
-        }
-      } catch (pushErr) {
-        console.error('Error enviando push:', pushErr);
+    if (req.user.rol === 'operador') {
+      const [ops] = await db.query(
+        'SELECT id FROM puesto_operadores WHERE puesto_id = ? AND usuario_id = ?',
+        [pedido.puesto_id, req.user.id]
+      );
+      if (ops.length === 0) {
+        return res.status(403).json({ error: 'No tienes permiso para modificar pedidos de este puesto' });
       }
     }
-    // -- FIN NOTIFICACIÓN PUSH --
+
+    const permitidos = VALID_TRANSITIONS[pedido.estado] || [];
+    if (!permitidos.includes(nuevo_estado)) {
+      return res.status(400).json({ error: `Transición inválida: ${pedido.estado} -> ${nuevo_estado}` });
+    }
+
+    await db.query('UPDATE pedidos SET estado = ? WHERE id = ?', [nuevo_estado, pedidoId]);
 
     res.json({ message: 'Estado actualizado correctamente' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 // ==================== VEND-004: BOTÓN PÁNICO ====================
 
 // Pausar / Reanudar / Llamar camarero

@@ -6,6 +6,8 @@
 // - operador -> gestion de pedidos de su barra
 // - usuario -> app de pedidos
 // Si no hay sesion activa redirige siempre al login
+// App.tsx
+// Punto de entrada principal de la aplicacion
 
 import { useState, useEffect } from 'react';
 import { Toaster } from 'sonner';
@@ -42,13 +44,13 @@ import { TrackOrderScreen } from './screens/TrackOrderScreen';
 import { SelectionScreen } from './screens/SelectionScreen';
 import { FestivalSelectScreen } from './screens/FestivalSelectScreen';
 
-// Pantallas para operador
+// Pantallas operador
 import { OperatorLayout } from './screens/OperadorLayout';
 import { OperadorScreen } from './screens/OperadorPedidosScreen';
 import { OperatorTicketsScreen } from './screens/OperatorTicketsScreen';
 import { OperatorMenuScreen } from './screens/OperatorMenuScreen';
 import { OperatorStockScreen } from './screens/OperatorStockScreen';
-
+import { OperatorOrderDetailScreen } from './screens/OperatorOrderDetailScreen';
 
 import { GestorScreen } from './screens/GestorScreen';
 import { AdminScreen } from './screens/AdminScreen';
@@ -83,32 +85,37 @@ function AppRoutes() {
   if (path === '/register') return <RegisterScreen />;
   if (path === '/forgot-password') return <ForgotPasswordScreen />;
 
-  // Si no hay usuario logueado redirige al login
   if (!user) {
     (window as any).navigateTo('/login');
     return null;
   }
 
-  // Enrutado por rol — operador con subrutas
   if (user.rol === 'operador') {
-    // Redirigir la raíz del operador a /operador/pedidos
     if (path === '/' || path === '/login' || path === '/operador' || !path.startsWith('/operador')) {
       (window as any).navigateTo('/operador/pedidos');
       return null;
     }
+
     return (
       <OperatorLayout>
+        {/* Pedidos = solo visualización */}
         {path === '/operador/pedidos' && <OperadorScreen />}
+        {path.startsWith('/operador/pedidos/') && <OperatorOrderDetailScreen readOnly />}
+
+        {/* Tickets = operativa */}
         {path === '/operador/tickets' && <OperatorTicketsScreen />}
+        {path.startsWith('/operador/tickets/') && <OperatorOrderDetailScreen readOnly={false} />}
+
         {path === '/operador/menu' && <OperatorMenuScreen />}
         {path === '/operador/stock' && <OperatorStockScreen />}
       </OperatorLayout>
     );
   }
+
   if (user.rol === 'gestor') return <GestorScreen />;
   if (user.rol === 'administrador') return <AdminScreen />;
 
-  // Rutas del usuario final
+  // Usuario final
   if (path === '/festival-select') return <FestivalSelectScreen />;
   if (path === '/selection') return <SelectionScreen />;
   if (path === '/home') return <HomeScreen />;

@@ -94,6 +94,12 @@ export const getPuestoEstado = async (puestoId: number) => {
     if (!res.ok) throw new Error('Error obteniendo estado');
     return res.json();
 };
+//Obtiene los puestos del operador
+export const getMisPuestosOperador = async () => {
+    const res = await fetch(`${API_URL}/operador/mis-puestos`, { headers: headers() });
+    if (!res.ok) throw new Error('Error cargando puestos del operador');
+    return res.json();
+};
 
 // Llama al botón pánico (pausar, reanudar o llamar camarero) (VEND-004)
 export const triggerPanico = async (puestoId: number, accion: string) => {
@@ -107,6 +113,30 @@ export const triggerPanico = async (puestoId: number, accion: string) => {
         throw new Error(errorData.error || 'Error en botón pánico');
     }
     return res.json();
+};
+export const buildImageUrl = (fotoUrl?: string | null) => {
+    if (!fotoUrl) return '';
+    if (fotoUrl.startsWith('http://') || fotoUrl.startsWith('https://')) {
+        return `${fotoUrl}${fotoUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+    }
+
+    const API_ORIGIN = 'http://localhost:3000';
+    const base = fotoUrl.startsWith('/') ? `${API_ORIGIN}${fotoUrl}` : `${API_ORIGIN}/${fotoUrl}`;
+    return `${base}${base.includes('?') ? '&' : '?'}v=${Date.now()}`;
+};
+export const setProductoAgotado = async (producto: any, agotado: boolean) => {
+    // agotado=true => activo=false (no disponible)
+    // agotado=false => activo=true (disponible)
+    const payload = {
+        nombre: producto.nombre,
+        descripcion: producto.descripcion,
+        precio: Number(producto.precio),
+        precio_dinamico: Number(producto.precio_dinamico || 0),
+        stock: Number(producto.stock ?? 0),
+        activo: agotado ? 0 : 1
+    };
+
+    return actualizarProducto(producto.id, payload);
 };
 
 // ==================== PEDIDOS ====================
@@ -155,8 +185,9 @@ export const getMisPedidos = async () => {
 // Obtiene el detalle completo de un pedido (para TrackOrderScreen)
 export const getPedido = async (pedidoId: number) => {
     const res = await fetch(`${API_URL}/pedidos/${pedidoId}`, { headers: headers() });
-    if (!res.ok) return null; // Return null instead of throwing — TrackOrderScreen handles this as "not found"
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
+    return data;
 };
 
 // Operador: obtiene los pedidos de su puesto
