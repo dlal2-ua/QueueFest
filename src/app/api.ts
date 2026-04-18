@@ -291,6 +291,13 @@ export const rechazarDecision = async (id: number) => {
     return res.json();
 };
 
+// Puestos del festival con posición en el mapa y métricas en tiempo real
+export const getMapaPuestos = async (festivalId: number) => {
+    const res = await fetch(`${API_URL}/gestor/mapa?festival_id=${festivalId}`, { headers: headers() });
+    if (!res.ok) throw new Error('Error al cargar mapa');
+    return res.json();
+};
+
 // ==================== ADMIN ====================
 
 // ── Festivales ────────────────────────────────────────────────────────────
