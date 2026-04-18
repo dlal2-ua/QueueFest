@@ -18,17 +18,29 @@ export function OperatorBottomNav() {
     };
 
     return (
-        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md h-16 bg-white border-t border-gray-200 z-40 grid grid-cols-4">
+        <nav
+            className="flex-shrink-0 flex items-center border-t"
+            style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', height: 66 }}
+        >
             {tabs.map((tab) => {
-                const isActive = currentPath === tab.path;
+                const isActive = currentPath === tab.path || currentPath.startsWith(tab.path + '/');
                 return (
                     <button
                         key={tab.path}
                         onClick={() => goTo(tab.path)}
-                        className={`text-sm font-medium ${isActive ? 'text-orange-600 bg-orange-50' : 'text-gray-600'
-                            }`}
+                        className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-all"
+                        style={{ height: '100%' }}
                     >
-                        {tab.label}
+                        <span
+                            className="text-xs font-semibold transition-all"
+                            style={{ color: isActive ? '#A67C52' : '#C4B5A5' }}
+                        >
+                            {tab.label}
+                        </span>
+                        <div
+                            className="w-1 h-1 rounded-full transition-all"
+                            style={{ backgroundColor: isActive ? '#A67C52' : 'transparent' }}
+                        />
                     </button>
                 );
             })}

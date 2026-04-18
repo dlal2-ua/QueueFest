@@ -20,77 +20,86 @@ interface Props {
   navigate: (view: string) => void;
 }
 
-/* ── Paleta de saturación ─────────────────────────────────────────────── */
-const COLOR_SAT = (n: number) => {
-  if (n === 0) return { fill: '#4CAF88', stroke: '#3A9E73', label: 'Libre'    };
-  if (n <= 3)  return { fill: '#F59E0B', stroke: '#D97706', label: 'Moderado' };
-  return             { fill: '#EF4444', stroke: '#DC2626', label: 'Saturado' };
-};
+/* ── Isometric constants ──────────────────────────────────────────────── */
+const TW = 54;   // tile width
+const TH = 27;   // tile height (TW/2)
+const OX = 88;   // screen origin X
+const OY = 78;   // screen origin Y
 
-/* ── Layout del recinto (coordenadas en viewBox 360×500) ──────────────── */
-const VB_W = 360, VB_H = 500;
-
-// Pasillo horizontal central
-const PASILLO_H = { x: 0, y: 215, w: VB_W, h: 54 };
-// Pasillo vertical central
-const PASILLO_V = { x: 163, y: 0, w: 34, h: VB_H };
-
-// Zonas especiales (encima del pasillo v, encima del pasillo h)
-const ESCENARIO = { x: 173, y: 20,  w: 170, h: 110 };
-const ZONA_VIP  = { x: 173, y: 285, w: 170, h: 100 };
-const ENTRADA   = { x: 113, y: 460, w: 134, h: 32  };
-
-/* Slots para stands (12 posiciones)
-   Col-izquierda (barras):   x=14..149, y evita los pasillos
-   Col-izquierda inferior:   y=278..440
-*/
-const SLOTS: { x: number; y: number; w: number; h: number }[] = [
-  // Columna izquierda — superior (y=20..207)
-  { x: 14,  y: 20,  w: 140, h: 56 },
-  { x: 14,  y: 84,  w: 140, h: 56 },
-  { x: 14,  y: 148, w: 140, h: 56 },
-  // Columna izquierda — inferior (y=278..440)
-  { x: 14,  y: 278, w: 140, h: 56 },
-  { x: 14,  y: 342, w: 140, h: 56 },
-  { x: 14,  y: 406, w: 140, h: 46 },
-  // Columna derecha — superior (x=206, y=142..207  — debajo del escenario)
-  { x: 206, y: 142, w: 140, h: 56 },
-  // Columna derecha — inferior (y=278..440)
-  { x: 206, y: 278, w: 140, h: 56 },
-  { x: 206, y: 342, w: 140, h: 56 },
-  { x: 206, y: 406, w: 140, h: 46 },
-  // Extra slots (si hay más de 10 stands)
-  { x: 14,  y: 460, w: 65,  h: 32 },
-  { x: 286, y: 460, w: 60,  h: 32 },
+/* Grid positions for up to 10 stands (two rows of 5, corridor row=1) */
+const GRID: [number, number][] = [
+  [0,0],[2,0],[4,0],[6,0],[8,0],
+  [0,2],[2,2],[4,2],[6,2],[8,2],
 ];
 
-/* ── Helpers ──────────────────────────────────────────────────────────── */
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+function iso(col: number, row: number) {
+  return {
+    x: OX + (col - row) * (TW / 2),
+    y: OY + (col + row) * (TH / 2),
+  };
+}
+
+function boxPoints(col: number, row: number, h: number) {
+  const { x, y } = iso(col, row);
+  return {
+    top:   `${x+TW/2},${y-h} ${x+TW},${y+TH/2-h} ${x+TW/2},${y+TH-h} ${x},${y+TH/2-h}`,
+    left:  `${x},${y+TH/2-h} ${x+TW/2},${y+TH-h} ${x+TW/2},${y+TH} ${x},${y+TH/2}`,
+    right: `${x+TW/2},${y+TH-h} ${x+TW},${y+TH/2-h} ${x+TW},${y+TH/2} ${x+TW/2},${y+TH}`,
+    cx: x + TW / 2,
+    cy: y - h + TH / 2,
+  };
+}
+
+/* ── Color palettes ───────────────────────────────────────────────────── */
+const PAL = {
+  free:     { t: '#4FC78E', l: '#2A9E6A', r: '#38B47E' },
+  moderate: { t: '#FFAB00', l: '#C88200', r: '#E69600' },
+  busy:     { t: '#E8534A', l: '#B43230', r: '#D2403C' },
+  closed:   { t: '#A0ADB8', l: '#6E7E8C', r: '#899AA8' },
+  grass:    { t: '#78C050', l: '#5A9A38', r: '#68AE44' },
+  pathT:    '#D4B483', pathL: '#B8966A', pathR: '#C9A576',
+  stage:    { t: '#9CA3AF', l: '#6B7280', r: '#808E9C' },
+};
+
+function getStatus(p: PuestoMapa): keyof typeof PAL {
+  if (!p.abierto) return 'closed';
+  if (p.pedidos_activos === 0) return 'free';
+  if (p.pedidos_activos <= 3) return 'moderate';
+  return 'busy';
+}
+function statusLabel(s: keyof typeof PAL) {
+  return s === 'free' ? 'Libre' : s === 'moderate' ? 'Moderado' : s === 'busy' ? 'Saturado' : 'Cerrado';
+}
+function boxH(p: PuestoMapa, maxO: number) {
+  if (!p.abierto || p.pedidos_activos === 0) return 10;
+  return 12 + (p.pedidos_activos / maxO) * 28;
+}
+function boxOp(p: PuestoMapa, maxO: number) {
+  if (!p.abierto) return 0.55;
+  if (p.pedidos_activos === 0) return 0.68;
+  return 0.72 + (p.pedidos_activos / maxO) * 0.23;
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 export function MapView({ festivalId, navigate }: Props) {
-  const [puestos, setPuestos] = useState<PuestoMapa[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [puestos, setPuestos]   = useState<PuestoMapa[]>([]);
+  const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState<PuestoMapa | null>(null);
-
-  // Pan + zoom state
   const [tf, setTf] = useState({ x: 0, y: 0, scale: 1 });
-  const dragRef = useRef<{ active: boolean; sx: number; sy: number; tx: number; ty: number }>({
-    active: false, sx: 0, sy: 0, tx: 0, ty: 0,
-  });
-  const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
+  const dragRef = useRef({ active: false, sx: 0, sy: 0, tx: 0, ty: 0 });
+  const touchRef = useRef<{ x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  /* Wheel zoom (passive:false necesario) */
+  /* Wheel zoom */
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const handler = (e: WheelEvent) => {
+    const el = containerRef.current; if (!el) return;
+    const h = (e: WheelEvent) => {
       e.preventDefault();
-      const f = e.deltaY < 0 ? 1.12 : 0.9;
-      setTf(t => ({ ...t, scale: clamp(t.scale * f, 0.4, 4) }));
+      setTf(t => ({ ...t, scale: clamp(t.scale * (e.deltaY < 0 ? 1.12 : 0.9), 0.4, 4) }));
     };
-    el.addEventListener('wheel', handler, { passive: false });
-    return () => el.removeEventListener('wheel', handler);
+    el.addEventListener('wheel', h, { passive: false });
+    return () => el.removeEventListener('wheel', h);
   }, []);
 
   const load = useCallback(async () => {
@@ -103,254 +112,217 @@ export function MapView({ festivalId, navigate }: Props) {
   useEffect(() => { load(); }, [load]);
 
   /* Mouse pan */
-  const onMouseDown = (e: React.MouseEvent) => {
-    dragRef.current = { active: true, sx: e.clientX, sy: e.clientY, tx: tf.x, ty: tf.y };
-  };
-  const onMouseMove = (e: React.MouseEvent) => {
+  const onMD = (e: React.MouseEvent) => { dragRef.current = { active:true, sx:e.clientX, sy:e.clientY, tx:tf.x, ty:tf.y }; };
+  const onMM = (e: React.MouseEvent) => {
     if (!dragRef.current.active) return;
-    setTf(t => ({
-      ...t,
-      x: dragRef.current.tx + (e.clientX - dragRef.current.sx),
-      y: dragRef.current.ty + (e.clientY - dragRef.current.sy),
-    }));
+    setTf(t => ({ ...t, x: dragRef.current.tx+(e.clientX-dragRef.current.sx), y: dragRef.current.ty+(e.clientY-dragRef.current.sy) }));
   };
-  const onMouseUp = () => { dragRef.current.active = false; };
-
-  /* Touch pan */
-  const onTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1)
-      lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  };
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 1 && lastTouchRef.current) {
-      const dx = e.touches[0].clientX - lastTouchRef.current.x;
-      const dy = e.touches[0].clientY - lastTouchRef.current.y;
-      lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      setTf(t => ({ ...t, x: t.x + dx, y: t.y + dy }));
+  const onMU = () => { dragRef.current.active = false; };
+  const onTS = (e: React.TouchEvent) => { if (e.touches.length===1) touchRef.current={x:e.touches[0].clientX,y:e.touches[0].clientY}; };
+  const onTM = (e: React.TouchEvent) => {
+    if (e.touches.length===1 && touchRef.current) {
+      const dx=e.touches[0].clientX-touchRef.current.x, dy=e.touches[0].clientY-touchRef.current.y;
+      touchRef.current={x:e.touches[0].clientX,y:e.touches[0].clientY};
+      setTf(t=>({...t,x:t.x+dx,y:t.y+dy}));
     }
   };
-  const onTouchEnd = () => { lastTouchRef.current = null; };
 
-  const zoomIn  = () => setTf(t => ({ ...t, scale: clamp(t.scale * 1.3, 0.4, 4) }));
-  const zoomOut = () => setTf(t => ({ ...t, scale: clamp(t.scale / 1.3, 0.4, 4) }));
-  const reset   = () => setTf({ x: 0, y: 0, scale: 1 });
+  const maxOrders = Math.max(...puestos.map(p => p.pedidos_activos), 1);
 
-  /* Asignar slots a los puestos */
-  const puestosConSlot = puestos.map((p, i) => {
-    if (p.pos_x !== null && p.pos_y !== null) {
-      // Usar coordenadas de la DB (% del canvas)
-      const sw = 140, sh = 56;
-      return { ...p, slot: { x: (p.pos_x / 100) * (VB_W - sw), y: (p.pos_y / 100) * (VB_H - sh), w: sw, h: sh } };
-    }
-    return { ...p, slot: SLOTS[i % SLOTS.length] };
-  });
+  /* Assign grid positions to stands */
+  const mapped = puestos.slice(0, 10).map((p, i) => ({ ...p, gc: GRID[i][0], gr: GRID[i][1] }));
+  const sorted = [...mapped].sort((a, b) => (a.gc + a.gr) - (b.gc + b.gr));
+
+  /* Build ground tile list, sorted back-to-front */
+  type Tile = { col: number; row: number; type: 'grass' | 'path' };
+  const ground: Tile[] = [];
+  for (let r = 0; r <= 2; r++)
+    for (let c = 0; c <= 8; c++)
+      ground.push({ col: c, row: r, type: r === 1 ? 'path' : 'grass' });
+  ground.sort((a, b) => (a.col + a.row) - (b.col + b.row));
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#FDF6EE' }}>
 
       {/* Header */}
-      <div
-        className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-        style={{ backgroundColor: '#FFF3E4', borderBottom: '1px solid #E8D5C0' }}
-      >
+      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+           style={{ backgroundColor: '#FFF3E4', borderBottom: '1px solid #E8D5C0' }}>
         <button onClick={() => navigate('main')} className="flex items-center gap-1 hover:opacity-70 transition-opacity">
           <ChevronLeft className="w-5 h-5" style={{ color: '#A67C52' }} />
           <span className="text-xs font-semibold" style={{ color: '#A67C52' }}>Volver</span>
         </button>
-        <h2 className="text-sm font-extrabold" style={{ color: '#A67C52' }}>Mapa del Festival</h2>
-        <button onClick={load} style={{ color: '#A67C52' }} className="p-1.5 hover:opacity-70 transition-opacity">
+        <h2 className="text-sm font-extrabold" style={{ color: '#A67C52' }}>Mapa 3D del Festival</h2>
+        <button onClick={load} style={{ color: '#A67C52' }} className="p-1.5 hover:opacity-70">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
-      {/* Área del mapa */}
+      {/* Map canvas */}
       <div
         ref={containerRef}
         className="flex-1 overflow-hidden relative select-none"
-        style={{ cursor: dragRef.current.active ? 'grabbing' : 'grab', backgroundColor: '#F0E6D3' }}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        style={{ cursor: dragRef.current.active ? 'grabbing' : 'grab', backgroundColor: '#B8D4F0' }}
+        onMouseDown={onMD} onMouseMove={onMM} onMouseUp={onMU} onMouseLeave={onMU}
+        onTouchStart={onTS} onTouchMove={onTM} onTouchEnd={() => { touchRef.current = null; }}
       >
         {loading ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-8 h-8 rounded-full border-4 border-amber-200 border-t-amber-600 animate-spin" />
           </div>
         ) : (
-          <div
-            style={{
-              transform: `translate(${tf.x}px, ${tf.y}px) scale(${tf.scale})`,
-              transformOrigin: 'center center',
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg
-              viewBox={`0 0 ${VB_W} ${VB_H}`}
-              width="100%"
-              height="100%"
-              style={{ maxWidth: VB_W, overflow: 'visible' }}
-              onClick={(e) => { if (e.target === e.currentTarget) setSelected(null); }}
-            >
-              {/* ── Fondo del recinto ─────────────────────────────────── */}
-              <rect x="4" y="4" width={VB_W - 8} height={VB_H - 8} rx="16"
-                fill="#F5ECD7" stroke="#D4B896" strokeWidth="2" />
+          <div style={{
+            transform: `translate(${tf.x}px,${tf.y}px) scale(${tf.scale})`,
+            transformOrigin: 'center center',
+            width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg viewBox="0 0 360 265" width="360" height="265" style={{ overflow: 'visible' }}
+                 onClick={(e) => { if (e.target === e.currentTarget) setSelected(null); }}>
 
-              {/* ── Pasillos ─────────────────────────────────────────── */}
-              <rect {...PASILLO_H} fill="#E8D5B7" />
-              <text x={VB_W / 2} y={PASILLO_H.y + PASILLO_H.h / 2 + 4}
-                textAnchor="middle" fill="#B8977A" fontSize="9" fontWeight="600" letterSpacing="1">
-                PASILLO PRINCIPAL
-              </text>
-              <rect {...PASILLO_V} fill="#EAD9BC" />
+              {/* ── Ground tiles (grass + corridors) ──────────────────── */}
+              {ground.map(({ col, row, type }) => {
+                if (type === 'grass') {
+                  const { x, y } = iso(col, row);
+                  const pts = `${x+TW/2},${y} ${x+TW},${y+TH/2} ${x+TW/2},${y+TH} ${x},${y+TH/2}`;
+                  // Alternate shade for checkerboard depth feel
+                  const shade = (col + row) % 2 === 0 ? PAL.grass.t : '#6FB849';
+                  return <polygon key={`g${col}-${row}`} points={pts} fill={shade} />;
+                } else {
+                  // Path tile with height=3 to look like elevated walkway
+                  const { top, left, right } = boxPoints(col, row, 3);
+                  return (
+                    <g key={`p${col}-${row}`}>
+                      <polygon points={left}  fill={PAL.pathL} />
+                      <polygon points={right} fill={PAL.pathR} />
+                      <polygon points={top}   fill={PAL.pathT} />
+                    </g>
+                  );
+                }
+              })}
 
-              {/* ── Escenario ────────────────────────────────────────── */}
-              <rect {...ESCENARIO} rx="10" fill="#DFC9A0" stroke="#C8A87A" strokeWidth="1.5" />
-              <text x={ESCENARIO.x + ESCENARIO.w / 2} y={ESCENARIO.y + ESCENARIO.h / 2 - 6}
-                textAnchor="middle" fill="#8B6030" fontSize="13" fontWeight="800">
-                🎵
-              </text>
-              <text x={ESCENARIO.x + ESCENARIO.w / 2} y={ESCENARIO.y + ESCENARIO.h / 2 + 10}
-                textAnchor="middle" fill="#8B6030" fontSize="10" fontWeight="700">
-                ESCENARIO
-              </text>
+              {/* ── Stage landmark (back-left of scene) ───────────────── */}
+              {(() => {
+                const sc = 10, sr = -1; // behind the stands
+                const { x, y } = iso(sc, sr);
+                const h = 22;
+                const tp = `${x+TW/2},${y-h} ${x+TW},${y+TH/2-h} ${x+TW/2},${y+TH-h} ${x},${y+TH/2-h}`;
+                const lp = `${x},${y+TH/2-h} ${x+TW/2},${y+TH-h} ${x+TW/2},${y+TH} ${x},${y+TH/2}`;
+                const rp = `${x+TW/2},${y+TH-h} ${x+TW},${y+TH/2-h} ${x+TW},${y+TH/2} ${x+TW/2},${y+TH}`;
+                return (
+                  <g opacity={0.85}>
+                    <polygon points={lp} fill={PAL.stage.l} />
+                    <polygon points={rp} fill={PAL.stage.r} />
+                    <polygon points={tp} fill={PAL.stage.t} />
+                    <text x={x+TW/2} y={y-h-4} textAnchor="middle"
+                          fill="#374151" fontSize="7" fontWeight="800">🎵 ESCENARIO</text>
+                  </g>
+                );
+              })()}
 
-              {/* ── Zona VIP ─────────────────────────────────────────── */}
-              <rect {...ZONA_VIP} rx="10" fill="#E8D5B7" stroke="#C8A87A" strokeWidth="1" strokeDasharray="4,3" />
-              <text x={ZONA_VIP.x + ZONA_VIP.w / 2} y={ZONA_VIP.y + ZONA_VIP.h / 2 + 4}
-                textAnchor="middle" fill="#A67C52" fontSize="10" fontWeight="700">
-                ZONA VIP
-              </text>
-
-              {/* ── Entrada ──────────────────────────────────────────── */}
-              <rect {...ENTRADA} rx="8" fill="#DFC9A0" stroke="#C8A87A" strokeWidth="1" />
-              <text x={ENTRADA.x + ENTRADA.w / 2} y={ENTRADA.y + ENTRADA.h / 2 + 4}
-                textAnchor="middle" fill="#8B6030" fontSize="9" fontWeight="700">
-                ENTRADA
-              </text>
-
-              {/* ── Etiquetas de zona ─────────────────────────────────── */}
-              <text x="84" y="13" textAnchor="middle" fill="#A67C52" fontSize="8" fontWeight="700" opacity="0.8">
-                BARRAS
-              </text>
-              <text x="286" y="13" textAnchor="middle" fill="#A67C52" fontSize="8" fontWeight="700" opacity="0.8">
-                FOOD TRUCKS
-              </text>
-
-              {/* ── Stands ──────────────────────────────────────────── */}
-              {puestosConSlot.map(p => {
-                const { slot } = p;
-                const cs = COLOR_SAT(p.pedidos_activos);
-                const isSelected = selected?.id === p.id;
-                const nombreCorto = p.nombre.length > 16 ? p.nombre.slice(0, 15) + '…' : p.nombre;
+              {/* ── Stands (sorted back → front) ──────────────────────── */}
+              {sorted.map(p => {
+                const st  = getStatus(p);
+                const c   = PAL[st] as { t:string;l:string;r:string };
+                const h   = boxH(p, maxOrders);
+                const op  = boxOp(p, maxOrders);
+                const { top, left, right, cx, cy } = boxPoints(p.gc, p.gr, h);
+                const isSel = selected?.id === p.id;
+                const label = p.nombre.length > 10 ? p.nombre.slice(0, 9) + '…' : p.nombre;
 
                 return (
-                  <g key={p.id} onClick={(e) => { e.stopPropagation(); setSelected(isSelected ? null : p); }}
+                  <g key={p.id} opacity={op}
+                     onClick={(e) => { e.stopPropagation(); setSelected(isSel ? null : p); }}
                      style={{ cursor: 'pointer' }}>
-                    {/* Sombra */}
-                    <rect x={slot.x + 2} y={slot.y + 3} width={slot.w} height={slot.h}
-                      rx="10" fill="rgba(0,0,0,0.09)" />
-                    {/* Cuerpo */}
-                    <rect x={slot.x} y={slot.y} width={slot.w} height={slot.h}
-                      rx="10"
-                      fill={p.abierto ? cs.fill : '#C4B5A5'}
-                      stroke={isSelected ? '#1a1a1a' : cs.stroke}
-                      strokeWidth={isSelected ? 2.5 : 1}
-                      opacity={p.abierto ? 1 : 0.5}
-                    />
-                    {/* Nombre */}
-                    <text x={slot.x + slot.w / 2} y={slot.y + slot.h / 2 - 5}
-                      textAnchor="middle" fill="#fff" fontSize="10" fontWeight="700">
-                      {nombreCorto}
+                    <polygon points={left}  fill={c.l} />
+                    <polygon points={right} fill={c.r} />
+                    <polygon points={top}   fill={c.t}
+                      stroke={isSel ? '#fff' : 'rgba(0,0,0,0.12)'}
+                      strokeWidth={isSel ? 2 : 0.5} />
+                    {/* Name */}
+                    <text x={cx} y={cy - 1} textAnchor="middle" fill="rgba(255,255,255,0.95)"
+                          fontSize="6.5" fontWeight="800" style={{ pointerEvents:'none' }}>
+                      {label}
                     </text>
-                    {/* Métricas */}
-                    <text x={slot.x + slot.w / 2} y={slot.y + slot.h / 2 + 8}
-                      textAnchor="middle" fill="rgba(255,255,255,0.88)" fontSize="8">
-                      {p.pedidos_activos} pedidos · {Math.round(p.espera_min)}m espera
-                    </text>
-                    {/* Badge cerrado */}
-                    {!p.abierto && (
-                      <text x={slot.x + slot.w - 6} y={slot.y + 13}
-                        textAnchor="end" fill="#fff" fontSize="7" fontWeight="800">
-                        CERRADO
+                    {/* Orders badge */}
+                    {p.pedidos_activos > 0 && (
+                      <text x={cx} y={cy + 6.5} textAnchor="middle" fill="rgba(255,255,255,0.85)"
+                            fontSize="5.5" style={{ pointerEvents:'none' }}>
+                        {p.pedidos_activos}p · {Math.round(p.espera_min)}m
                       </text>
                     )}
                   </g>
                 );
               })}
+
+              {/* ── Entrada marker ────────────────────────────────────── */}
+              {(() => {
+                const ec = 4, er = 3;
+                const { x, y } = iso(ec, er);
+                const h = 5;
+                const tp = `${x+TW/2},${y-h} ${x+TW},${y+TH/2-h} ${x+TW/2},${y+TH-h} ${x},${y+TH/2-h}`;
+                const lp = `${x},${y+TH/2-h} ${x+TW/2},${y+TH-h} ${x+TW/2},${y+TH} ${x},${y+TH/2}`;
+                const rp = `${x+TW/2},${y+TH-h} ${x+TW},${y+TH/2-h} ${x+TW},${y+TH/2} ${x+TW/2},${y+TH}`;
+                return (
+                  <g>
+                    <polygon points={lp} fill="#C4A476" />
+                    <polygon points={rp} fill="#D4B487" />
+                    <polygon points={tp} fill="#E8C990" />
+                    <text x={x+TW/2} y={y-h-3} textAnchor="middle"
+                          fill="#8B6030" fontSize="6.5" fontWeight="700">ENTRADA</text>
+                  </g>
+                );
+              })()}
             </svg>
           </div>
         )}
 
-        {/* Controles de zoom */}
+        {/* Zoom controls */}
         <div className="absolute bottom-4 right-4 flex flex-col gap-1">
-          <button onClick={zoomIn}
-            className="w-9 h-9 rounded-full flex items-center justify-center shadow-md border"
-            style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', color: '#A67C52' }}>
-            <Plus className="w-4 h-4" />
-          </button>
-          <button onClick={zoomOut}
-            className="w-9 h-9 rounded-full flex items-center justify-center shadow-md border"
-            style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', color: '#A67C52' }}>
-            <Minus className="w-4 h-4" />
-          </button>
-          <button onClick={reset}
-            className="w-9 h-9 rounded-full flex items-center justify-center shadow-md border text-[10px] font-bold"
-            style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', color: '#A67C52' }}>
-            1:1
-          </button>
+          {[
+            { label: <Plus className="w-4 h-4" />,   fn: () => setTf(t=>({...t,scale:clamp(t.scale*1.3,0.4,4)})) },
+            { label: <Minus className="w-4 h-4" />,  fn: () => setTf(t=>({...t,scale:clamp(t.scale/1.3,0.4,4)})) },
+            { label: <span className="text-[10px] font-bold">1:1</span>, fn: () => setTf({x:0,y:0,scale:1}) },
+          ].map(({ label, fn }, i) => (
+            <button key={i} onClick={fn}
+              className="w-9 h-9 rounded-full flex items-center justify-center shadow-md border"
+              style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', color: '#A67C52' }}>
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Leyenda */}
-      <div
-        className="flex-shrink-0 flex items-center justify-center gap-4 py-2 border-t"
-        style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}
-      >
-        {[
-          { color: '#4CAF88', label: 'Libre'    },
-          { color: '#F59E0B', label: 'Moderado' },
-          { color: '#EF4444', label: 'Saturado' },
-        ].map(({ color, label }) => (
-          <span key={label} className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: '#8B6650' }}>
-            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: color }} />
+      {/* Legend */}
+      <div className="flex-shrink-0 flex items-center justify-center gap-3 py-2 border-t"
+           style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}>
+        {([['#4FC78E','Libre'],['#FFAB00','Moderado'],['#E8534A','Saturado']] as [string,string][]).map(([color,label]) => (
+          <span key={label} className="flex items-center gap-1 text-[10px] font-semibold" style={{ color:'#8B6650' }}>
+            <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor:color }} />
             {label}
           </span>
         ))}
+        <span className="text-[9px] italic" style={{ color:'#C8956C',opacity:0.7 }}>altura = ocupación</span>
       </div>
 
-      {/* Popup del puesto seleccionado */}
+      {/* Stand popup */}
       {selected && (
-        <div
-          className="flex-shrink-0 border-t px-4 py-3"
-          style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}
-        >
+        <div className="flex-shrink-0 border-t px-4 py-3"
+             style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}>
           <div className="flex items-start justify-between mb-2">
             <div>
               <h3 className="font-extrabold text-sm" style={{ color: '#2C1810' }}>{selected.nombre}</h3>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                  style={{
-                    backgroundColor: selected.abierto ? '#D1FAE5' : '#FEE2E2',
-                    color: selected.abierto ? '#065F46' : '#991B1B',
-                  }}>
+                  style={{ backgroundColor: selected.abierto ? '#D1FAE5' : '#FEE2E2', color: selected.abierto ? '#065F46' : '#991B1B' }}>
                   {selected.abierto ? 'Abierto' : 'Cerrado'}
                 </span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full"
-                  style={{ backgroundColor: COLOR_SAT(selected.pedidos_activos).fill + '33',
-                           color: COLOR_SAT(selected.pedidos_activos).stroke }}>
-                  {COLOR_SAT(selected.pedidos_activos).label}
+                  style={{ backgroundColor: (PAL[getStatus(selected)] as any).t + '33', color: (PAL[getStatus(selected)] as any).l }}>
+                  {statusLabel(getStatus(selected))}
                 </span>
               </div>
             </div>
-            <button onClick={() => setSelected(null)} className="hover:opacity-70 transition-opacity" style={{ color: '#A67C52' }}>
+            <button onClick={() => setSelected(null)} style={{ color: '#A67C52' }}>
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -362,18 +334,16 @@ export function MapView({ festivalId, navigate }: Props) {
               { label: 'Ingresos hoy',   value: `${Number(selected.ingresos_hoy).toFixed(0)}€` },
             ].map(({ label, value }) => (
               <div key={label} className="rounded-xl p-2 text-center border"
-                style={{ backgroundColor: '#FDF6EE', borderColor: '#E8D5C0' }}>
+                   style={{ backgroundColor: '#FDF6EE', borderColor: '#E8D5C0' }}>
                 <p className="text-sm font-extrabold" style={{ color: '#A67C52' }}>{value}</p>
                 <p className="text-[9px]" style={{ color: '#8B6650' }}>{label}</p>
               </div>
             ))}
           </div>
 
-          <button
-            onClick={() => { setSelected(null); navigate('stands'); }}
-            className="w-full text-center text-xs font-bold py-2 rounded-full transition-opacity hover:opacity-80"
-            style={{ backgroundColor: '#A67C52', color: '#fff' }}
-          >
+          <button onClick={() => { setSelected(null); navigate('stands'); }}
+            className="w-full text-center text-xs font-bold py-2 rounded-full hover:opacity-80 transition-opacity"
+            style={{ backgroundColor: '#A67C52', color: '#fff' }}>
             Ver detalle completo →
           </button>
         </div>

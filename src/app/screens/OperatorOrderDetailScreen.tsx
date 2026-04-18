@@ -57,20 +57,10 @@ export function OperatorOrderDetailScreen({ readOnly = false }: Props) {
 
     const stepIndex = useMemo(() => {
         const s: DBStatus = pedido?.estado;
-
-        // Antes de confirmar: no marcar ningún paso
         if (s === 'pendiente') return -1;
-
-        // Confirmado = Nuevo
         if (s === 'confirmado') return 0;
-
-        // En preparación
         if (s === 'preparando') return 1;
-
-        // Finalizado
         if (s === 'listo' || s === 'entregado') return 2;
-
-        // Cancelado u otros: nada marcado
         return -1;
     }, [pedido?.estado]);
 
@@ -96,75 +86,114 @@ export function OperatorOrderDetailScreen({ readOnly = false }: Props) {
         }
     };
 
-    if (initialLoading) return <div className="p-4">Cargando...</div>;
-    if (error) return <div className="p-4 text-red-600">{error}</div>;
-    if (!pedido) return <div className="p-4">Pedido no encontrado</div>;
+    if (initialLoading) return (
+        <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: '#FDF6EE' }}>
+            <p className="text-sm" style={{ color: '#C8956C', opacity: 0.6 }}>Cargando...</p>
+        </div>
+    );
+
+    if (error) return (
+        <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: '#FDF6EE' }}>
+            <p className="text-sm text-red-600">{error}</p>
+        </div>
+    );
+
+    if (!pedido) return (
+        <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: '#FDF6EE' }}>
+            <p className="text-sm" style={{ color: '#C8956C', opacity: 0.6 }}>Pedido no encontrado</p>
+        </div>
+    );
+
+    const stepColors = [
+        { label: 'Nuevo',      active: stepIndex >= 0, color: '#6366F1' },
+        { label: 'En Proceso', active: stepIndex >= 1, color: '#F59E0B' },
+        { label: 'Terminado',  active: stepIndex >= 2, color: '#4CAF88' },
+    ];
 
     return (
-        <div className="min-h-screen bg-gray-100 p-4 pb-56">
-            <div className="flex items-center gap-2 mb-4">
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#FDF6EE' }}>
+
+            {/* Header */}
+            <div
+                className="flex-shrink-0 flex items-center gap-3 px-4 py-3"
+                style={{ background: 'linear-gradient(135deg, #C8956C, #A67C52)', boxShadow: '0 2px 8px rgba(166,124,82,0.20)' }}
+            >
                 <button
                     onClick={() => navigate(readOnly ? '/operador/pedidos' : '/operador/tickets')}
-                    className="p-2 rounded-full bg-white"
+                    className="p-1.5 rounded-full"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}
                 >
-                    <ChevronLeft className="w-5 h-5" />
+                    <ChevronLeft className="w-4 h-4 text-white" />
                 </button>
-                <h1 className="text-xl font-bold">Vista de Pedido Detallado</h1>
+                <h1 className="text-sm font-extrabold text-white">Vista de Pedido Detallado</h1>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 shadow-sm">
-                <h2 className="text-3xl font-extrabold mb-1">#{pedido.id}</h2>
-                <p className="text-sm text-gray-700">Alias: {pedido?.usuario_nombre || 'Cliente'}</p>
-                <p className="text-sm text-gray-500 mb-4">
-                    Ordered: {new Date(pedido.creado_en).toLocaleString('es-ES')}
-                </p>
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4 pb-32 space-y-3">
 
-                <div className="border rounded-lg overflow-hidden mb-3">
-                    <div className="grid grid-cols-3 bg-gray-50 px-3 py-2 text-sm font-semibold">
-                        <span>Item</span><span className="text-center">Qty</span><span className="text-right">Price</span>
-                    </div>
-                    {pedido.items?.map((it: any, idx: number) => (
-                        <div key={idx} className="grid grid-cols-3 px-3 py-2 text-sm border-t">
-                            <span>{it.producto_nombre}</span>
-                            <span className="text-center">{it.cantidad}</span>
-                            <span className="text-right">{formatPrice(Number(it.precio_unitario) * Number(it.cantidad))}</span>
+                {/* Order summary */}
+                <div className="rounded-2xl border p-4" style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}>
+                    <h2 className="text-2xl font-extrabold mb-1" style={{ color: '#2C1810' }}>#{pedido.id}</h2>
+                    <p className="text-xs" style={{ color: '#8B6650' }}>Alias: {pedido?.usuario_nombre || 'Cliente'}</p>
+                    <p className="text-xs mb-4" style={{ color: '#C8956C' }}>
+                        {new Date(pedido.creado_en).toLocaleString('es-ES')}
+                    </p>
+
+                    <div className="rounded-xl overflow-hidden border" style={{ borderColor: '#E8D5C0' }}>
+                        <div className="grid grid-cols-3 px-3 py-2 text-[11px] font-bold" style={{ backgroundColor: '#E8D5C0', color: '#2C1810' }}>
+                            <span>Item</span><span className="text-center">Qty</span><span className="text-right">Precio</span>
                         </div>
-                    ))}
-                </div>
-
-                <div className="flex justify-between font-bold text-lg border-t pt-3">
-                    <span>Total pedido</span>
-                    <span>{formatPrice(Number(pedido.total))}</span>
-                </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-4 mt-4 shadow-sm">
-                <h3 className="font-semibold mb-4">Timeline</h3>
-                <div className="flex items-center justify-between text-sm">
-                    <div className={stepIndex >= 0 ? 'text-blue-600 font-semibold' : ''}>Nuevo</div>
-                    <div className={stepIndex >= 1 ? 'text-amber-600 font-semibold' : ''}>En Proceso</div>
-                    <div className={stepIndex >= 2 ? 'text-green-600 font-semibold' : ''}>Terminado</div>
-                </div>
-            </div>
-
-            {!readOnly && (
-                <div className="fixed bottom-16 left-0 right-0 z-40">
-                    <div className="max-w-md mx-auto bg-white p-3 border-t border-gray-200 space-y-2 shadow-lg rounded-t-2xl">
-                        <button
-                            disabled={disablePreparingBtn}
-                            onClick={() => marcarEstado('preparando')}
-                            className="w-full bg-amber-400 text-black font-bold py-3 rounded-xl disabled:opacity-50"
-                        >
-                            MARCAR EN PROCESO
-                        </button>
-                        <button
-                            disabled={disableFinishedBtn}
-                            onClick={() => marcarEstado('listo')}
-                            className="w-full bg-green-600 text-white font-bold py-3 rounded-xl disabled:opacity-50"
-                        >
-                            MARCAR TERMINADO
-                        </button>
+                        {pedido.items?.map((it: any, idx: number) => (
+                            <div key={idx} className="grid grid-cols-3 px-3 py-2 text-xs border-t" style={{ borderColor: '#E8D5C0', color: '#2C1810' }}>
+                                <span>{it.producto_nombre}</span>
+                                <span className="text-center">{it.cantidad}</span>
+                                <span className="text-right">{formatPrice(Number(it.precio_unitario) * Number(it.cantidad))}</span>
+                            </div>
+                        ))}
                     </div>
+
+                    <div className="flex justify-between font-extrabold text-sm border-t pt-3 mt-3" style={{ borderColor: '#E8D5C0', color: '#2C1810' }}>
+                        <span>Total pedido</span>
+                        <span style={{ color: '#A67C52' }}>{formatPrice(Number(pedido.total))}</span>
+                    </div>
+                </div>
+
+                {/* Timeline */}
+                <div className="rounded-2xl border p-4" style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}>
+                    <h3 className="text-xs font-bold mb-3" style={{ color: '#2C1810' }}>Timeline</h3>
+                    <div className="flex items-center justify-between">
+                        {stepColors.map(({ label, active, color }) => (
+                            <span
+                                key={label}
+                                className="text-[11px] font-semibold transition-colors"
+                                style={{ color: active ? color : '#C4B5A5' }}
+                            >
+                                {label}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Action buttons */}
+            {!readOnly && (
+                <div className="flex-shrink-0 p-3 border-t space-y-2" style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}>
+                    <button
+                        disabled={disablePreparingBtn}
+                        onClick={() => marcarEstado('preparando')}
+                        className="w-full py-3 rounded-full text-sm font-extrabold text-white transition-opacity disabled:opacity-40"
+                        style={{ backgroundColor: '#F59E0B' }}
+                    >
+                        MARCAR EN PROCESO
+                    </button>
+                    <button
+                        disabled={disableFinishedBtn}
+                        onClick={() => marcarEstado('listo')}
+                        className="w-full py-3 rounded-full text-sm font-extrabold text-white transition-opacity disabled:opacity-40"
+                        style={{ backgroundColor: '#4CAF88' }}
+                    >
+                        MARCAR TERMINADO
+                    </button>
                 </div>
             )}
         </div>

@@ -14,6 +14,7 @@ import { Toaster } from 'sonner';
 import { CartProvider } from './context/CartContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { PhoneFrameShell } from './components/PhoneFrameShell';
 
 // Pantallas comunes
 import { SplashScreen } from './screens/SplashScreen';
@@ -79,17 +80,24 @@ function AppRoutes() {
 
   const path = String(currentPath || '/');
 
-  // Rutas públicas
+  // Rutas públicas — Login y Splash manejan su propio frame
   if (path === '/' || path === '/splash') return <SplashScreen />;
   if (path === '/login') return <LoginScreen />;
-  if (path === '/register') return <RegisterScreen />;
-  if (path === '/forgot-password') return <ForgotPasswordScreen />;
+  if (path === '/register') return <PhoneFrameShell><RegisterScreen /></PhoneFrameShell>;
+  if (path === '/forgot-password') return <PhoneFrameShell><ForgotPasswordScreen /></PhoneFrameShell>;
 
   if (!user) {
     (window as any).navigateTo('/login');
     return null;
   }
 
+  // Gestor — maneja su propio frame
+  if (user.rol === 'gestor') return <GestorScreen />;
+
+  // Admin — envuelto en phone frame
+  if (user.rol === 'administrador') return <PhoneFrameShell><AdminScreen /></PhoneFrameShell>;
+
+  // Operador — OperatorLayout maneja su propio frame
   if (user.rol === 'operador') {
     if (path === '/' || path === '/login' || path === '/operador' || !path.startsWith('/operador')) {
       (window as any).navigateTo('/operador/pedidos');
@@ -98,11 +106,9 @@ function AppRoutes() {
 
     return (
       <OperatorLayout>
-        {/* Pedidos = solo visualización */}
         {path === '/operador/pedidos' && <OperadorScreen />}
         {path.startsWith('/operador/pedidos/') && <OperatorOrderDetailScreen readOnly />}
 
-        {/* Tickets = operativa */}
         {path === '/operador/tickets' && <OperatorTicketsScreen />}
         {path.startsWith('/operador/tickets/') && <OperatorOrderDetailScreen readOnly={false} />}
 
@@ -112,33 +118,36 @@ function AppRoutes() {
     );
   }
 
-  if (user.rol === 'gestor') return <GestorScreen />;
-  if (user.rol === 'administrador') return <AdminScreen />;
-
-  // Usuario final
-  if (path === '/festival-select') return <FestivalSelectScreen />;
-  if (path === '/selection') return <SelectionScreen />;
-  if (path === '/home') return <HomeScreen />;
-  if (path.startsWith('/food-truck/') && path.endsWith('/offers')) return <FoodTruckOffersScreen />;
-  if (path.startsWith('/food-truck/')) return <FoodTruckDetailScreen />;
-  if (path.startsWith('/bar/') && path.endsWith('/offers')) return <BarOffersScreen />;
-  if (path.startsWith('/bar/')) return <BarDetailScreen />;
-  if (path.startsWith('/product/')) return <ProductDetailScreen />;
-  if (path === '/offers') return <OffersScreen />;
-  if (path === '/cart') return <CartScreen />;
-  if (path === '/payment') return <PaymentScreen />;
-  if (path === '/confirmation') return <OrderConfirmationScreen />;
-  if (path === '/profile/info') return <PersonalInfoScreen />;
-  if (path === '/profile/royalties') return <RoyaltiesScreen />;
-  if (path === '/profile/payments') return <PaymentMethodsScreen />;
-  if (path === '/profile/orders') return <OrderHistoryScreen />;
-  if (path === '/profile/favorites') return <FavoritesScreen />;
-  if (path === '/profile/support') return <HelpSupportScreen />;
-  if (path === '/profile/language') return <LanguageScreen />;
-  if (path.startsWith('/track-order/')) return <TrackOrderScreen />;
-  if (path.startsWith('/profile')) return <ProfileScreen />;
-
-  return <SelectionScreen />;
+  // Usuario final — envuelto en phone frame
+  return (
+    <PhoneFrameShell>
+      {path === '/festival-select' && <FestivalSelectScreen />}
+      {path === '/selection' && <SelectionScreen />}
+      {path === '/home' && <HomeScreen />}
+      {path.startsWith('/food-truck/') && path.endsWith('/offers') && <FoodTruckOffersScreen />}
+      {path.startsWith('/food-truck/') && !path.endsWith('/offers') && <FoodTruckDetailScreen />}
+      {path.startsWith('/bar/') && path.endsWith('/offers') && <BarOffersScreen />}
+      {path.startsWith('/bar/') && !path.endsWith('/offers') && <BarDetailScreen />}
+      {path.startsWith('/product/') && <ProductDetailScreen />}
+      {path === '/offers' && <OffersScreen />}
+      {path === '/cart' && <CartScreen />}
+      {path === '/payment' && <PaymentScreen />}
+      {path === '/confirmation' && <OrderConfirmationScreen />}
+      {path === '/profile/info' && <PersonalInfoScreen />}
+      {path === '/profile/royalties' && <RoyaltiesScreen />}
+      {path === '/profile/payments' && <PaymentMethodsScreen />}
+      {path === '/profile/orders' && <OrderHistoryScreen />}
+      {path === '/profile/favorites' && <FavoritesScreen />}
+      {path === '/profile/support' && <HelpSupportScreen />}
+      {path === '/profile/language' && <LanguageScreen />}
+      {path.startsWith('/track-order/') && <TrackOrderScreen />}
+      {path.startsWith('/profile') && !path.includes('/profile/') && <ProfileScreen />}
+      {!path.startsWith('/festival-select') && !path.startsWith('/selection') && !path.startsWith('/home')
+        && !path.startsWith('/food-truck/') && !path.startsWith('/bar/') && !path.startsWith('/product/')
+        && path !== '/offers' && path !== '/cart' && path !== '/payment' && path !== '/confirmation'
+        && !path.startsWith('/profile') && !path.startsWith('/track-order/') && <SelectionScreen />}
+    </PhoneFrameShell>
+  );
 }
 
 function App() {
@@ -147,9 +156,7 @@ function App() {
       <LanguageProvider>
         <CartProvider>
           <Toaster position="top-center" />
-          <div className="max-w-md mx-auto bg-white min-h-screen">
-            <AppRoutes />
-          </div>
+          <AppRoutes />
         </CartProvider>
       </LanguageProvider>
     </AuthProvider>

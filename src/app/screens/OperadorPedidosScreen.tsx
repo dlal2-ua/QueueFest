@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getPedidosPuesto, getMisPuestosOperador } from '../api';
 import { useNavigate } from '../utils/navigation';
+import { LogOut, RefreshCw } from 'lucide-react';
 
 export function OperadorScreen() {
   const { user, logout } = useAuth();
@@ -16,13 +17,13 @@ export function OperadorScreen() {
   const [loading, setLoading] = useState(true);
   const [puestoId, setPuestoId] = useState<number | null>(null);
 
-  const colorEstado: Record<string, string> = {
-    pendiente: 'bg-yellow-100 text-yellow-800',
-    confirmado: 'bg-blue-100 text-blue-800',
-    preparando: 'bg-orange-100 text-orange-800',
-    listo: 'bg-green-100 text-green-800',
-    entregado: 'bg-gray-100 text-gray-800',
-    cancelado: 'bg-red-100 text-red-800'
+  const colorEstado: Record<string, { bg: string; text: string }> = {
+    pendiente:  { bg: '#FEF3C7', text: '#92400E' },
+    confirmado: { bg: '#DBEAFE', text: '#1E40AF' },
+    preparando: { bg: '#FFF3E4', text: '#A67C52' },
+    listo:      { bg: '#D1FAE5', text: '#065F46' },
+    entregado:  { bg: '#F3F4F6', text: '#6B7280' },
+    cancelado:  { bg: '#FEE2E2', text: '#991B1B' },
   };
 
   const cargarDatos = async () => {
@@ -56,52 +57,68 @@ export function OperadorScreen() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="text-white p-4 flex justify-between items-center bg-orange-500">
+    <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#FDF6EE' }}>
+
+      {/* Header */}
+      <div
+        className="flex-shrink-0 flex items-center justify-between px-4 py-3"
+        style={{ background: 'linear-gradient(135deg, #C8956C, #A67C52)', boxShadow: '0 2px 8px rgba(166,124,82,0.20)' }}
+      >
         <div>
-          <h1 className="text-xl font-bold">Panel Pedidos (solo lectura)</h1>
-          <p className="text-white/80 text-sm">{user?.nombre}</p>
+          <h1 className="text-sm font-extrabold text-white">Panel Pedidos</h1>
+          <p className="text-[11px] text-white/70">{user?.nombre}</p>
         </div>
-        <button onClick={logout} className="text-white/80 text-sm underline hover:text-white">
-          Cerrar sesion
+        <button onClick={logout} className="flex items-center gap-1 text-white/80 hover:text-white transition-opacity">
+          <LogOut className="w-4 h-4" />
+          <span className="text-xs font-medium">Salir</span>
         </button>
       </div>
 
-      <div className="p-4">
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-4 pb-4">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Todos los pedidos y estado</h2>
+          <h2 className="text-sm font-bold" style={{ color: '#2C1810' }}>Todos los pedidos y estado</h2>
           <button
             onClick={cargarDatos}
-            className="text-sm bg-white border border-gray-300 px-3 py-1 rounded-full shadow-sm hover:bg-gray-50"
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors"
+            style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', color: '#A67C52' }}
           >
+            <RefreshCw className="w-3 h-3" />
             Actualizar
           </button>
         </div>
 
         {loading ? (
-          <p className="text-center text-gray-500 mt-10">Cargando pedidos...</p>
+          <p className="text-center text-sm py-10" style={{ color: '#C8956C', opacity: 0.6 }}>Cargando pedidos...</p>
         ) : pedidos.length === 0 ? (
-          <p className="text-center text-gray-500 mt-10">No hay pedidos</p>
+          <p className="text-center text-sm py-10" style={{ color: '#C8956C', opacity: 0.6 }}>No hay pedidos</p>
         ) : (
-          <div className="space-y-3">
-            {pedidos.map((pedido) => (
-              <div
-                key={pedido.id}
-                onClick={() => navigate(`/operador/pedidos/${pedido.id}`)}
-                className="bg-white rounded-xl p-4 shadow-sm cursor-pointer hover:shadow-md transition"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <p className="font-semibold">Pedido #{pedido.id}</p>
-                    <p className="text-sm text-gray-500">{pedido.usuario_nombre}</p>
+          <div className="space-y-2">
+            {pedidos.map((pedido) => {
+              const c = colorEstado[pedido.estado] ?? { bg: '#F3F4F6', text: '#6B7280' };
+              return (
+                <div
+                  key={pedido.id}
+                  onClick={() => navigate(`/operador/pedidos/${pedido.id}`)}
+                  className="rounded-2xl border cursor-pointer transition-all active:scale-[0.98] hover:shadow-md"
+                  style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', padding: '12px 14px' }}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <div>
+                      <p className="text-xs font-extrabold" style={{ color: '#2C1810' }}>Pedido #{pedido.id}</p>
+                      <p className="text-[11px]" style={{ color: '#8B6650' }}>{pedido.usuario_nombre}</p>
+                    </div>
+                    <span
+                      className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: c.bg, color: c.text }}
+                    >
+                      {pedido.estado}
+                    </span>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${colorEstado[pedido.estado]}`}>
-                    {pedido.estado}
-                  </span>
+                  <p className="text-[11px] font-semibold" style={{ color: '#A67C52' }}>Total: {pedido.total}€</p>
                 </div>
-                <p className="text-sm text-gray-600">Total: {pedido.total}€</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

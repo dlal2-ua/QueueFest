@@ -84,7 +84,7 @@ export function GestorScreen() {
           md:rounded-[45px]
           md:border-[10px] md:border-[#1a1a1a]
         "
-        style={{ backgroundColor: view === 'welcome' ? '#000000' : '#FDF6EE' }}
+        style={{ backgroundColor: view === 'welcome' ? '#000000' : '#FDF6EE', transform: 'translate(0, 0)' }}
       >
         {/* Notch — desktop only */}
         <div
