@@ -234,8 +234,11 @@ export const getLoyalty = async () => {
 
 // ==================== GESTOR ====================
 // Estadísticas del día: pedidos, ingresos, espera media, puestos abiertos
-export const getEstadisticas = async () => {
-    const res = await fetch(`${API_URL}/gestor/estadisticas`, { headers: headers() });
+export const getEstadisticas = async (festivalId?: number) => {
+    const url = festivalId
+        ? `${API_URL}/gestor/estadisticas?festival_id=${festivalId}`
+        : `${API_URL}/gestor/estadisticas`;
+    const res = await fetch(url, { headers: headers() });
     return res.json();
 };
 

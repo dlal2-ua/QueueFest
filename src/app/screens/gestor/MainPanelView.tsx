@@ -13,13 +13,13 @@ interface Props {
   navigate: (view: string) => void;
 }
 
-export function MainPanelView({ festivalNombre, modoAuto, onToggleModo, onChangeFestival, onLogout, navigate }: Props) {
+export function MainPanelView({ festivalId, festivalNombre, modoAuto, onToggleModo, onChangeFestival, onLogout, navigate }: Props) {
   const [stats, setStats] = useState<any>(null);
 
   const cargarStats = useCallback(async () => {
-    try { setStats(await getEstadisticas()); }
+    try { setStats(await getEstadisticas(festivalId)); }
     catch (e) { console.error(e); }
-  }, []);
+  }, [festivalId]);
 
   useEffect(() => {
     cargarStats();

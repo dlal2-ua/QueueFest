@@ -842,9 +842,25 @@ app.get('/api/loyalty', auth, async (req, res) => {
 
 app.get('/api/gestor/estadisticas', auth, async (req, res) => {
   try {
-    const [pedidos] = await db.query('SELECT COUNT(*) as total, SUM(total) as ingresos FROM pedidos WHERE DATE(creado_en) = CURDATE()');
-    const [esperas] = await db.query('SELECT AVG(tiempo_servicio_medio) as espera_media FROM puestos WHERE abierto = true');
-    const [puestos] = await db.query('SELECT COUNT(*) as abiertos FROM puestos WHERE abierto = true');
+    const fid = req.query.festival_id ? Number(req.query.festival_id) : null;
+    const byFestival = fid ? ' AND pu.festival_id = ?' : '';
+    const byFestivalStand = fid ? ' AND festival_id = ?' : '';
+    const args = fid ? [fid] : [];
+
+    const [pedidos] = await db.query(
+      `SELECT COUNT(*) as total, SUM(pe.total) as ingresos
+       FROM pedidos pe JOIN puestos pu ON pe.puesto_id = pu.id
+       WHERE DATE(pe.creado_en) = CURDATE()${byFestival}`,
+      args
+    );
+    const [esperas] = await db.query(
+      `SELECT AVG(tiempo_servicio_medio) as espera_media FROM puestos WHERE abierto = true${byFestivalStand}`,
+      args
+    );
+    const [puestos] = await db.query(
+      `SELECT COUNT(*) as abiertos FROM puestos WHERE abierto = true${byFestivalStand}`,
+      args
+    );
     res.json({
       pedidos_hoy: pedidos[0].total,
       ingresos_hoy: pedidos[0].ingresos || 0,
