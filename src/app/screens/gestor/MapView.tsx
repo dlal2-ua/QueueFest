@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getMapaPuestos } from '../../api';
 import { ChevronLeft, RefreshCw, Plus, Minus, X } from 'lucide-react';
+import { formatWait } from '../../utils/formatTime';
 
 interface PuestoMapa {
   id: number;
@@ -247,7 +248,7 @@ export function MapView({ festivalId, navigate }: Props) {
                     {p.pedidos_activos > 0 && (
                       <text x={cx} y={cy + 6.5} textAnchor="middle" fill="rgba(255,255,255,0.85)"
                             fontSize="5.5" style={{ pointerEvents:'none' }}>
-                        {p.pedidos_activos}p · {Math.round(p.espera_min)}m
+                        {p.pedidos_activos}p · {formatWait(p.espera_min)}
                       </text>
                     )}
                   </g>
@@ -330,7 +331,7 @@ export function MapView({ festivalId, navigate }: Props) {
           <div className="grid grid-cols-3 gap-2 mb-2">
             {[
               { label: 'Pedidos activos', value: selected.pedidos_activos },
-              { label: 'Espera media',    value: `${Math.round(selected.espera_min)}m` },
+              { label: 'Espera media',    value: formatWait(selected.espera_min) },
               { label: 'Ingresos hoy',   value: `${Number(selected.ingresos_hoy).toFixed(0)}€` },
             ].map(({ label, value }) => (
               <div key={label} className="rounded-xl p-2 text-center border"

@@ -46,7 +46,7 @@ export function OperatorLayout({ children }: { children: ReactNode }) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden phone-scroll">
           {children}
         </div>
 
@@ -68,6 +68,8 @@ export function OperatorLayout({ children }: { children: ReactNode }) {
             box-shadow: 0 0 0 2px #333, 0 30px 80px rgba(0,0,0,0.50), inset 0 0 0 1px #555;
           }
         }
+        .phone-scroll::-webkit-scrollbar { display: none; }
+        .phone-scroll { scrollbar-width: none; -ms-overflow-style: none; }
       `}</style>
     </div>
   );

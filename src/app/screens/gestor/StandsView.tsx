@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getMapaPuestos, getPedidosPuesto } from '../../api';
 import { ChevronLeft, BarChart2, MapPin, ChevronRight } from 'lucide-react';
+import { formatWait } from '../../utils/formatTime';
 
 /* ─── Tipos ────────────────────────────────────────────────────────────── */
 interface PuestoMapa {
@@ -131,7 +132,7 @@ function ListaPuestos({ festivalId, onSelect }: ListaProps) {
                     />
                   </div>
                   <span className="text-[10px] font-bold w-10 text-right flex-shrink-0" style={{ color: s.color }}>
-                    {val}{METRICAS[metrica].unit}
+                    {metrica === 'espera_min' ? formatWait(val) : `${val}${METRICAS[metrica].unit}`}
                   </span>
                   <span className="text-[9px] font-semibold w-12 text-right flex-shrink-0" style={{ color: s.color }}>
                     {s.label}

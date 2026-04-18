@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getEstadisticas } from '../../api';
 import { Zap, Hand, ChevronLeft, Store, Euro, Map, ShoppingBag, Clock, LogOut } from 'lucide-react';
+import { formatWait } from '../../utils/formatTime';
 
 interface Props {
   festivalId: number;
@@ -30,7 +31,7 @@ export function MainPanelView({ festivalNombre, modoAuto, onToggleModo, onChange
     { icon: Store,       valor: stats?.puestos_abiertos ?? '—', label: 'Puestos activos',   color: '#A67C52' },
     { icon: Euro,        valor: stats?.ingresos_hoy !== undefined ? `${Number(stats.ingresos_hoy).toFixed(0)}€` : '—', label: 'Ingresos hoy', color: '#4CAF88' },
     { icon: ShoppingBag, valor: stats?.pedidos_hoy ?? '—',       label: 'Pedidos hoy',      color: '#6366F1' },
-    { icon: Clock,       valor: stats?.espera_media !== undefined ? `${Number(stats.espera_media).toFixed(0)}m` : '—', label: 'Espera media', color: '#F59E0B' },
+    { icon: Clock,       valor: stats?.espera_media !== undefined ? formatWait(Number(stats.espera_media)) : '—', label: 'Espera media', color: '#F59E0B' },
   ];
 
   return (
