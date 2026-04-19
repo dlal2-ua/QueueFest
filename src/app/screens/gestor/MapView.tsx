@@ -11,7 +11,7 @@ interface PuestoMapa {
 interface Props { festivalId: number; festivalNombre: string; navigate: (v: string) => void; }
 
 /* ── Isometric constants ───────────────────────────────────────────── */
-const TW = 40, TH = 20, OX = 230, OY = 60;
+const TW = 40, TH = 20, OX = 230, OY = 80;
 function iso(c: number, r: number) { return { x: OX+(c-r)*(TW/2), y: OY+(c+r)*(TH/2) }; }
 
 /* Stand grid — 18×12 map, two zones with corridor gap */
@@ -59,53 +59,37 @@ function FoodTruck({bx,by,tw,td,hp,c,name,isSel,isBusy,onClick}:{
   const bS={x:bx+tw/2, y:by+td};
   const bE={x:bx+tw,   y:by+td/2};
   const bW={x:bx,      y:by+td/2};
-
-  // face-point on left face: sh=horizontal(0=left,1=right), sv=vertical(0=top,1=bottom)
   const fp=(sh:number,sv:number)=>{
     const top=lerp2(tW,tS,sh), bot=lerp2(bW,bS,sh);
     return lerp2(top,bot,sv);
   };
-
-  // Awning (stripe above window)
-  const a1=fp(0.08,0.12), a2=fp(0.78,0.12), a3=fp(0.78,0.28), a4=fp(0.08,0.28);
-  // Serving window
-  const w1=fp(0.12,0.30), w2=fp(0.70,0.30), w3=fp(0.70,0.62), w4=fp(0.12,0.62);
-  // Chimney on top face
+  const a1=fp(0.08,0.10), a2=fp(0.82,0.10), a3=fp(0.82,0.26), a4=fp(0.08,0.26);
+  const w1=fp(0.12,0.30), w2=fp(0.72,0.30), w3=fp(0.72,0.65), w4=fp(0.12,0.65);
   const chBase=lerp2(lerp2(tN,tE,0.6),lerp2(tW,tS,0.6),0.3);
   const chOff={x:-tw*0.04,y:-5};
   const ch1={x:chBase.x+chOff.x,y:chBase.y+chOff.y};
   const ch2={x:chBase.x+chOff.x+tw*0.08,y:chBase.y+chOff.y+td*0.04};
   const ch3={x:chBase.x+chOff.x+tw*0.08,y:chBase.y+td*0.04};
   const ch4={x:chBase.x+chOff.x,y:chBase.y};
-  // Wheel ellipses (below left face bottom corners)
   const wl={x:bW.x+tw*0.12, y:bW.y+2};
   const wr={x:bS.x-tw*0.15, y:bS.y+2};
-  // Center of top face for text
   const cx=(tN.x+tE.x+tS.x+tW.x)/4, cy=(tN.y+tE.y+tS.y+tW.y)/4;
-
   return (
     <g onClick={onClick} style={{cursor:'pointer'}} className={isBusy?'glow':undefined}>
-      {/* Body */}
       <polygon points={pts(tW,tS,bS,bW)} fill={c.l}/>
       <polygon points={pts(tS,tE,bE,bS)} fill={c.r}/>
       <polygon points={pts(tN,tE,tS,tW)} fill={c.t}
         stroke={isSel?'#fff':'rgba(0,0,0,0.15)'} strokeWidth={isSel?2.5:0.6}/>
-      {/* Awning stripe */}
       <polygon points={pts(a1,a2,a3,a4)} fill={c.a} opacity={0.95}/>
       <polygon points={pts(a1,a2,a3,a4)} fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth="0.5"/>
-      {/* Serving window */}
-      <polygon points={pts(w1,w2,w3,w4)} fill="#FFD080" opacity={0.9}/>
+      <polygon points={pts(w1,w2,w3,w4)} fill="#FFD080" opacity={0.92}/>
       <polygon points={pts(w1,w2,w3,w4)} fill="none" stroke="#8B6914" strokeWidth="0.7"/>
-      {/* Window cross */}
       <line x1={lerp2(w1,w2,0.5).x} y1={lerp2(w1,w2,0.5).y}
             x2={lerp2(w4,w3,0.5).x} y2={lerp2(w4,w3,0.5).y}
             stroke="#8B6914" strokeWidth="0.5" opacity={0.6}/>
-      {/* Chimney */}
       <polygon points={pts(ch1,ch2,ch3,ch4)} fill="#555" opacity={0.85}/>
-      {/* Wheels */}
       <ellipse cx={wl.x} cy={wl.y} rx={tw*0.06} ry={TH*0.12} fill="#222" opacity={0.85}/>
       <ellipse cx={wr.x} cy={wr.y} rx={tw*0.06} ry={TH*0.12} fill="#222" opacity={0.85}/>
-      {/* Name */}
       <text x={cx} y={cy+1.5} textAnchor="middle" fill="rgba(255,255,255,0.97)"
             fontSize="6.5" fontWeight="800" style={{pointerEvents:'none',
             filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.6))'}}>
@@ -127,61 +111,40 @@ function BarTent({bx,by,tw,td,hp,c,name,isSel,isBusy,onClick}:{
   const bS={x:bx+tw/2, y:by+td};
   const bE={x:bx+tw,   y:by+td/2};
   const bW={x:bx,      y:by+td/2};
-
-  // Tent apex
   const topCx=(tN.x+tE.x+tS.x+tW.x)/4, topCy=(tN.y+tE.y+tS.y+tW.y)/4;
   const peakH=Math.max(10, hp*0.5);
   const apex={x:topCx, y:topCy-peakH};
-
-  // Left face point helper
   const fp=(sh:number,sv:number)=>{
     const top=lerp2(tW,tS,sh), bot=lerp2(bW,bS,sh);
     return lerp2(top,bot,sv);
   };
-
-  // Entrance arch on left face
-  const e1=fp(0.15,0.42), e2=fp(0.52,0.42), e3=fp(0.52,1.0), e4=fp(0.15,1.0);
-  // Bar counter (darker strip at bottom of right face)
   const rfp=(sh:number,sv:number)=>{
     const top=lerp2(tS,tE,sh), bot=lerp2(bS,bE,sh);
     return lerp2(top,bot,sv);
   };
+  const e1=fp(0.15,0.42), e2=fp(0.52,0.42), e3=fp(0.52,1.0), e4=fp(0.15,1.0);
   const cnt1=rfp(0,0.6), cnt2=rfp(1,0.6), cnt3=rfp(1,0.78), cnt4=rfp(0,0.78);
-
-  // String lights along tent bottom edges (tW→tS and tS→tE)
   const lightsL=Array.from({length:5},(_,i)=>lerp2(tW,tS,i/4));
   const lightsR=Array.from({length:4},(_,i)=>lerp2(tS,tE,(i+1)/4));
-
   const cx=(tN.x+tE.x+tS.x+tW.x)/4, cy=(tN.y+tE.y+tS.y+tW.y)/4;
-
   return (
     <g onClick={onClick} style={{cursor:'pointer'}} className={isBusy?'glow':undefined}>
-      {/* Body */}
       <polygon points={pts(tW,tS,bS,bW)} fill={c.l}/>
       <polygon points={pts(tS,tE,bE,bS)} fill={c.r}/>
-      {/* Bar counter strip */}
       <polygon points={pts(cnt1,cnt2,cnt3,cnt4)} fill={c.a} opacity={0.7}/>
-      {/* Top face (floor of tent) */}
       <polygon points={pts(tN,tE,tS,tW)} fill={c.t}
         stroke={isSel?'#fff':'rgba(0,0,0,0.15)'} strokeWidth={isSel?2.5:0.6}/>
-      {/* Tent roof — front-left slope */}
       <polygon points={pts(apex,tW,tS)} fill={c.l} opacity={0.82}/>
-      {/* Tent roof — front-right slope */}
       <polygon points={pts(apex,tS,tE)} fill={c.r} opacity={0.82}/>
-      {/* Tent roof — back slopes (partially visible) */}
       <polygon points={pts(apex,tN,tW)} fill={c.t} opacity={0.7}/>
       <polygon points={pts(apex,tE,tN)} fill={c.t} opacity={0.6}/>
-      {/* Tent edges */}
       <line x1={apex.x} y1={apex.y} x2={tW.x} y2={tW.y} stroke="rgba(0,0,0,0.2)" strokeWidth="0.8"/>
       <line x1={apex.x} y1={apex.y} x2={tS.x} y2={tS.y} stroke="rgba(0,0,0,0.2)" strokeWidth="0.8"/>
       <line x1={apex.x} y1={apex.y} x2={tE.x} y2={tE.y} stroke="rgba(0,0,0,0.15)" strokeWidth="0.8"/>
-      {/* Entrance dark area */}
       <polygon points={pts(e1,e2,e3,e4)} fill="rgba(0,0,0,0.55)"/>
-      {/* String lights */}
       {[...lightsL,...lightsR].map((p,i)=>(
-        <circle key={i} cx={p.x} cy={p.y} r="1.8" fill="#FFD700" opacity={0.9}/>
+        <circle key={i} cx={p.x} cy={p.y} r="2" fill={['#FFD700','#FF4444','#44BBFF','#FF44FF','#44FF88'][i%5]} opacity={0.92}/>
       ))}
-      {/* Name */}
       <text x={cx} y={cy+1.5} textAnchor="middle" fill="rgba(255,255,255,0.97)"
             fontSize="6.5" fontWeight="800" style={{pointerEvents:'none',
             filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.6))'}}>
@@ -193,16 +156,16 @@ function BarTent({bx,by,tw,td,hp,c,name,isSel,isBusy,onClick}:{
 
 /* ── Palm tree ─────────────────────────────────────────────────────── */
 function palmSVG(cx:number,cy:number,s=1){
-  const angles=[0,55,110,165,220,280,335];
-  const leaves=angles.map(a=>`<ellipse cx="${cx}" cy="${cy-34*s}" rx="${16*s}" ry="${5*s}" fill="#2D8B4E" opacity="0.88" transform="rotate(${a} ${cx} ${cy-34*s})"/>`).join('');
-  return `<g class="palm"><rect x="${cx-2.5*s}" y="${cy-34*s}" width="${5*s}" height="${34*s}" fill="#8B6914" rx="2" transform="rotate(-4 ${cx} ${cy})"/>${leaves}<circle cx="${cx+2.5*s}" cy="${cy-31*s}" r="${2.8*s}" fill="#6B4226"/></g>`;
+  const angles=[0,52,105,158,212,265,318];
+  const leaves=angles.map(a=>`<ellipse cx="${cx}" cy="${cy-34*s}" rx="${17*s}" ry="${5*s}" fill="#2D8B4E" opacity="0.9" transform="rotate(${a} ${cx} ${cy-34*s})"/>`).join('');
+  return `<g class="palm"><rect x="${cx-2.5*s}" y="${cy-34*s}" width="${5*s}" height="${34*s}" fill="#8B6914" rx="2" transform="rotate(-4 ${cx} ${cy})"/>${leaves}<circle cx="${cx+3*s}" cy="${cy-30*s}" r="${3*s}" fill="#5B3210" opacity="0.9"/></g>`;
 }
 
 export function MapView({ festivalId, navigate }: Props) {
   const [puestos,setPuestos]   = useState<PuestoMapa[]>([]);
   const [loading,setLoading]   = useState(true);
   const [selected,setSelected] = useState<PuestoMapa|null>(null);
-  const [tf,setTf]             = useState({x:0,y:0,scale:0.7});
+  const [tf,setTf]             = useState({x:0,y:0,scale:0.65});
   const dragRef  = useRef({active:false,sx:0,sy:0,tx:0,ty:0});
   const touchRef = useRef<{x:number,y:number}|null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -240,9 +203,12 @@ export function MapView({ festivalId, navigate }: Props) {
   const sorted=[...mapped].sort((a,b)=>(a.gc+a.gr)-(b.gc+b.gr));
 
   /* ── Decorative positions ─────────────────────────────────────── */
-  const palms=[iso(-1.5,1),iso(-1.5,4),iso(-1.5,7),iso(2,-2),iso(8,-2.2),iso(14,-2),iso(17.5,1),iso(17.5,4),iso(17.5,7),iso(5,11),iso(11,11)];
-  const SC=6.5, SR=-3.5; // stage col/row
-  const entrIso=iso(8,11);
+  const palms=[
+    iso(-2,3),iso(-2,7),iso(2,-2.5),iso(6,-2.5),iso(11,-2.5),iso(16,-2.5),
+    iso(19,2),iso(19,6),iso(5,11.5),iso(9,12),iso(13,11.5),
+  ];
+  const SC=5.5, SR=-4.5; // stage col/row — top center
+  const entrIso=iso(8.5,13);
 
   /* ── isoBox for scene elements ───────────────────────────────── */
   function ibox(col:number,row:number,w:number,d:number,h:number){
@@ -276,7 +242,7 @@ export function MapView({ festivalId, navigate }: Props) {
       <div ref={containerRef}
            className="flex-1 overflow-hidden relative select-none"
            style={{cursor:dragRef.current.active?'grabbing':'grab',
-                   background:'linear-gradient(180deg,#5BA3D0 0%,#8CC4E8 40%,#C8E8F8 100%)'}}
+                   background:'linear-gradient(160deg,#4A8CC0 0%,#6BACD4 35%,#A8D4EC 70%,#C8E8F8 100%)'}}
            onMouseDown={onMD} onMouseMove={onMM} onMouseUp={onMU} onMouseLeave={onMU}
            onTouchStart={onTS} onTouchMove={onTM} onTouchEnd={()=>{touchRef.current=null;}}>
 
@@ -288,188 +254,267 @@ export function MapView({ festivalId, navigate }: Props) {
           <div style={{transform:`translate(${tf.x}px,${tf.y}px) scale(${tf.scale})`,
                        transformOrigin:'center center',width:'100%',height:'100%',
                        display:'flex',alignItems:'center',justifyContent:'center'}}>
-            <svg viewBox="-60 -100 560 420" width="500" height="360" style={{overflow:'visible'}}
+            <svg viewBox="-100 -140 660 520" width="520" height="400" style={{overflow:'visible'}}
                  onClick={e=>{if(e.target===e.currentTarget)setSelected(null);}}>
 
               <defs>
                 <style>{`
                   .palm{animation:sway 4s ease-in-out infinite;transform-box:fill-box;transform-origin:bottom center}
                   @keyframes sway{0%,100%{transform:rotate(-2.5deg)}50%{transform:rotate(2.5deg)}}
-                  .lpulse{animation:lp 1.8s ease-in-out infinite alternate}
-                  @keyframes lp{0%{opacity:0.4}100%{opacity:1}}
+                  .lpulse{animation:lp 1.6s ease-in-out infinite alternate}
+                  @keyframes lp{0%{opacity:0.35}100%{opacity:1}}
                   .glow{filter:drop-shadow(0 0 6px rgba(232,83,74,0.7));animation:gb 2s ease-in-out infinite alternate}
                   @keyframes gb{0%{filter:drop-shadow(0 0 3px rgba(232,83,74,0.4))}100%{filter:drop-shadow(0 0 12px rgba(232,83,74,0.9))}}
+                  .flagwave{animation:fw 2.2s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:left center}
+                  @keyframes fw{0%{transform:skewX(-5deg)}100%{transform:skewX(5deg)}}
                 `}</style>
+                <radialGradient id="gndGrad" cx="50%" cy="40%" r="65%">
+                  <stop offset="0%" stopColor="#DFC48A"/>
+                  <stop offset="70%" stopColor="#C8A96E"/>
+                  <stop offset="100%" stopColor="#9A7845"/>
+                </radialGradient>
+                <radialGradient id="stageGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#FF7B00" stopOpacity="0.4"/>
+                  <stop offset="100%" stopColor="#FF7B00" stopOpacity="0"/>
+                </radialGradient>
               </defs>
 
-              {/* ── Ground island (organic polygon) ───────────────── */}
+              {/* ── Ground island — leaf/boat shape ──────────────── */}
               {(()=>{
+                // Elongated leaf shape — narrow at both ends, wide in the middle
                 const corners=[
-                  iso(-1,4), iso(1,-1.5), iso(7,-2.5), iso(13,-2), iso(18.5,-0.5),
-                  iso(18.5,6), iso(17,12), iso(10,12.5), iso(4,12.5), iso(-1,11),
-                  iso(-1.5,7),
+                  iso(-2.5,6),   // left tip
+                  iso(-1,0.5),
+                  iso(0,-2),
+                  iso(5,-4),
+                  iso(10,-4.5),  // top center (wide)
+                  iso(16,-3.5),
+                  iso(19,0),
+                  iso(19.5,6),   // right tip area
+                  iso(17,12),
+                  iso(12,13.5),
+                  iso(8,14),     // bottom center
+                  iso(4,13.5),
+                  iso(0,12),
+                  iso(-2,9),
                 ];
-                // Shadow below ground
-                const shadow=corners.map(({x,y})=>({x,y:y+10}));
+                // Darker edge shadow
+                const shadow=corners.map(({x,y})=>({x:x+4,y:y+8}));
                 return <>
-                  <polygon points={shadow.map(p=>`${p.x},${p.y}`).join(' ')} fill="rgba(0,0,0,0.12)"/>
-                  <polygon points={corners.map(p=>`${p.x},${p.y}`).join(' ')} fill="#C8A96E"/>
-                  {/* Grass zones */}
-                  <polygon points={[iso(-0.5,-0.5),iso(7,-0.5),iso(7,5.5),iso(-0.5,5.5)].map(p=>`${p.x},${p.y}`).join(' ')} fill="#6BBF40" opacity={0.8}/>
-                  <polygon points={[iso(9.5,-0.5),iso(17.5,-0.5),iso(17.5,5.5),iso(9.5,5.5)].map(p=>`${p.x},${p.y}`).join(' ')} fill="#6BBF40" opacity={0.8}/>
+                  <polygon points={shadow.map(p=>`${p.x},${p.y}`).join(' ')} fill="rgba(0,0,0,0.18)"/>
+                  {/* Base sandy ground */}
+                  <polygon points={corners.map(p=>`${p.x},${p.y}`).join(' ')} fill="url(#gndGrad)"/>
+                  {/* Dark sandy edges for depth */}
+                  <polygon points={corners.map(p=>`${p.x},${p.y}`).join(' ')}
+                           fill="none" stroke="#8B6830" strokeWidth="3" opacity={0.5}/>
                 </>;
               })()}
 
-              {/* ── Sandy paths ──────────────────────────────────── */}
+              {/* ── Zone colored overlays ─────────────────────────── */}
               {(()=>{
-                const h=ibox(7,0,2.5,12,0.15);
-                return <><polygon points={h.left} fill="#B89050"/><polygon points={h.right} fill="#CCA860"/><polygon points={h.top} fill="#E0BF70"/></>;
+                // FOOD zone (left) — dark navy blue
+                const foodZone=[iso(-0.5,-1),iso(7,-1),iso(7,5.5),iso(-0.5,5.5)];
+                // BAR zone (right) — dark navy blue
+                const barZone=[iso(9.5,-1),iso(17.5,-1),iso(17.5,5.5),iso(9.5,5.5)];
+                // STAGE zone (top center) — orange glow area
+                const stageZone=[iso(3,-5),iso(13,-5),iso(13,-0.5),iso(3,-0.5)];
+                // VIP zone (bottom right) — yellow/gold
+                const vipZone=[iso(12,6.5),iso(18,6.5),iso(18,12.5),iso(12,12.5)];
+                // CHILL zone (bottom left) — teal/purple
+                const chillZone=[iso(-0.5,6.5),iso(7,6.5),iso(7,12.5),iso(-0.5,12.5)];
+
+                const fmt=(pts:{x:number,y:number}[])=>pts.map(p=>`${p.x.toFixed(0)},${p.y.toFixed(0)}`).join(' ');
+                return <>
+                  <polygon points={fmt(foodZone)}  fill="#1B3A6B" opacity={0.48}/>
+                  <polygon points={fmt(barZone)}   fill="#1B3A6B" opacity={0.48}/>
+                  <polygon points={fmt(stageZone)} fill="#C85A00" opacity={0.32}/>
+                  <polygon points={fmt(vipZone)}   fill="#B8960A" opacity={0.42}/>
+                  <polygon points={fmt(chillZone)} fill="#4B0082" opacity={0.22}/>
+                  {/* Stage glow ellipse */}
+                  <ellipse cx={iso(8.5,-2.5).x} cy={iso(8.5,-2.5).y+20} rx="160" ry="60" fill="url(#stageGlow)"/>
+                </>;
               })()}
+
+              {/* ── Sandy corridor (center) ───────────────────────── */}
               {(()=>{
-                const h=ibox(-0.5,5.5,18.5,1.5,0.15);
-                return <><polygon points={h.left} fill="#B89050"/><polygon points={h.right} fill="#CCA860"/><polygon points={h.top} fill="#E0BF70"/></>;
+                const h=ibox(7.2,-0.5,1.6,14,0.12);
+                return <><polygon points={h.left} fill="#B89050" opacity={0.7}/><polygon points={h.right} fill="#CCA860" opacity={0.7}/><polygon points={h.top} fill="#DFB870" opacity={0.85}/></>;
               })()}
-              {/* Path arrows */}
-              {[2,5,8].map(r=>{
+              {/* Horizontal corridor */}
+              {(()=>{
+                const h=ibox(-0.5,5.8,18,1.2,0.12);
+                return <><polygon points={h.left} fill="#B89050" opacity={0.6}/><polygon points={h.right} fill="#CCA860" opacity={0.6}/><polygon points={h.top} fill="#DFB870" opacity={0.8}/></>;
+              })()}
+              {/* Dotted path center line */}
+              {[0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5,10.5,11.5].map(r=>{
                 const {x,y}=iso(8,r);
-                return <polygon key={r} points={`${x},${y-8} ${x+6},${y} ${x-6},${y}`} fill="#FF6B35" opacity={0.55}/>;
+                return <ellipse key={r} cx={x} cy={y} rx={3} ry={1.5} fill="rgba(255,255,255,0.35)"/>;
+              })}
+              {/* Direction arrows on corridor */}
+              {[1.5,3.5,5.5].map(r=>{
+                const {x,y}=iso(8,r);
+                return <polygon key={r} points={`${x},${y-9} ${x+7},${y} ${x-7},${y}`} fill="#22CC44" opacity={0.7}/>;
               })}
 
               {/* ── Entrance plaza ────────────────────────────────── */}
               {(()=>{
-                const h=ibox(5.5,10,6,2,0.18);
-                return <><polygon points={h.left} fill="#C09858"/><polygon points={h.right} fill="#D4AE68"/><polygon points={h.top} fill="#ECC878"/></>;
+                const h=ibox(5,11,7,3,0.15);
+                return <><polygon points={h.left} fill="#B09050"/><polygon points={h.right} fill="#C4A460"/><polygon points={h.top} fill="#DEC070"/></>;
               })()}
 
-              {/* ── VIP platform ─────────────────────────────────── */}
+              {/* ── Stage (ESCENARIO PRINCIPAL — orange) ─────────── */}
               {(()=>{
-                const step1=ibox(12.5,6.5,5.5,5,0.28);
-                const step2=ibox(13,7,4.5,4,0.38);
-                const tent=ibox(13.3,7.3,3.8,3.4,0.18);
-                const {x:vx,y:vy}=iso(15.3,9);
-                // Tent apex
-                const tpN={x:tent.cx,y:tent.cy-tent.hp};
-                const tpE={x:tent.cx+tent.tw/2+10,y:tent.cy-tent.hp/2};
-                const tpS={x:tent.cx,y:tent.cy+10};
-                const tpW={x:tent.cx-tent.tw/2-10,y:tent.cy-tent.hp/2};
-                const ap={x:tent.cx,y:tent.cy-tent.hp-14};
-                return <>
-                  <polygon points={step1.left} fill="#6B5535"/><polygon points={step1.right} fill="#7B6545"/><polygon points={step1.top} fill="#8B7555"/>
-                  <polygon points={step2.left} fill="#7B6545"/><polygon points={step2.right} fill="#8B7555"/><polygon points={step2.top} fill="#9B8565"/>
-                  <polygon points={tent.left}  fill="#D8D0C8"/><polygon points={tent.right} fill="#C8C0B8"/><polygon points={tent.top}  fill="#F0EDE8"/>
-                  <polygon points={pts({x:ap.x,y:ap.y},tpW,tpS)} fill="#E0DCd8" opacity={0.85}/>
-                  <polygon points={pts({x:ap.x,y:ap.y},tpS,tpE)} fill="#D0CCC8" opacity={0.85}/>
-                  {/* Rope barrier */}
-                  {[0,1,2].map(i=>{
-                    const px=iso(13+i*1.8,10.8);
-                    const b=ibox(13+i*1.8-0.1,10.8-0.1,0.2,0.2,0.6);
-                    return <g key={i}><polygon points={b.left} fill="#8B6914"/><polygon points={b.top} fill="#A67C28"/></g>;
-                  })}
-                  <rect x={vx-18} y={vy-28} width="36" height="14" rx="4" fill="#FFD700"/>
-                  <text x={vx} y={vy-18} textAnchor="middle" fontSize="8" fontWeight="800" fill="#6B4A00">⭐ VIP</text>
-                </>;
-              })()}
-
-              {/* ── Stage ────────────────────────────────────────── */}
-              {(()=>{
-                const sc=SC,sr=SR;
-                const base=ibox(sc,sr,6,2.5,0.55);
-                const wall=ibox(sc,sr+2.2,6,0.35,3.5);
-                const roof=ibox(sc-0.5,sr+0.5,7,2.2,0.2);
-                const stripe=ibox(sc-0.5,sr+2.4,7,0.35,0.15);
-                const spkL=ibox(sc-0.7,sr+0.5,0.55,0.55,2.8);
-                const spkR=ibox(sc+6.2,sr+0.5,0.55,0.55,2.8);
-                // LED screen on back wall
-                const lp=iso(sc+1,sr+2.5);
-                const lp2=iso(sc+5,sr+2.5);
-                const lsp=iso(sc+1,sr+3);
-                const lsp2=iso(sc+5,sr+3);
-                const {x:lx,y:ly}=iso(sc+3,sr+1.5);
-                const lightCols=['#FF3232','#3232FF','#FFFF32','#32FF32','#FF32FF','#FF8800'];
+                const sc=SC, sr=SR;
+                const base=ibox(sc,sr,7,3,0.6);
+                const wall=ibox(sc,sr+2.5,7,0.4,4.5);
+                const roof=ibox(sc-0.6,sr+0.5,8.2,2.8,0.25);
+                const spkL=ibox(sc-0.8,sr+0.6,0.6,0.6,3.5);
+                const spkR=ibox(sc+7.2,sr+0.6,0.6,0.6,3.5);
+                const ledPos=iso(sc+1,sr+3), ledPos2=iso(sc+6,sr+3);
+                const ledBot=iso(sc+1,sr+3.5), ledBot2=iso(sc+6,sr+3.5);
+                const {x:lx,y:ly}=iso(sc+3.5,sr+1.8);
+                const lightCols=['#FF2020','#2020FF','#FFFF20','#20FF60','#FF20FF','#FF8800','#20FFFF'];
+                const orangeL='#AA4A00', orangeM='#CC5C00', orangeT='#FF6B00';
+                const orangeRoof='#883800', orangeRoofT='#CC5500';
                 return <g>
-                  <polygon points={base.left}  fill="#606060"/><polygon points={base.right} fill="#787878"/><polygon points={base.top} fill="#909090"/>
-                  <polygon points={wall.left}  fill="#0E0E0E"/><polygon points={wall.right} fill="#181818"/><polygon points={wall.top}  fill="#222"/>
-                  {/* LED screen */}
-                  <polygon points={pts({x:lp.x+10,y:lp.y-25},{x:lp2.x-10,y:lp2.y-25},{x:lsp2.x-10,y:lsp2.y-25},{x:lsp.x+10,y:lsp.y-25})} fill="#0044CC" opacity={0.85}/>
-                  <polygon points={pts({x:lp.x+10,y:lp.y-25},{x:lp2.x-10,y:lp2.y-25},{x:lsp2.x-10,y:lsp2.y-25},{x:lsp.x+10,y:lsp.y-25})} fill="none" stroke="#2266FF" strokeWidth="1"/>
-                  {/* Screen scan lines */}
-                  {[0,1,2,3].map(i=>{
-                    const ty=(lp.y-25)+(lp.y-lsp.y+25)*i/4;
-                    return <line key={i} x1={lp.x+10} y1={ty} x2={lp2.x-10} y2={ty+((lp2.y-lp.y)/4)} stroke="white" strokeWidth="0.4" opacity={0.3}/>;
+                  {/* Base platform */}
+                  <polygon points={base.left}  fill="#505050"/><polygon points={base.right} fill="#686868"/><polygon points={base.top} fill="#808080"/>
+                  {/* Back wall */}
+                  <polygon points={wall.left}  fill="#0A0A0A"/><polygon points={wall.right} fill="#141414"/><polygon points={wall.top}  fill="#1E1E1E"/>
+                  {/* LED screen — big bright display */}
+                  <polygon points={pts({x:ledPos.x+12,y:ledPos.y-45},{x:ledPos2.x-12,y:ledPos2.y-45},{x:ledBot2.x-12,y:ledBot2.y-35},{x:ledBot.x+12,y:ledBot.y-35})} fill="#002288" opacity={0.9}/>
+                  <polygon points={pts({x:ledPos.x+12,y:ledPos.y-45},{x:ledPos2.x-12,y:ledPos2.y-45},{x:ledBot2.x-12,y:ledBot2.y-35},{x:ledBot.x+12,y:ledBot.y-35})} fill="none" stroke="#4488FF" strokeWidth="1.5"/>
+                  {/* Screen glow lines */}
+                  {[0,1,2,3,4].map(i=>{
+                    const ty=(ledPos.y-45)+(ledPos.y-ledBot.y+45)*i/5;
+                    return <line key={i} x1={ledPos.x+12} y1={ty} x2={ledPos2.x-12} y2={ty+((ledPos2.y-ledPos.y)/5)} stroke="#6699FF" strokeWidth="0.5" opacity={0.4}/>;
                   })}
-                  <polygon points={roof.left}  fill="#303030"/><polygon points={roof.right} fill="#3C3C3C"/><polygon points={roof.top}  fill="#484848"/>
+                  {/* Roof — orange color */}
+                  <polygon points={roof.left}  fill={orangeRoof}/><polygon points={roof.right} fill={orangeL}/><polygon points={roof.top} fill={orangeRoofT}/>
                   {/* Roof truss lines */}
-                  {[0.2,0.5,0.8].map((t,i)=>{
-                    const p1=iso(sc-0.5+t*7,sr+0.5), p2=iso(sc-0.5+t*7,sr+2.7);
-                    return <line key={i} x1={p1.x} y1={p1.y-roof.hp} x2={p2.x} y2={p2.y-roof.hp} stroke="#666" strokeWidth="1" opacity={0.7}/>;
+                  {[0.15,0.4,0.65,0.9].map((t,i)=>{
+                    const p1=iso(sc-0.6+t*8.2,sr+0.5), p2=iso(sc-0.6+t*8.2,sr+3.3);
+                    return <line key={i} x1={p1.x} y1={p1.y-roof.hp} x2={p2.x} y2={p2.y-roof.hp} stroke="#CC8844" strokeWidth="1.2" opacity={0.6}/>;
                   })}
-                  <polygon points={stripe.left} fill="#CC5520"/><polygon points={stripe.right} fill="#DD6630"/><polygon points={stripe.top} fill="#FF6B35"/>
-                  <polygon points={spkL.left} fill="#0C0C0C"/><polygon points={spkL.right} fill="#141414"/><polygon points={spkL.top} fill="#1C1C1C"/>
-                  <polygon points={spkR.left} fill="#0C0C0C"/><polygon points={spkR.right} fill="#141414"/><polygon points={spkR.top} fill="#1C1C1C"/>
-                  {/* Stage lights hanging from roof */}
-                  {[0.4,1.2,2.0,2.8,3.6,4.4,5.2].map((off,i)=>{
-                    const lpos=iso(sc+off,sr+2.4);
-                    return <g key={i} className="lpulse" style={{animationDelay:`${i*0.22}s`}}>
-                      <line x1={lpos.x} y1={lpos.y-roof.hp+2} x2={lpos.x} y2={lpos.y-roof.hp+8} stroke="#888" strokeWidth="0.8"/>
-                      <circle cx={lpos.x} cy={lpos.y-roof.hp+10} r="3.5" fill={lightCols[i%6]}/>
+                  {/* Orange stripe at base of roof */}
+                  {(()=>{ const s=ibox(sc-0.6,sr+2.8,8.2,0.4,0.18); return <><polygon points={s.left} fill={orangeL}/><polygon points={s.right} fill={orangeM}/><polygon points={s.top} fill={orangeT}/></>; })()}
+                  {/* Speaker towers */}
+                  <polygon points={spkL.left} fill="#080808"/><polygon points={spkL.right} fill="#101010"/><polygon points={spkL.top} fill="#181818"/>
+                  <polygon points={spkR.left} fill="#080808"/><polygon points={spkR.right} fill="#101010"/><polygon points={spkR.top} fill="#181818"/>
+                  {/* Hanging colored lights */}
+                  {[0.5,1.2,1.9,2.6,3.3,4.0,4.7,5.4,6.1].map((off,i)=>{
+                    const lpos=iso(sc+off,sr+2.8);
+                    return <g key={i} className="lpulse" style={{animationDelay:`${i*0.18}s`}}>
+                      <line x1={lpos.x} y1={lpos.y-roof.hp+2} x2={lpos.x} y2={lpos.y-roof.hp+9} stroke="#999" strokeWidth="0.8"/>
+                      <circle cx={lpos.x} cy={lpos.y-roof.hp+11} r="4" fill={lightCols[i%7]}/>
                     </g>;
                   })}
-                  <text x={lx} y={ly-65} textAnchor="middle" fontSize="10" fontWeight="900" fill="#fff"
-                        style={{filter:'drop-shadow(0 1px 4px rgba(0,0,0,0.9))'}}>🎵 ESCENARIO</text>
+                  {/* Stage label */}
+                  <rect x={lx-48} y={ly-88} width="96" height="18" rx="4" fill="#FF6B00" opacity={0.92}/>
+                  <text x={lx} y={ly-75} textAnchor="middle" fontSize="9.5" fontWeight="900" fill="#fff"
+                        style={{filter:'drop-shadow(0 1px 3px rgba(0,0,0,0.8))'}}>🎵 ESCENARIO PRINCIPAL</text>
                 </g>;
               })()}
 
-              {/* ── Fence perimeter ───────────────────────────────── */}
-              {[
-                ...Array.from({length:18},(_,c)=>ibox(c,-0.55,1,0.12,0.6)),
-                ...Array.from({length:18},(_,c)=>ibox(c,12.45,1,0.12,0.6)),
-                ...Array.from({length:13},(_,r)=>ibox(-0.55,r,0.12,1,0.6)),
-                ...Array.from({length:13},(_,r)=>ibox(17.45,r,0.12,1,0.6)),
-              ].map((b,i)=>(
-                <g key={`f${i}`}><polygon points={b.left} fill="#3E1A08"/><polygon points={b.right} fill="#4E2810"/><polygon points={b.top} fill="#603620"/></g>
-              ))}
+              {/* ── Crowd near stage ──────────────────────────────── */}
+              {Array.from({length:28},(_,i)=>{
+                const cc=SC+0.3+(i%7)*0.9, cr=SR+3.6+Math.floor(i/7)*0.55;
+                const {x,y}=iso(cc,cr);
+                const hues=['#FF5555','#5566FF','#FFCC44','#44FF99','#FF55CC','#55DDFF','#FF8844'];
+                return <ellipse key={i} cx={x} cy={y} rx={5} ry={2.8} fill={hues[i%7]} opacity={0.72}/>;
+              })}
 
-              {/* ── Zone label signs ──────────────────────────────── */}
+              {/* ── VIP area (gold/yellow) ────────────────────────── */}
               {(()=>{
-                const foodP=iso(2,-1.2);
-                const barP=iso(13,-1.2);
+                const step1=ibox(12.5,6.5,5.5,5.5,0.25);
+                const step2=ibox(13,7,4.5,4.5,0.35);
+                const tent=ibox(13.3,7.3,3.8,3.8,0.18);
+                const {x:vx,y:vy}=iso(15.2,9.2);
+                const tpE={x:tent.cx+tent.tw/2+10,y:tent.cy-tent.hp/2};
+                const tpS={x:tent.cx,y:tent.cy+10};
+                const tpW={x:tent.cx-tent.tw/2-10,y:tent.cy-tent.hp/2};
+                const ap={x:tent.cx,y:tent.cy-tent.hp-18};
                 return <>
-                  <rect x={foodP.x-22} y={foodP.y-14} width="44" height="14" rx="6" fill="#FF6B35" opacity={0.88}/>
-                  <text x={foodP.x} y={foodP.y-4} textAnchor="middle" fontSize="7.5" fontWeight="800" fill="#fff">🍕 FOOD ZONE</text>
-                  <rect x={barP.x-20} y={barP.y-14} width="40" height="14" rx="6" fill="#A67C52" opacity={0.88}/>
-                  <text x={barP.x} y={barP.y-4} textAnchor="middle" fontSize="7.5" fontWeight="800" fill="#fff">🍺 BAR ZONE</text>
+                  <polygon points={step1.left} fill="#7A6225"/><polygon points={step1.right} fill="#8A7235"/><polygon points={step1.top} fill="#A89048"/>
+                  <polygon points={step2.left} fill="#A08030"/><polygon points={step2.right} fill="#B09040"/><polygon points={step2.top} fill="#D4B050"/>
+                  <polygon points={tent.left}  fill="#C8B040"/><polygon points={tent.right} fill="#D8C050"/><polygon points={tent.top}  fill="#F0D860"/>
+                  {/* Tent peak */}
+                  <polygon points={pts(ap,tpW,tpS)} fill="#D4BC44" opacity={0.88}/>
+                  <polygon points={pts(ap,tpS,tpE)} fill="#C4AC34" opacity={0.88}/>
+                  {/* Gold rope posts */}
+                  {[0,1,2,3].map(i=>{
+                    const b=ibox(13+i*1.5,10.5,0.15,0.15,0.7);
+                    return <g key={i}><polygon points={b.left} fill="#8B6914"/><polygon points={b.top} fill="#D4A820"/></g>;
+                  })}
+                  {/* Gold rope lines */}
+                  <line x1={iso(13,10.5).x} y1={iso(13,10.5).y} x2={iso(17.5,10.5).x} y2={iso(17.5,10.5).y} stroke="#D4A820" strokeWidth="1.2" opacity={0.8}/>
+                  {/* VIP badge */}
+                  <rect x={vx-24} y={vy-36} width="48" height="18" rx="5" fill="#FFD700"/>
+                  <rect x={vx-24} y={vy-36} width="48" height="18" rx="5" fill="none" stroke="#AA8800" strokeWidth="1"/>
+                  <text x={vx} y={vy-23} textAnchor="middle" fontSize="9" fontWeight="900" fill="#5A4000">⭐ VIP</text>
                 </>;
               })()}
 
-              {/* ── Floating service icons ────────────────────────── */}
-              {[
-                {p:iso(8.5,5.5), icon:'🚻', bg:'#0066CC'},
-                {p:iso(6.5,10),  icon:'ℹ',  bg:'#0066CC'},
-                {p:iso(10,10),   icon:'🩺',  bg:'#CC0000'},
-              ].map(({p,icon,bg},i)=>(
-                <g key={i}>
-                  <circle cx={p.x} cy={p.y-12} r="9" fill={bg} opacity={0.9}/>
-                  <text x={p.x} y={p.y-8} textAnchor="middle" fontSize="9">{icon}</text>
-                </g>
-              ))}
-
-              {/* ── Decorations ──────────────────────────────────── */}
-              {/* Kiosk */}
+              {/* ── Chill zone / Picnic (bottom left) ────────────── */}
               {(()=>{
-                const k=ibox(8,4.5,1,1,0.9), kr=ibox(7.7,4.2,1.6,1.6,0.15);
-                return <><polygon points={k.left} fill="#C07020"/><polygon points={k.right} fill="#D08030"/><polygon points={k.top} fill="#EE9A40"/>
-                  <polygon points={kr.left} fill="#CC4010"/><polygon points={kr.right} fill="#DD5020"/><polygon points={kr.top} fill="#FF6428"/></>;
+                // Striped circus tent
+                const tent=ibox(1,8.5,3.5,3.5,1.2);
+                const topCx=tent.cx, topCy=tent.cy-tent.hp;
+                const apex={x:topCx,y:topCy-22};
+                const tN={x:topCx,y:topCy};
+                const tE={x:topCx+tent.tw/2,y:topCy+tent.td/2};
+                const tS={x:topCx,y:topCy+tent.td};
+                const tW={x:topCx-tent.tw/2,y:topCy+tent.td/2};
+                const {x:tx,y:ty}=iso(2.5,10);
+                return <>
+                  <polygon points={tent.left}  fill="#CC1111"/><polygon points={tent.right} fill="#EE2222"/><polygon points={tent.top}  fill="#FFFFFF" opacity={0.6}/>
+                  {/* Red-white striped roof */}
+                  <polygon points={pts(apex,tW,tS)} fill="#DD1111" opacity={0.9}/>
+                  <polygon points={pts(apex,tS,tE)} fill="#EE3333" opacity={0.9}/>
+                  <polygon points={pts(apex,tN,tW)} fill="#FF5555" opacity={0.75}/>
+                  <polygon points={pts(apex,tE,tN)} fill="#FF4444" opacity={0.6}/>
+                  {/* White stripes on left face */}
+                  {[0.2,0.5,0.8].map((t,i)=>{
+                    const p1=lerp2({x:apex.x,y:apex.y},{x:tW.x,y:tW.y},t);
+                    const p2=lerp2({x:apex.x,y:apex.y},{x:tS.x,y:tS.y},t);
+                    return <line key={i} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="white" strokeWidth="2.5" opacity={0.5}/>;
+                  })}
+                  <rect x={tx-20} y={ty-22} width="40" height="12" rx="3" fill="#8B0000" opacity={0.85}/>
+                  <text x={tx} y={ty-12} textAnchor="middle" fontSize="7.5" fontWeight="800" fill="#fff">PICNIC</text>
+                </>;
               })()}
-              {/* Trash bins */}
-              {[[3.5,5],[8.5,5],[13.5,5]].map(([c,r],i)=>{
-                const b=ibox(c,r,0.3,0.3,0.65);
-                return <g key={i}><polygon points={b.left} fill="#222"/><polygon points={b.right} fill="#2E2E2E"/><polygon points={b.top} fill="#3A3A3A"/></g>;
+
+              {/* ── Service kiosk on corridor ─────────────────────── */}
+              {(()=>{
+                const k=ibox(7.8,4.2,1.2,1.2,1.0);
+                const kr=ibox(7.55,3.95,1.7,1.7,0.18);
+                return <><polygon points={k.left} fill="#C07020"/><polygon points={k.right} fill="#D08030"/><polygon points={k.top} fill="#F09A40"/>
+                  <polygon points={kr.left} fill="#AA3800"/><polygon points={kr.right} fill="#CC4800"/><polygon points={kr.top} fill="#FF5A14"/></>;
+              })()}
+
+              {/* ── Trash bins ────────────────────────────────────── */}
+              {[[3.5,5.5],[8.5,5.5],[13.5,5.5]].map(([c,r],i)=>{
+                const b=ibox(c,r,0.35,0.35,0.7);
+                return <g key={i}><polygon points={b.left} fill="#1A5E1A"/><polygon points={b.right} fill="#227722"/><polygon points={b.top} fill="#2E8B2E"/></g>;
               })}
-              {/* Bushes */}
-              {[[11.5,6.8],[11.5,8.2],[11.5,9.6],[11.5,11]].map(([c,r],i)=>{
-                const b=ibox(c,r,0.65,0.65,0.6);
-                return <g key={i}><polygon points={b.left} fill="#1A5818"/><polygon points={b.right} fill="#247022"/><polygon points={b.top} fill="#308830"/></g>;
+
+              {/* ── Bushes / planters ─────────────────────────────── */}
+              {[[11,6.5],[11,8],[11,9.5],[11,11],[5.5,6.5],[5.5,8]].map(([c,r],i)=>{
+                const b=ibox(c,r,0.7,0.7,0.6);
+                const greens=['#1A6A18','#246B22','#1E7A1A'];
+                const g=greens[i%3];
+                return <g key={i}><polygon points={b.left} fill={g}/><polygon points={b.right} fill={g} opacity={0.85}/><polygon points={b.top} fill="#3AAA38"/></g>;
               })}
+
+              {/* ── Fence perimeter ───────────────────────────────── */}
+              {[
+                ...Array.from({length:18},(_,c)=>ibox(c,-0.7,1,0.12,0.7)),
+                ...Array.from({length:18},(_,c)=>ibox(c,13.58,1,0.12,0.7)),
+                ...Array.from({length:15},(_,r)=>ibox(-0.7,r,0.12,1,0.7)),
+                ...Array.from({length:15},(_,r)=>ibox(18.58,r,0.12,1,0.7)),
+              ].map((b,i)=>(
+                <g key={`f${i}`}><polygon points={b.left} fill="#3E1A08"/><polygon points={b.right} fill="#4E2810"/><polygon points={b.top} fill="#5E3820"/></g>
+              ))}
 
               {/* ── Stands — sorted back→front ───────────────────── */}
               {sorted.map(p=>{
@@ -488,37 +533,102 @@ export function MapView({ festivalId, navigate }: Props) {
                   : <BarTent   key={p.id} {...props}/>;
               })}
 
-              {/* ── Crowd near stage ──────────────────────────────── */}
-              {Array.from({length:20},(_,i)=>{
-                const cc=SC+0.5+(i%5)*0.9, cr=SR+3.2+Math.floor(i/5)*0.6;
-                const {x,y}=iso(cc,cr);
-                const hues=['#FF6464','#6464FF','#FFD064','#64FF96','#FF80CC'];
-                return <ellipse key={i} cx={x} cy={y} rx={4} ry={2.5} fill={hues[i%5]} opacity={0.7}/>;
-              })}
+              {/* ── Zone label signs ──────────────────────────────── */}
+              {(()=>{
+                const foodP=iso(2,-2.2), barP=iso(13.5,-2.2), vipP=iso(15.5,7.2), chillP=iso(2.5,8.5);
+                const stageP=iso(8.5,-5);
+                return <>
+                  {/* FOOD ZONE */}
+                  <rect x={foodP.x-28} y={foodP.y-16} width="56" height="16" rx="6" fill="#1B3A6B" opacity={0.92}/>
+                  <text x={foodP.x} y={foodP.y-5} textAnchor="middle" fontSize="7.5" fontWeight="800" fill="#fff">🍕 FOOD ZONE</text>
+                  {/* BAR ZONE */}
+                  <rect x={barP.x-26} y={barP.y-16} width="52" height="16" rx="6" fill="#1B3A6B" opacity={0.92}/>
+                  <text x={barP.x} y={barP.y-5} textAnchor="middle" fontSize="7.5" fontWeight="800" fill="#fff">🍺 BAR ZONE</text>
+                  {/* VIP */}
+                  <rect x={vipP.x-24} y={vipP.y-16} width="48" height="16" rx="6" fill="#8B6914" opacity={0.88}/>
+                  <text x={vipP.x} y={vipP.y-5} textAnchor="middle" fontSize="7.5" fontWeight="800" fill="#FFE66D">VIP'S AREA</text>
+                  {/* CHILL */}
+                  <rect x={chillP.x-26} y={chillP.y-16} width="52" height="16" rx="6" fill="#5B008E" opacity={0.82}/>
+                  <text x={chillP.x} y={chillP.y-5} textAnchor="middle" fontSize="7.5" fontWeight="800" fill="#fff">🎪 CHILL ZONE</text>
+                  {/* Stage - above fence */}
+                  <rect x={stageP.x-44} y={stageP.y-16} width="88" height="16" rx="6" fill="#CC5500" opacity={0.92}/>
+                  <text x={stageP.x} y={stageP.y-5} textAnchor="middle" fontSize="7.5" fontWeight="800" fill="#fff">🎵 ESCENARIOS / STAGES</text>
+                </>;
+              })()}
+
+              {/* ── Floating service icons ────────────────────────── */}
+              {[
+                {p:iso(8,5.8),   icon:'🚻', bg:'#0055CC', lbl:'WC'},
+                {p:iso(3.5,6.2), icon:'🚻', bg:'#0055CC', lbl:'WC'},
+                {p:iso(13.5,6.2),icon:'🚻', bg:'#0055CC', lbl:'WC'},
+                {p:iso(6,10.5),  icon:'ℹ',  bg:'#0077AA', lbl:'INFO'},
+                {p:iso(10,10.5), icon:'🩺',  bg:'#CC0000', lbl:''},
+                {p:iso(15.5,5.5),icon:'💳',  bg:'#6600CC', lbl:'CASHLESS'},
+              ].map(({p,icon,bg,lbl},i)=>(
+                <g key={i}>
+                  <circle cx={p.x} cy={p.y-14} r="10" fill={bg} opacity={0.92}/>
+                  <text x={p.x} y={p.y-10} textAnchor="middle" fontSize="10">{icon}</text>
+                  {lbl&&<text x={p.x} y={p.y-1} textAnchor="middle" fontSize="5.5" fontWeight="700" fill="#fff">{lbl}</text>}
+                </g>
+              ))}
 
               {/* ── Palm trees ───────────────────────────────────── */}
-              <g dangerouslySetInnerHTML={{__html:palms.map((p,i)=>palmSVG(p.x,p.y,0.75+i%3*0.07)).join('')}}/>
+              <g dangerouslySetInnerHTML={{__html:palms.map((p,i)=>palmSVG(p.x,p.y,0.72+i%3*0.08)).join('')}}/>
 
-              {/* ── Entrance arch ─────────────────────────────────── */}
+              {/* ── Entrance arch (bottom center) ────────────────── */}
               {(()=>{
                 const {x,y}=entrIso;
                 return <g>
-                  <rect x={x-28} y={y-46} width="10" height="46" fill="#A67C52" rx="2"/>
-                  <rect x={x+18} y={y-46} width="10" height="46" fill="#A67C52" rx="2"/>
-                  <path d={`M${x-28} ${y-46} Q${x} ${y-80} ${x+28} ${y-46}`} fill="none" stroke="#A67C52" strokeWidth="8"/>
-                  <text x={x} y={y-50} textAnchor="middle" fontSize="8.5" fill="#FF6B35" fontWeight="800">FESTIVAL</text>
-                  {['#FF6B35','#FFD700','#4CAF88','#FF6B35','#FFD700'].map((col,i)=>{
-                    const fx=x-16+i*8;
-                    return <polygon key={i} points={`${fx},${y-73} ${fx+5},${y-65} ${fx-5},${y-65}`} fill={col}/>;
+                  {/* Arch pillars */}
+                  <rect x={x-35} y={y-56} width="12" height="56" fill="#6B4A20" rx="3"/>
+                  <rect x={x+23} y={y-56} width="12" height="56" fill="#6B4A20" rx="3"/>
+                  {/* Arch curve */}
+                  <path d={`M${x-35} ${y-56} Q${x} ${y-100} ${x+35} ${y-56}`} fill="none" stroke="#6B4A20" strokeWidth="10"/>
+                  {/* Festival name banner */}
+                  <rect x={x-40} y={y-78} width="80" height="20" rx="4" fill="#FF6B00" opacity={0.95}/>
+                  <text x={x} y={y-63} textAnchor="middle" fontSize="10" fontWeight="900" fill="#fff">FESTIVAL</text>
+                  {/* Colorful flags */}
+                  {['#FF4444','#FFD700','#44CC44','#4488FF','#FF44CC','#44FFEE'].map((col,i)=>{
+                    const fx=x-25+i*10;
+                    return <g key={i} className="flagwave">
+                      <line x1={fx} y1={y-95} x2={fx} y2={y-70} stroke="#666" strokeWidth="0.8"/>
+                      <polygon points={`${fx},${y-95} ${fx+9},${y-88} ${fx},${y-81}`} fill={col}/>
+                    </g>;
                   })}
+                  {/* GENERAL ENTRANCE label */}
+                  <rect x={x-38} y={y-58} width="76" height="14" rx="3" fill="#22AA44" opacity={0.88}/>
+                  <text x={x} y={y-47} textAnchor="middle" fontSize="7" fontWeight="800" fill="#fff">ENTRADA GENERAL</text>
+                  {/* Green exit arrows */}
+                  {[-1,0,1].map(i=>{
+                    const ax=x+i*14, ay=y+4;
+                    return <polygon key={i} points={`${ax},${ay-10} ${ax+7},${ay} ${ax-7},${ay}`} fill="#22CC44" opacity={0.8}/>;
+                  })}
+                </g>;
+              })()}
+
+              {/* ── Exit arrows at perimeter ──────────────────────── */}
+              {[iso(-2,6), iso(19.5,6)].map(({x,y},i)=>(
+                <g key={i}>
+                  <circle cx={x} cy={y} r="11" fill="#22AA44" opacity={0.88}/>
+                  <text x={x} y={y+4} textAnchor="middle" fontSize="9" fontWeight="900" fill="#fff">{i===0?'←EXIT→'[0]:'EXIT'}</text>
+                </g>
+              ))}
+
+              {/* ── Meeting point ─────────────────────────────────── */}
+              {(()=>{
+                const mp=iso(8,7);
+                return <g>
+                  <circle cx={mp.x} cy={mp.y-14} r="10" fill="#1144AA" opacity={0.9}/>
+                  <text x={mp.x} y={mp.y-10} textAnchor="middle" fontSize="11">👣</text>
+                  <text x={mp.x} y={mp.y} textAnchor="middle" fontSize="5.5" fontWeight="700" fill="#1144AA" opacity={0.8}>MEETING POINT</text>
                 </g>;
               })()}
 
               {/* ── Corridor label ────────────────────────────────── */}
               {(()=>{
                 const p=iso(8.2,3);
-                return <text x={p.x} y={p.y} textAnchor="middle" fontSize="7" fill="#8B6914" opacity={0.65}
-                             transform={`rotate(-26,${p.x},${p.y})`} fontStyle="italic">Main Corridor</text>;
+                return <text x={p.x} y={p.y+2} textAnchor="middle" fontSize="6.5" fill="#8B6914" opacity={0.6}
+                             transform={`rotate(-27,${p.x},${p.y})`} fontStyle="italic" fontWeight="600">Main Corridor</text>;
               })()}
 
             </svg>
@@ -530,7 +640,7 @@ export function MapView({ festivalId, navigate }: Props) {
           {[
             {lbl:<Plus className="w-4 h-4"/>,   fn:()=>setTf(t=>({...t,scale:clamp(t.scale*1.2,0.3,5)}))},
             {lbl:<Minus className="w-4 h-4"/>,  fn:()=>setTf(t=>({...t,scale:clamp(t.scale/1.2,0.3,5)}))},
-            {lbl:<span className="text-[9px] font-bold">FIT</span>, fn:()=>setTf({x:0,y:0,scale:0.7})},
+            {lbl:<span className="text-[9px] font-bold">FIT</span>, fn:()=>setTf({x:0,y:0,scale:0.65})},
           ].map(({lbl,fn},i)=>(
             <button key={i} onClick={fn}
               className="w-8 h-8 rounded-full flex items-center justify-center shadow-lg border"
@@ -539,9 +649,25 @@ export function MapView({ festivalId, navigate }: Props) {
             </button>
           ))}
         </div>
+
+        {/* Legend — zone colors */}
+        <div className="absolute top-2 left-2 rounded-xl p-2 flex flex-col gap-1"
+             style={{backgroundColor:'rgba(255,243,228,0.92)',border:'1px solid #E8D5C0',fontSize:'9px',minWidth:'90px'}}>
+          {[
+            {col:'#FF6B00',lbl:'Escenario'},
+            {col:'#1B3A6B',lbl:'Comida / Bar'},
+            {col:'#B8960A',lbl:'VIP'},
+            {col:'#5B008E',lbl:'Chill'},
+          ].map(({col,lbl})=>(
+            <span key={lbl} className="flex items-center gap-1.5 font-semibold" style={{color:'#4A3020'}}>
+              <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{backgroundColor:col}}/>
+              {lbl}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* Legend */}
+      {/* Stand legend */}
       <div className="flex-shrink-0 flex items-center justify-around py-2 border-t"
            style={{backgroundColor:'#FFF3E4',borderColor:'#E8D5C0'}}>
         <span className="text-[10px] font-semibold flex items-center gap-1" style={{color:'#8B6650'}}>
