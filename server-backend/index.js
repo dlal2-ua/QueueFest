@@ -156,6 +156,503 @@ if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
   );
 }
 
+const WAIT_ZERO_NOTIFICATION_TYPE = 'espera_cero';
+const waitTrackerByPuesto = new Map();
+const waitEvaluationLocks = new Map();
+const notificationMetrics = {
+  generated: 0,
+  deduplicated: 0,
+  deduplicatedByReason: {},
+  skippedByReason: {},
+  pushSent: 0,
+  pushFailed: 0,
+  pushSkipped: 0
+};
+
+function incrementReasonCounter(target, reason) {
+  target[reason] = (target[reason] || 0) + 1;
+}
+
+function metricSkip(reason) {
+  incrementReasonCounter(notificationMetrics.skippedByReason, reason);
+}
+
+function metricDedup(reason) {
+  notificationMetrics.deduplicated += 1;
+  incrementReasonCounter(notificationMetrics.deduplicatedByReason, reason);
+}
+
+function fallbackWaitZeroMessage(puestoNombre) {
+  return `La ${puestoNombre} no tiene espera ahora mismo. Aprovecha para pedir sin cola.`;
+}
+
+function parseJsonSafe(value) {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchWaitSnapshotForPuesto(puestoId) {
+  const [rows] = await db.query(
+    `SELECT
+       p.id,
+       p.nombre,
+       p.tipo AS puesto_tipo,
+       p.abierto,
+       COALESCE(pe.total, 0) AS pedidos_activos,
+       ROUND((COALESCE(pe.total, 0) * p.tiempo_servicio_medio) / GREATEST(p.num_empleados, 1)) AS espera_calculada_min
+     FROM puestos p
+     LEFT JOIN (
+       SELECT puesto_id, COUNT(*) AS total
+       FROM pedidos
+       WHERE estado NOT IN ('entregado', 'cancelado')
+       GROUP BY puesto_id
+     ) pe ON pe.puesto_id = p.id
+     WHERE p.id = ?
+     LIMIT 1`,
+    [puestoId]
+  );
+  return rows[0] || null;
+}
+
+async function seedWaitTracker() {
+  try {
+    const [rows] = await db.query(
+      `SELECT
+         p.id,
+         ROUND((COALESCE(pe.total, 0) * p.tiempo_servicio_medio) / GREATEST(p.num_empleados, 1)) AS espera_calculada_min
+       FROM puestos p
+       LEFT JOIN (
+         SELECT puesto_id, COUNT(*) AS total
+         FROM pedidos
+         WHERE estado NOT IN ('entregado', 'cancelado')
+         GROUP BY puesto_id
+       ) pe ON pe.puesto_id = p.id`
+    );
+    waitTrackerByPuesto.clear();
+    rows.forEach((row) => {
+      waitTrackerByPuesto.set(Number(row.id), {
+        lastWait: Number(row.espera_calculada_min || 0),
+        episodeId: null
+      });
+    });
+    console.log('[notifications] wait tracker initialized', { puestos: rows.length });
+  } catch (err) {
+    console.error('[notifications] wait tracker init failed:', err.message);
+  }
+}
+
+async function getTopFavoritesByUserForPuesto(puestoId) {
+  const [rows] = await db.query(
+    `SELECT
+       pe.usuario_id,
+       pr.id,
+       pr.nombre,
+       SUM(pi.cantidad) AS cantidad_total,
+       MAX(pe.creado_en) AS ultima_compra
+     FROM pedidos pe
+     INNER JOIN pedido_items pi ON pi.pedido_id = pe.id
+     INNER JOIN productos pr ON pr.id = pi.producto_id
+     WHERE pe.puesto_id = ? AND pe.estado <> 'cancelado'
+     GROUP BY pe.usuario_id, pr.id, pr.nombre
+     ORDER BY pe.usuario_id ASC, cantidad_total DESC, ultima_compra DESC, pr.id ASC`,
+    [puestoId]
+  );
+
+  const favoritesByUser = new Map();
+  for (const row of rows) {
+    const usuarioId = Number(row.usuario_id);
+    if (!usuarioId || favoritesByUser.has(usuarioId)) continue;
+    favoritesByUser.set(usuarioId, {
+      id: Number(row.id),
+      nombre: row.nombre
+    });
+  }
+
+  return favoritesByUser;
+}
+
+async function getAvailableProductsMapForPuesto(puestoId, productIds) {
+  if (!Array.isArray(productIds) || productIds.length === 0) return new Map();
+
+  const [rows] = await db.query(
+    `SELECT id, nombre
+     FROM productos
+     WHERE puesto_id = ? AND activo = 1 AND stock > 0 AND id IN (?)`,
+    [puestoId, productIds]
+  );
+
+  const availableProductsById = new Map();
+  rows.forEach((row) => {
+    availableProductsById.set(Number(row.id), {
+      id: Number(row.id),
+      nombre: row.nombre
+    });
+  });
+  return availableProductsById;
+}
+
+async function getPushSubscriptionsByUsers(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) return new Map();
+
+  const [rows] = await db.query(
+    `SELECT id, usuario_id, endpoint, p256dh, auth
+     FROM push_subscriptions
+     WHERE usuario_id IN (?)`,
+    [userIds]
+  );
+
+  const subscriptionsByUser = new Map();
+  rows.forEach((row) => {
+    const usuarioId = Number(row.usuario_id);
+    if (!usuarioId) return;
+    if (!subscriptionsByUser.has(usuarioId)) {
+      subscriptionsByUser.set(usuarioId, []);
+    }
+    subscriptionsByUser.get(usuarioId).push(row);
+  });
+  return subscriptionsByUser;
+}
+
+function buildWaitZeroDedupKey({ puestoId, episodeId, usuarioId }) {
+  return `wait_zero:${puestoId}:${episodeId}:${usuarioId}`;
+}
+
+async function insertInAppNotification({
+  usuarioId,
+  puestoId,
+  tipo,
+  titulo,
+  mensaje,
+  payload,
+  dedupKey
+}) {
+  const [result] = await db.query(
+    `INSERT IGNORE INTO notificaciones_usuario
+       (usuario_id, puesto_id, tipo, titulo, mensaje, leida, payload, dedup_key)
+     VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+    [usuarioId, puestoId, tipo, titulo, mensaje, JSON.stringify(payload || {}), dedupKey || null]
+  );
+
+  if (result.affectedRows === 0) {
+    metricDedup('duplicate_dedup_key');
+    return null;
+  }
+
+  return {
+    id: result.insertId,
+    usuario_id: usuarioId,
+    puesto_id: puestoId,
+    tipo,
+    titulo,
+    mensaje
+  };
+}
+
+async function sendComplementaryPush(usuarioId, notification, preloadedSubscriptions) {
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    notificationMetrics.pushSkipped += 1;
+    metricSkip('push_not_configured');
+    return;
+  }
+
+  let subs = preloadedSubscriptions;
+  if (!subs) {
+    const [rows] = await db.query(
+      'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE usuario_id = ?',
+      [usuarioId]
+    );
+    subs = rows;
+  }
+
+  if (subs.length === 0) {
+    notificationMetrics.pushSkipped += 1;
+    metricSkip('user_without_push_subscription');
+    return;
+  }
+
+  const payload = JSON.stringify({
+    title: notification.titulo,
+    body: notification.mensaje,
+    data: {
+      notification_id: notification.id,
+      puesto_id: notification.puesto_id,
+      tipo: notification.tipo
+    }
+  });
+
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification(
+        {
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth }
+        },
+        payload
+      );
+      notificationMetrics.pushSent += 1;
+    } catch (err) {
+      notificationMetrics.pushFailed += 1;
+      if (err?.statusCode === 404 || err?.statusCode === 410) {
+        try {
+          await db.query('DELETE FROM push_subscriptions WHERE id = ?', [sub.id]);
+        } catch (cleanupErr) {
+          console.error('[notifications] push subscription cleanup failed:', cleanupErr.message);
+        }
+      }
+    }
+  }
+}
+
+async function generateWaitZeroNotifications({
+  puestoId,
+  puestoNombre,
+  puestoTipo,
+  previousWait,
+  currentWait,
+  episodeId,
+  source
+}) {
+  const [users] = await db.query(
+    `SELECT DISTINCT usuario_id
+     FROM pedidos
+     WHERE puesto_id = ? AND estado <> 'cancelado' AND usuario_id IS NOT NULL`,
+    [puestoId]
+  );
+
+  if (users.length === 0) {
+    metricSkip('no_users_with_history_for_puesto');
+    return;
+  }
+
+  const userIds = users
+    .map((row) => Number(row.usuario_id))
+    .filter((usuarioId) => Number.isFinite(usuarioId) && usuarioId > 0);
+
+  if (userIds.length === 0) {
+    metricSkip('no_valid_users_for_notification');
+    return;
+  }
+
+  const favoritesByUser = await getTopFavoritesByUserForPuesto(puestoId);
+  const favoriteProductIds = [...new Set(
+    [...favoritesByUser.values()]
+      .map((favorite) => Number(favorite.id))
+      .filter((productId) => Number.isFinite(productId) && productId > 0)
+  )];
+  const availableProductsById = await getAvailableProductsMapForPuesto(puestoId, favoriteProductIds);
+  const subscriptionsByUser = await getPushSubscriptionsByUsers(userIds);
+
+  for (const usuarioId of userIds) {
+    if (!usuarioId) continue;
+
+    const favorito = favoritesByUser.get(usuarioId) || null;
+    const productoDisponible = favorito?.id
+      ? availableProductsById.get(Number(favorito.id)) || null
+      : null;
+
+    if (favorito?.id) {
+      if (!productoDisponible) {
+        metricSkip('favorite_not_available_anymore');
+      }
+    } else {
+      metricSkip('user_without_favorite_history');
+    }
+
+    const titulo = productoDisponible
+      ? `${puestoNombre} sin espera: ${productoDisponible.nombre}`
+      : `${puestoNombre} sin espera ahora`;
+    const mensaje = productoDisponible
+      ? `${puestoNombre} no tiene espera ahora mismo. Tu favorito ${productoDisponible.nombre} esta disponible.`
+      : fallbackWaitZeroMessage(puestoNombre);
+
+    const payload = {
+      episode_id: episodeId,
+      trigger: 'wait_zero',
+      source,
+      wait_before: previousWait,
+      wait_after: currentWait,
+      favorite_product_id: favorito?.id || null,
+      mentioned_product_id: productoDisponible?.id || null,
+      puesto_tipo: puestoTipo || null,
+      triggered_at: new Date().toISOString()
+    };
+
+    const notification = await insertInAppNotification({
+      usuarioId,
+      puestoId,
+      tipo: WAIT_ZERO_NOTIFICATION_TYPE,
+      titulo,
+      mensaje,
+      payload,
+      dedupKey: buildWaitZeroDedupKey({ puestoId, episodeId, usuarioId })
+    });
+
+    if (!notification) continue;
+
+    notificationMetrics.generated += 1;
+    await sendComplementaryPush(usuarioId, notification, subscriptionsByUser.get(usuarioId) || []);
+  }
+
+  console.log('[notifications] wait-zero summary', {
+    puestoId,
+    episodeId,
+    generated: notificationMetrics.generated,
+    deduplicated: notificationMetrics.deduplicated,
+    skippedByReason: notificationMetrics.skippedByReason,
+    deduplicatedByReason: notificationMetrics.deduplicatedByReason,
+    pushSent: notificationMetrics.pushSent,
+    pushFailed: notificationMetrics.pushFailed,
+    pushSkipped: notificationMetrics.pushSkipped
+  });
+}
+
+async function runEvaluateWaitZeroTriggerForPuesto(puestoId, source) {
+  try {
+    const snapshot = await fetchWaitSnapshotForPuesto(puestoId);
+    if (!snapshot) return;
+
+    const normalizedPuestoId = Number(snapshot.id);
+    const currentWait = Number(snapshot.espera_calculada_min || 0);
+    const isOpen = Number(snapshot.abierto) === 1 || snapshot.abierto === true;
+    const previousState = waitTrackerByPuesto.get(normalizedPuestoId);
+
+    if (!previousState) {
+      waitTrackerByPuesto.set(normalizedPuestoId, {
+        lastWait: currentWait,
+        episodeId: null
+      });
+      return;
+    }
+
+    const previousWait = Number(previousState.lastWait || 0);
+
+    if (!isOpen) {
+      waitTrackerByPuesto.set(normalizedPuestoId, {
+        lastWait: currentWait,
+        episodeId: null
+      });
+      metricSkip('puesto_closed_no_notification');
+      return;
+    }
+
+    if (previousWait > 0 && currentWait === 0) {
+      const episodeId = `${normalizedPuestoId}-${Date.now()}`;
+      waitTrackerByPuesto.set(normalizedPuestoId, {
+        lastWait: currentWait,
+        episodeId
+      });
+      await generateWaitZeroNotifications({
+        puestoId: normalizedPuestoId,
+        puestoNombre: snapshot.nombre,
+        puestoTipo: snapshot.puesto_tipo,
+        previousWait,
+        currentWait,
+        episodeId,
+        source
+      });
+      return;
+    }
+
+    if (previousWait === 0 && currentWait > 0) {
+      waitTrackerByPuesto.set(normalizedPuestoId, {
+        lastWait: currentWait,
+        episodeId: null
+      });
+      metricSkip('episode_reset_wait_rose_above_zero');
+      return;
+    }
+
+    waitTrackerByPuesto.set(normalizedPuestoId, {
+      lastWait: currentWait,
+      episodeId: previousState.episodeId || null
+    });
+  } catch (err) {
+    console.error('[notifications] wait-zero trigger failed:', err.message);
+  }
+}
+
+async function evaluateWaitZeroTriggerForPuesto(puestoId, source) {
+  const normalizedPuestoId = Number(puestoId);
+  if (!normalizedPuestoId) return;
+
+  const previousLock = waitEvaluationLocks.get(normalizedPuestoId) || Promise.resolve();
+  const nextLock = previousLock
+    .catch(() => {})
+    .then(() => runEvaluateWaitZeroTriggerForPuesto(normalizedPuestoId, source))
+    .finally(() => {
+      if (waitEvaluationLocks.get(normalizedPuestoId) === nextLock) {
+        waitEvaluationLocks.delete(normalizedPuestoId);
+      }
+    });
+
+  waitEvaluationLocks.set(normalizedPuestoId, nextLock);
+  await nextLock;
+}
+
+async function doesColumnExist(tableName, columnName) {
+  const [rows] = await db.query(
+    `SELECT 1
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [tableName, columnName]
+  );
+  return rows.length > 0;
+}
+
+async function doesIndexExist(tableName, indexName) {
+  const [rows] = await db.query(
+    `SELECT 1
+     FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND INDEX_NAME = ?
+     LIMIT 1`,
+    [tableName, indexName]
+  );
+  return rows.length > 0;
+}
+
+async function ensureNotificationsTableSchema() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS notificaciones_usuario (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      usuario_id INT NOT NULL,
+      puesto_id INT NULL,
+      tipo VARCHAR(64) NOT NULL,
+      titulo VARCHAR(255) NOT NULL,
+      mensaje TEXT NOT NULL,
+      leida TINYINT(1) NOT NULL DEFAULT 0,
+      payload JSON NULL,
+      dedup_key VARCHAR(255) NULL,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+      FOREIGN KEY (puesto_id) REFERENCES puestos(id) ON DELETE SET NULL,
+      INDEX idx_notif_usuario_id (usuario_id, id)
+    )
+  `);
+
+  if (!(await doesColumnExist('notificaciones_usuario', 'dedup_key'))) {
+    await db.query('ALTER TABLE notificaciones_usuario ADD COLUMN dedup_key VARCHAR(255) NULL');
+  }
+
+  if (!(await doesIndexExist('notificaciones_usuario', 'idx_notif_usuario_leida_id'))) {
+    await db.query('ALTER TABLE notificaciones_usuario ADD INDEX idx_notif_usuario_leida_id (usuario_id, leida, id)');
+  }
+
+  if (!(await doesIndexExist('notificaciones_usuario', 'uq_notif_dedup'))) {
+    await db.query('ALTER TABLE notificaciones_usuario ADD UNIQUE KEY uq_notif_dedup (usuario_id, tipo, dedup_key)');
+  }
+}
+
 // Asegurar que las tablas existen al arrancar
 async function initDB() {
   try {
@@ -172,6 +669,9 @@ async function initDB() {
       )
     `);
     console.log('SQL Migration push_subscriptions checked.');
+
+    await ensureNotificationsTableSchema();
+    console.log('SQL Migration notificaciones_usuario checked.');
 
     await paymentsModule.initDb(db);
   } catch (err) {
@@ -192,6 +692,8 @@ async function initDB() {
   } catch (err) {
     console.error('DB Init gestor_config Failed:', err);
   }
+
+  await seedWaitTracker();
 }
 
 // Middleware para verificar tokenn
@@ -386,6 +888,7 @@ app.put('/api/admin/puestos/:id', auth, async (req, res) => {
       'UPDATE puestos SET nombre = ?, tipo = ?, capacidad_max = ?, num_empleados = ?, abierto = ? WHERE id = ?',
       [nombre, tipo, capacidad_max, num_empleados, abierto, req.params.id]
     );
+    await evaluateWaitZeroTriggerForPuesto(Number(req.params.id), 'admin_update_puesto');
     res.json({ message: 'Puesto actualizado' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -594,6 +1097,7 @@ app.post('/api/pedidos', auth, async (req, res) => {
       [req.user.id, puntos, puntos]
     );
     await conn.commit();
+    await evaluateWaitZeroTriggerForPuesto(Number(puesto_id), 'pedido_creado');
     res.json({ pedido_id: pedidoId, puntos_ganados: puntos });
   } catch (err) {
     await conn.rollback();
@@ -766,6 +1270,7 @@ app.patch('/api/pedidos/:id/estado', auth, async (req, res) => {
     }
 
     await db.query('UPDATE pedidos SET estado = ? WHERE id = ?', [nuevo_estado, pedidoId]);
+    await evaluateWaitZeroTriggerForPuesto(Number(pedido.puesto_id), 'pedido_estado_actualizado');
 
     res.json({ message: 'Estado actualizado correctamente' });
   } catch (err) {
@@ -786,11 +1291,13 @@ app.patch('/api/puestos/:id/panico', auth, async (req, res) => {
   try {
     if (accion === 'pausar') {
       await db.query('UPDATE puestos SET abierto = 0 WHERE id = ?', [puestoId]);
+      await evaluateWaitZeroTriggerForPuesto(Number(puestoId), 'panico_pausar');
       return res.json({ message: 'Puesto pausado. Ya no se aceptan nuevos pedidos.' });
     }
 
     if (accion === 'reanudar') {
       await db.query('UPDATE puestos SET abierto = 1 WHERE id = ?', [puestoId]);
+      await evaluateWaitZeroTriggerForPuesto(Number(puestoId), 'panico_reanudar');
       return res.json({ message: 'Puesto reactivado. Se aceptan nuevos pedidos.' });
     }
 
@@ -806,6 +1313,7 @@ app.patch('/api/puestos/:id/panico', auth, async (req, res) => {
         });
       }
       await db.query('UPDATE puestos SET num_empleados = num_empleados + 1 WHERE id = ?', [puestoId]);
+      await evaluateWaitZeroTriggerForPuesto(Number(puestoId), 'panico_llamar_camarero');
       return res.json({ message: 'Camarero de apoyo llamado.', num_empleados: num_empleados + 1, capacidad_max });
     }
   } catch (err) {
@@ -1129,6 +1637,48 @@ app.delete('/api/admin/promociones/:id', auth, async (req, res) => {
 
 
 // ─── PUSH SUBSCRIPTION ENDPOINT ───
+app.get('/api/notifications/me', auth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT *
+       FROM notificaciones_usuario
+       WHERE usuario_id = ?
+       ORDER BY id DESC
+       LIMIT 200`,
+      [req.user.id]
+    );
+
+    res.json(rows.map((row) => ({
+      ...row,
+      payload: parseJsonSafe(row.payload)
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/notifications/:id/read', auth, async (req, res) => {
+  try {
+    const notificationId = Number(req.params.id);
+    if (!notificationId) return res.status(400).json({ error: 'ID de notificacion invalido' });
+
+    const [result] = await db.query(
+      `UPDATE notificaciones_usuario
+       SET leida = 1
+       WHERE id = ? AND usuario_id = ?`,
+      [notificationId, req.user.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Notificacion no encontrada' });
+    }
+
+    res.json({ message: 'Notificacion marcada como leida', id: notificationId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/notifications/public-key', (req, res) => {
   if (!process.env.VAPID_PUBLIC_KEY) return res.status(500).json({ error: 'Push no configurado' });
   res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
@@ -1247,12 +1797,14 @@ async function ejecutarDecision(decision) {
     case 'cerrar_barra':
       if (decision.puesto_id) {
         await db.query('UPDATE puestos SET abierto = 0 WHERE id = ?', [decision.puesto_id]);
+        await evaluateWaitZeroTriggerForPuesto(Number(decision.puesto_id), 'decision_cerrar_barra');
       }
       break;
 
     case 'abrir_barra':
       if (decision.puesto_id) {
         await db.query('UPDATE puestos SET abierto = 1 WHERE id = ?', [decision.puesto_id]);
+        await evaluateWaitZeroTriggerForPuesto(Number(decision.puesto_id), 'decision_abrir_barra');
       }
       break;
 

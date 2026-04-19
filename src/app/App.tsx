@@ -44,6 +44,9 @@ import { RoyaltiesScreen } from './screens/RoyaltiesScreen';
 import { TrackOrderScreen } from './screens/TrackOrderScreen';
 import { SelectionScreen } from './screens/SelectionScreen';
 import { FestivalSelectScreen } from './screens/FestivalSelectScreen';
+import { ProfileNotificationsScreen } from './screens/ProfileNotificationsScreen';
+import { usePushNotifications } from './hooks/usePushNotifications';
+import { useInAppNotifications } from './hooks/useInAppNotifications';
 
 // Pantallas operador
 import { OperatorLayout } from './screens/OperadorLayout';
@@ -75,6 +78,10 @@ function AppRoutes() {
     setCurrentPath(path);
     window.dispatchEvent(new Event('navigation'));
   };
+
+  const isUserRole = user?.rol === 'usuario';
+  usePushNotifications(isUserRole);
+  useInAppNotifications(isUserRole);
 
   if (isLoading) return <SplashScreen />;
 
@@ -137,6 +144,7 @@ function AppRoutes() {
       {path === '/profile/royalties' && <RoyaltiesScreen />}
       {path === '/profile/payments' && <PaymentMethodsScreen />}
       {path === '/profile/orders' && <OrderHistoryScreen />}
+      {path === '/profile/notifications' && <ProfileNotificationsScreen />}
       {path === '/profile/favorites' && <FavoritesScreen />}
       {path === '/profile/support' && <HelpSupportScreen />}
       {path === '/profile/language' && <LanguageScreen />}
@@ -155,7 +163,7 @@ function App() {
     <AuthProvider>
       <LanguageProvider>
         <CartProvider>
-          <Toaster position="top-center" />
+          <Toaster position="top-center" visibleToasts={3} />
           <AppRoutes />
         </CartProvider>
       </LanguageProvider>
