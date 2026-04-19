@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from '../utils/navigation';
-import { User, CreditCard, Clock, Heart, HelpCircle, ChevronRight, LogOut, Globe, Coins, Sparkles } from 'lucide-react';
+import { User, CreditCard, Clock, Heart, HelpCircle, ChevronRight, LogOut, Globe, Coins, Sparkles, Bell } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
@@ -29,6 +29,7 @@ export function ProfileScreen() {
     { icon: Coins, label: 'Royalties', path: '/profile/royalties' },
     { icon: CreditCard, label: t('profile.paymentMethods'), path: '/profile/payments' },
     { icon: Clock, label: t('profile.orderHistory'), path: '/profile/orders' },
+    { icon: Bell, label: 'Notificaciones', path: '/profile/notifications' },
     { icon: Heart, label: t('profile.favorites'), path: '/profile/favorites' },
     { icon: Globe, label: t('profile.language'), path: '/profile/language' },
     { icon: HelpCircle, label: t('profile.helpSupport'), path: '/profile/support' }

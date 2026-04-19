@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { getVapidPublicKey, subscribeToPushNotifications } from '../api';
-import { toast } from 'sonner';
 
-export function usePushNotifications() {
+export function usePushNotifications(enabled = true) {
     useEffect(() => {
+        if (!enabled) return;
+
         // Solo pedimos permisos e inicializamos el SW si el nav lo soporta
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
             return;
@@ -43,7 +44,7 @@ export function usePushNotifications() {
         };
 
         initPush();
-    }, []);
+    }, [enabled]);
 }
 
 // Función auxiliar indispensable para el protocolo Web Push

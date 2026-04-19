@@ -16,6 +16,17 @@ const headers = () => ({
     Authorization: `Bearer ${getToken()}`
 });
 
+const parseApiError = async (res: Response, fallback: string) => {
+    try {
+        const data = await res.json();
+        if (typeof data?.error === 'string' && data.error.trim()) return data.error;
+        if (typeof data?.message === 'string' && data.message.trim()) return data.message;
+    } catch {
+        // Ignore parse errors and use fallback message.
+    }
+    return fallback;
+};
+
 // ==================== AUTH ====================
 // Login: devuelve token JWT y datos del usuario con su rol
 export const login = async (email: string, password: string) => {
@@ -222,6 +233,35 @@ export const subscribeToPushNotifications = async (subscription: PushSubscriptio
         body: JSON.stringify(subscription)
     });
     if (!res.ok) throw new Error('Failed to save subscription');
+    return res.json();
+};
+
+export interface InAppNotification {
+    id: number;
+    usuario_id: number;
+    puesto_id: number | null;
+    tipo: string;
+    titulo: string;
+    mensaje: string;
+    leida: number | boolean;
+    payload?: Record<string, any> | null;
+    creado_en?: string;
+    created_at?: string;
+}
+
+export const getMisNotificaciones = async (): Promise<InAppNotification[]> => {
+    const res = await fetch(`${API_URL}/notifications/me`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar notificaciones'));
+    const data = await res.json().catch(() => []);
+    return Array.isArray(data) ? data : [];
+};
+
+export const marcarNotificacionLeida = async (notificationId: number) => {
+    const res = await fetch(`${API_URL}/notifications/${notificationId}/read`, {
+        method: 'PATCH',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al marcar notificacion como leida'));
     return res.json();
 };
 
@@ -559,5 +599,4 @@ export const eliminarPromocion = async (id: number) => {
     if (!res.ok) throw new Error('Error al eliminar promocion');
     return res.json();
 };
-
 
