@@ -84,7 +84,7 @@ const PAL = {
 function getStatus(p: PuestoMapa): keyof typeof PAL {
   if (!p.abierto) return 'closed';
   if (p.pedidos_activos === 0) return 'free';
-  if (p.pedidos_activos <= 3) return 'moderate';
+  if (p.pedidos_activos <= 10) return 'moderate';
   return 'busy';
 }
 function statusLabel(s: keyof typeof PAL) {
@@ -453,7 +453,7 @@ export function MapView({ festivalId, navigate }: Props) {
                       <text x={b.cx} y={b.cy+10} textAnchor="middle"
                             fill="rgba(255,255,255,0.85)" fontSize="5.5"
                             style={{ pointerEvents:'none' }}>
-                        {p.pedidos_activos}p · {formatWait(p.espera_min)}
+                        {p.pedidos_activos}p · {formatWait(p.espera_min, p.pedidos_activos > 0)}
                       </text>
                     )}
                   </g>
@@ -557,7 +557,7 @@ export function MapView({ festivalId, navigate }: Props) {
           <div className="grid grid-cols-3 gap-2 mb-2">
             {[
               {label:'Pedidos activos', value: selected.pedidos_activos},
-              {label:'Espera media',    value: formatWait(selected.espera_min)},
+              {label:'Espera media',    value: formatWait(selected.espera_min, selected.pedidos_activos > 0)},
               {label:'Ingresos hoy',   value: `${Number(selected.ingresos_hoy).toFixed(0)}€`},
             ].map(({label,value}) => (
               <div key={label} className="rounded-xl p-2 text-center border"

@@ -616,14 +616,17 @@ app.get('/api/gestor/mapa', auth, async (req, res) => {
       SELECT
         p.id, p.nombre, p.tipo, p.abierto,
         p.pos_x, p.pos_y,
-        COUNT(CASE WHEN o.estado NOT IN ('entregado','cancelado') THEN 1 END)            AS pedidos_activos,
-        COALESCE(AVG(CASE WHEN o.estado NOT IN ('entregado','cancelado')
-          THEN TIMESTAMPDIFF(MINUTE, o.creado_en, NOW()) END), 0)                       AS espera_min,
-        COALESCE(SUM(CASE WHEN DATE(o.creado_en) = CURDATE() THEN o.total ELSE 0 END),0) AS ingresos_hoy
+        COUNT(CASE WHEN o.estado NOT IN ('entregado','cancelado') THEN 1 END) AS pedidos_activos,
+        ROUND(
+          COUNT(CASE WHEN o.estado NOT IN ('entregado','cancelado') THEN 1 END)
+          * p.tiempo_servicio_medio
+          / GREATEST(p.num_empleados, 1)
+        ) AS espera_min,
+        COALESCE(SUM(CASE WHEN o.estado != 'cancelado' THEN o.total ELSE 0 END), 0) AS ingresos_hoy
       FROM puestos p
       LEFT JOIN pedidos o ON o.puesto_id = p.id
       WHERE p.festival_id = ?
-      GROUP BY p.id
+      GROUP BY p.id, p.tiempo_servicio_medio, p.num_empleados
       ORDER BY p.id
     `, [festival_id]);
     res.json(rows);

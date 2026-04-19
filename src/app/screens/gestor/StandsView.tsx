@@ -22,11 +22,17 @@ const METRICAS: Record<MetricKey, { label: string; unit: string }> = {
   ingresos_hoy:    { label: 'Ingresos hoy',    unit: '€'   },
 };
 
-const sat = (val: number, max: number) => {
+const sat = (val: number, max: number, metrica: string) => {
+  // For pedidos_activos use absolute festival thresholds, else relative
+  if (metrica === 'pedidos_activos') {
+    if (val === 0)   return { label: 'Libre',    color: '#4CAF88' };
+    if (val <= 10)   return { label: 'Moderado', color: '#F59E0B' };
+    return                  { label: 'Saturado', color: '#EF4444' };
+  }
   const r = val / max;
-  if (r < 0.33) return { label: 'Libre',    color: '#4CAF88' };
-  if (r < 0.66) return { label: 'Moderado', color: '#F59E0B' };
-  return             { label: 'Saturado', color: '#EF4444' };
+  if (r < 0.33) return { label: 'Bajo',    color: '#4CAF88' };
+  if (r < 0.66) return { label: 'Medio',   color: '#F59E0B' };
+  return               { label: 'Alto',    color: '#EF4444' };
 };
 
 /* ─── Sub-vista 5A: Lista ───────────────────────────────────────────────── */
@@ -101,7 +107,7 @@ function ListaPuestos({ festivalId, onSelect }: ListaProps) {
           puestos.map(p => {
             const val   = p[metrica] ?? 0;
             const ratio = val / max;
-            const s     = sat(val, max);
+            const s     = sat(val, max, metrica);
             return (
               <button
                 key={p.id}
@@ -132,7 +138,7 @@ function ListaPuestos({ festivalId, onSelect }: ListaProps) {
                     />
                   </div>
                   <span className="text-[10px] font-bold w-10 text-right flex-shrink-0" style={{ color: s.color }}>
-                    {metrica === 'espera_min' ? formatWait(val) : `${val}${METRICAS[metrica].unit}`}
+                    {metrica === 'espera_min' ? formatWait(val, p.pedidos_activos > 0) : `${val}${METRICAS[metrica].unit}`}
                   </span>
                   <span className="text-[9px] font-semibold w-12 text-right flex-shrink-0" style={{ color: s.color }}>
                     {s.label}

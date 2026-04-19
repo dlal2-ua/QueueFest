@@ -45,6 +45,7 @@ export function WelcomeView({ onEnter }: Props) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-10"
          style={{ backgroundColor: '#000000' }}>
+      <style>{`.dd-scroll::-webkit-scrollbar{display:none}`}</style>
 
       {/* Eyebrow */}
       <p className="text-[11px] font-bold uppercase tracking-[0.3em] mb-4"
@@ -90,15 +91,16 @@ export function WelcomeView({ onEnter }: Props) {
         {/* Dropdown list */}
         {open && (
           <div
-            className="absolute left-0 right-0 rounded-2xl border overflow-hidden"
+            className="absolute left-0 right-0 rounded-2xl border dd-scroll"
             style={{
-              top: 'calc(100% + 8px)',
+              bottom: 'calc(100% + 8px)',
               backgroundColor: '#1A1A1A',
               borderColor: '#FF6B35',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+              boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
               zIndex: 50,
-              maxHeight: 220,
+              maxHeight: 200,
               overflowY: 'auto',
+              scrollbarWidth: 'none',
             }}
           >
             {festivales.length === 0 ? (
