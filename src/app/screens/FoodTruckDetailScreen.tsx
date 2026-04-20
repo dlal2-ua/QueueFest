@@ -5,7 +5,7 @@ import { MenuItem } from '../components/MenuItem';
 import { useCart } from '../context/CartContext';
 import { StatusBadge } from '../components/StatusBadge';
 import { BottomNav } from '../components/BottomNav';
-import { getProductos, getPuesto } from '../api';
+import { getProductos, getPuesto, buildImageUrl } from '../api';
 
 export function FoodTruckDetailScreen() {
   const { id } = useParams(); // id del puesto (foodtruck)
@@ -112,18 +112,26 @@ export function FoodTruckDetailScreen() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
-      <div className="relative h-48 bg-gradient-to-br from-green-500 to-emerald-600 flex items-end">
+      <div className="relative h-48 bg-gradient-to-br from-green-500 to-emerald-600 flex items-end overflow-hidden">
+        {truck.foto_url && (
+          <img
+            src={buildImageUrl(truck.foto_url)}
+            alt={truck.nombre}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/60" />
         <button
           onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg"
+          className="absolute top-4 left-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg z-10"
         >
           <ChevronLeft className="w-6 h-6" />
         </button>
-        <div className="absolute top-4 right-4 flex gap-2">
+        <div className="absolute top-4 right-4 flex gap-2 z-10">
           {queueStatus && <StatusBadge type={queueStatus} />}
         </div>
-        <div className="p-5 pb-6">
-          <p className="text-green-200 text-xs font-medium uppercase tracking-wide">{festival?.nombre}</p>
+        <div className="p-5 pb-6 relative z-10">
+          <p className="text-white text-xs font-medium uppercase tracking-wide drop-shadow-lg">{festival?.nombre}</p>
         </div>
       </div>
 
@@ -171,6 +179,8 @@ export function FoodTruckDetailScreen() {
                       name={item.nombre}
                       description={item.descripcion}
                       price={item.precio_dinamico > 0 ? item.precio_dinamico : item.precio}
+                      image={buildImageUrl(item.foto_url)}
+                      stock={item.stock}
                       onView={() => handleViewItem(item)}
                       onAdd={handleAddItem}
                     />

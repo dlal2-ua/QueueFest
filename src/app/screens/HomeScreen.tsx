@@ -8,7 +8,7 @@ import { BottomNav } from '../components/BottomNav';
 import { VendorCard } from '../components/VendorCard';
 import { Search, ChevronLeft } from 'lucide-react';
 import { useNavigate } from '../utils/navigation';
-import { getPuestosByFestivalPublico } from '../api';
+import { getPuestosByFestivalPublico, buildImageUrl } from '../api';
 
 export function HomeScreen() {
   const navigate = useNavigate();
@@ -94,7 +94,7 @@ export function HomeScreen() {
             <VendorCard
               key={puesto.id}
               id={puesto.id}
-              image="https://images.unsplash.com/photo-1555970348-3a10b197f131?w=800"
+              image={buildImageUrl(puesto.foto_url)}
               name={puesto.nombre}
               cuisine={puesto.tipo === 'barra' ? 'Barra de bebidas' : 'Food Truck'}
               waitTime={puesto.tiempo_servicio_medio}

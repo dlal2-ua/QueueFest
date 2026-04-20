@@ -6,7 +6,7 @@ import { useCart } from '../context/CartContext';
 import { useLanguage } from '../context/LanguageContext';
 import { BottomNav } from '../components/BottomNav';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
-import { getProductos, getPuesto } from '../api';
+import { getProductos, getPuesto, buildImageUrl } from '../api';
 import { formatPrice } from '../utils/formatPrice';
 import { getProductImage, isProductFavorite, toggleFavoriteProduct } from '../utils/productHelpers';
 
@@ -16,6 +16,9 @@ interface ProductDetail {
   descripcion: string;
   precio: number;
   precio_dinamico: number;
+  foto_url?: string;
+  stock?: number;
+  activo?: number;
 }
 
 export function ProductDetailScreen() {
@@ -61,7 +64,10 @@ export function ProductDetailScreen() {
               nombre: foundProduct.nombre ?? 'Producto sin nombre',
               descripcion: foundProduct.descripcion ?? 'Sin descripcion disponible por ahora.',
               precio: Number(foundProduct.precio ?? 0),
-              precio_dinamico: Number(foundProduct.precio_dinamico ?? 0)
+              precio_dinamico: Number(foundProduct.precio_dinamico ?? 0),
+              foto_url: foundProduct.foto_url ?? '',
+              stock: Number(foundProduct.stock ?? 0),
+              activo: foundProduct.activo ?? 1
             });
           } else {
             setProduct(null);
@@ -83,9 +89,10 @@ export function ProductDetailScreen() {
 
   const displayPrice = product ? (product.precio_dinamico > 0 ? product.precio_dinamico : product.precio) : 0;
   const productImage = useMemo(
-    () => getProductImage(product?.nombre || 'Producto', vendorType),
-    [product?.nombre, vendorType]
+    () => buildImageUrl(product?.foto_url),
+    [product?.foto_url]
   );
+  const isOutOfStock = product?.stock === 0;
 
   const handleToggleFavorite = () => {
     if (!product || !vendor) return;
@@ -204,10 +211,21 @@ export function ProductDetailScreen() {
 
           <button
             onClick={handleAddToCart}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-black px-5 py-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+            disabled={isOutOfStock}
+            className={`mt-5 flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-4 text-sm font-semibold transition-colors ${
+              isOutOfStock
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-black text-white hover:bg-gray-800'
+            }`}
           >
-            <Plus className="h-4 w-4" />
-            Anadir al carrito
+            {isOutOfStock ? (
+              'AGOTADO'
+            ) : (
+              <>
+                <Plus className="h-4 w-4" />
+                Anadir al carrito
+              </>
+            )}
           </button>
         </section>
 
