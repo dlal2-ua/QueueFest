@@ -18,6 +18,8 @@ echo "[3/3] Generando claves VAPID para notificaciones Push si no existen"
 if [ ! -f .env ]; then
     echo "Creando archivo .env con claves VAPID generadas automaticamente..."
     npx web-push generate-vapid-keys --format dotenv > .env
+    echo "" >> .env
+    echo "SSH_PRIVATE_KEY_PATH=PON TU RUTA A LA CLAVE PRIVADA QUE PASO EL ALE: DJ BOBO" >> .env
 fi
 cd ..
 
@@ -25,7 +27,7 @@ echo ""
 echo "========================================================="
 echo " Todo instalado. Levantando servicios en segundo plano..."
 echo " Asegurate de haber configurado la ruta de la llave SSH "
-echo " en el archivo server-backend/index.js antes de continuar."
+echo " en el archivo server-backend/.env antes de continuar."
 echo "========================================================="
 read -p "Presiona Enter para continuar..."
 

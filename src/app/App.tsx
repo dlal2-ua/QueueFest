@@ -58,6 +58,7 @@ import { OperatorOrderDetailScreen } from './screens/OperatorOrderDetailScreen';
 
 import { GestorScreen } from './screens/GestorScreen';
 import { AdminScreen } from './screens/AdminScreen';
+import { AdminDashboardScreen } from './screens/AdminDashboardScreen';
 
 function AppRoutes() {
   const { user, isLoading } = useAuth();
@@ -102,7 +103,10 @@ function AppRoutes() {
   if (user.rol === 'gestor') return <GestorScreen />;
 
   // Admin — envuelto en phone frame
-  if (user.rol === 'administrador') return <PhoneFrameShell><AdminScreen /></PhoneFrameShell>;
+  if (user.rol === 'administrador') {
+    if (path === '/admin/dashboard') return <PhoneFrameShell><AdminDashboardScreen /></PhoneFrameShell>;
+    return <PhoneFrameShell><AdminScreen /></PhoneFrameShell>;
+  }
 
   // Operador — OperatorLayout maneja su propio frame
   if (user.rol === 'operador') {
