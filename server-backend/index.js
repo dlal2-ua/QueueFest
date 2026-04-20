@@ -750,6 +750,131 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// Endpoint para obtener perfil del usuario autenticado
+app.get('/api/perfil', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const [rows] = await db.query(
+      'SELECT u.*, r.nombre as rol FROM usuarios u JOIN roles r ON u.rol_id = r.id WHERE u.id = ?',
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const user = rows[0];
+    delete user.password_hash;
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint para actualizar perfil de usuario (requiere autenticación)
+app.patch('/api/perfil', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      alias,
+      telefono,
+      fecha_nacimiento,
+      ciudad,
+      idioma_preferido,
+      festival_favorito,
+      preferencias_dieteticas,
+      alergias,
+      notificaciones_push,
+      notificaciones_email,
+      acepta_marketing,
+      avatar_url
+    } = req.body;
+
+    // Construir query dinámicamente solo con los campos proporcionados
+    const updates = [];
+    const values = [];
+
+    if (alias !== undefined) {
+      updates.push('alias = ?');
+      values.push(alias);
+    }
+    if (telefono !== undefined) {
+      updates.push('telefono = ?');
+      values.push(telefono);
+    }
+    if (fecha_nacimiento !== undefined) {
+      updates.push('fecha_nacimiento = ?');
+      values.push(fecha_nacimiento);
+    }
+    if (ciudad !== undefined) {
+      updates.push('ciudad = ?');
+      values.push(ciudad);
+    }
+    if (idioma_preferido !== undefined) {
+      updates.push('idioma_preferido = ?');
+      values.push(idioma_preferido);
+    }
+    if (festival_favorito !== undefined) {
+      updates.push('festival_favorito = ?');
+      values.push(festival_favorito);
+    }
+    if (preferencias_dieteticas !== undefined) {
+      updates.push('preferencias_dieteticas = ?');
+      values.push(preferencias_dieteticas);
+    }
+    if (alergias !== undefined) {
+      updates.push('alergias = ?');
+      values.push(alergias);
+    }
+    if (notificaciones_push !== undefined) {
+      updates.push('notificaciones_push = ?');
+      values.push(notificaciones_push ? 1 : 0);
+    }
+    if (notificaciones_email !== undefined) {
+      updates.push('notificaciones_email = ?');
+      values.push(notificaciones_email ? 1 : 0);
+    }
+    if (acepta_marketing !== undefined) {
+      updates.push('acepta_marketing = ?');
+      values.push(acepta_marketing ? 1 : 0);
+    }
+    if (avatar_url !== undefined) {
+      updates.push('avatar_url = ?');
+      values.push(avatar_url);
+    }
+
+    // Si no hay campos para actualizar, devolver error
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No se proporcionaron campos para actualizar' });
+    }
+
+    // Añadir userId al final de los valores
+    values.push(userId);
+
+    // Ejecutar la actualización
+    const query = `UPDATE usuarios SET ${updates.join(', ')}, actualizado_en = CURRENT_TIMESTAMP WHERE id = ?`;
+    await db.query(query, values);
+
+    // Obtener los datos actualizados del usuario
+    const [rows] = await db.query(
+      'SELECT u.*, r.nombre as rol FROM usuarios u JOIN roles r ON u.rol_id = r.id WHERE u.id = ?',
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    // Eliminar password_hash antes de enviar
+    const user = rows[0];
+    delete user.password_hash;
+
+    res.json({ message: 'Perfil actualizado correctamente', user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==================== PUESTOS ====================
 
 app.get('/api/puestos/esperas', async (req, res) => {

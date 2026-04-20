@@ -64,6 +64,43 @@ export const register = async (email: string, password: string, nombre: string) 
     return res.json();
 };
 
+// Obtener perfil del usuario autenticado
+export const getProfile = async () => {
+    const res = await fetch(`${API_URL}/perfil`, {
+        headers: headers()
+    });
+    if (!res.ok) {
+        throw new Error('Error al obtener el perfil');
+    }
+    return res.json();
+};
+
+// Actualizar perfil del usuario autenticado
+export const updateProfile = async (profileData: {
+    alias?: string;
+    telefono?: string;
+    fecha_nacimiento?: string;
+    ciudad?: string;
+    idioma_preferido?: string;
+    festival_favorito?: string;
+    preferencias_dieteticas?: string;
+    alergias?: string;
+    notificaciones_push?: boolean;
+    notificaciones_email?: boolean;
+    acepta_marketing?: boolean;
+}) => {
+    const res = await fetch(`${API_URL}/perfil`, {
+        method: 'PATCH',
+        headers: headers(),
+        body: JSON.stringify(profileData)
+    });
+    if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data?.error || 'Error al actualizar el perfil');
+    }
+    return res.json();
+};
+
 // ==================== PUESTOS ====================
 // Obtiene todos los puestos abiertos (barras y food trucks) — sin filtro de festival
 export const getPuestos = async () => {

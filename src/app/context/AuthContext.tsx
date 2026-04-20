@@ -5,12 +5,27 @@
 // El token JWT se guarda en localStorage para persistir entre recargas
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { getProfile } from '../api';
 
 interface User {
     id: number;
     email: string;
     nombre: string;
     rol: 'administrador' | 'gestor' | 'operador' | 'usuario';
+    alias?: string;
+    telefono?: string;
+    fecha_nacimiento?: string;
+    ciudad?: string;
+    idioma_preferido?: string;
+    festival_favorito?: string;
+    preferencias_dieteticas?: string;
+    alergias?: string;
+    notificaciones_push?: boolean;
+    notificaciones_email?: boolean;
+    acepta_marketing?: boolean;
+    avatar_url?: string;
+    creado_en?: string;
+    actualizado_en?: string;
 }
 
 interface AuthContextType {
@@ -19,6 +34,7 @@ interface AuthContextType {
     isLoading: boolean;
     login: (token: string, user: User) => void;
     logout: () => void;
+    refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -53,8 +69,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
     };
 
+    const refreshUser = async () => {
+        if (!token) return;
+        try {
+            const updatedUser = await getProfile();
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            setUser(updatedUser);
+        } catch (error) {
+            console.error('Error al refrescar el perfil:', error);
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+        <AuthContext.Provider value={{ user, token, isLoading, login, logout, refreshUser }}>
             {children}
         </AuthContext.Provider>
     );
