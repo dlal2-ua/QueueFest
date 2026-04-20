@@ -16,6 +16,11 @@ export function OperatorTicketsScreen() {
     const [isPanicModalOpen, setIsPanicModalOpen] = useState(false);
     const [toastMessage, setToastMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
+    const playPanicoSound = () => {
+        const audio = new Audio('/panico.opus');
+        audio.play().catch(() => {/* el navegador bloqueó el audio */});
+    };
+
     const cargarDatos = async () => {
         try {
             let currentPuestoId = puestoId;
@@ -138,7 +143,7 @@ export function OperatorTicketsScreen() {
 
                 {puesto?.abierto === 1 ? (
                     <button
-                        onClick={() => setIsPanicModalOpen(true)}
+                        onClick={() => { playPanicoSound(); setIsPanicModalOpen(true); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white"
                         style={{ backgroundColor: '#EF4444' }}
                     >
