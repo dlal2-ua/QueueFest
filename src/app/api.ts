@@ -112,6 +112,13 @@ export const getMisPuestosOperador = async () => {
     return res.json();
 };
 
+// Operador: obtiene el stock de materias primas de su puesto
+export const getStockPuesto = async (puestoId: number) => {
+    const res = await fetch(`${API_URL}/operador/stock/${puestoId}`, { headers: headers() });
+    if (!res.ok) throw new Error('Error cargando stock del puesto');
+    return res.json();
+};
+
 // Llama al botón pánico (pausar, reanudar o llamar camarero) (VEND-004)
 export const triggerPanico = async (puestoId: number, accion: string) => {
     const res = await fetch(`${API_URL}/puestos/${puestoId}/panico`, {

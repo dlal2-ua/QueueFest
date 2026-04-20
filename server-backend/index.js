@@ -583,7 +583,7 @@ async function evaluateWaitZeroTriggerForPuesto(puestoId, source) {
 
   const previousLock = waitEvaluationLocks.get(normalizedPuestoId) || Promise.resolve();
   const nextLock = previousLock
-    .catch(() => {})
+    .catch(() => { })
     .then(() => runEvaluateWaitZeroTriggerForPuesto(normalizedPuestoId, source))
     .finally(() => {
       if (waitEvaluationLocks.get(normalizedPuestoId) === nextLock) {
@@ -1214,7 +1214,209 @@ app.get('/api/operador/mis-puestos', auth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// Operador: ver pedidos de su puesto
+
+// Operador: consultar stock de materias primas de su puesto
+app.get('/api/operador/stock/:puestoId', auth, async (req, res) => {
+  try {
+    const puestoId = Number(req.params.puestoId);
+
+    // Verificar que el operador pertenece a este puesto (o es gestor/admin)
+    if (req.user.rol === 'operador') {
+      const [ops] = await db.query(
+        'SELECT id FROM puesto_operadores WHERE puesto_id = ? AND usuario_id = ?',
+        [puestoId, req.user.id]
+      );
+      if (ops.length === 0) {
+        return res.status(403).json({ error: 'No tienes permiso para ver el stock de este puesto' });
+      }
+    }
+
+    const [rows] = await db.query(
+      `SELECT
+         sp.puesto_id,
+         sp.materia_prima_id,
+         mp.nombre,
+         mp.unidad_medida,
+         CAST(sp.stock_actual AS FLOAT) AS stock_actual,
+         CAST(sp.stock_minimo AS FLOAT) AS stock_minimo,
+         CAST(sp.stock_maximo AS FLOAT) AS stock_maximo,
+         sp.actualizado_en,
+         CASE
+           WHEN sp.stock_actual <= sp.stock_minimo THEN 'critico'
+           WHEN sp.stock_actual <= sp.stock_minimo * 1.5 THEN 'bajo'
+           ELSE 'ok'
+         END AS estado
+       FROM stock_puesto sp
+       JOIN materias_primas mp ON mp.id = sp.materia_prima_id
+       WHERE sp.puesto_id = ?
+       ORDER BY estado DESC, mp.nombre ASC`,
+      [puestoId]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Operador: predicción de agotamiento de materias primas
+// Basada en el consumo real de los últimos 7 días y la concentración horaria de pedidos
+app.get('/api/operador/prediccion/:puestoId', auth, async (req, res) => {
+  try {
+    const puestoId = Number(req.params.puestoId);
+
+    // Verificar pertenencia al puesto
+    if (req.user.rol === 'operador') {
+      const [ops] = await db.query(
+        'SELECT id FROM puesto_operadores WHERE puesto_id = ? AND usuario_id = ?',
+        [puestoId, req.user.id]
+      );
+      if (ops.length === 0) {
+        return res.status(403).json({ error: 'No tienes permiso' });
+      }
+    }
+
+    // 1. Consumo total de cada MP en los últimos 7 días, desglosado por hora del día
+    const [consumoHorario] = await db.query(
+      `SELECT
+         pm.materia_prima_id,
+         mp.nombre,
+         mp.unidad_medida,
+         HOUR(p.creado_en)                              AS hora_dia,
+         SUM(pi.cantidad * pm.cantidad_por_unidad)      AS consumo_hora_total,
+         COUNT(DISTINCT DATE(p.creado_en))              AS dias_con_datos
+       FROM pedidos p
+       JOIN pedido_items pi              ON pi.pedido_id  = p.id
+       JOIN producto_materias_primas pm  ON pm.producto_id = pi.producto_id
+       JOIN materias_primas mp           ON mp.id = pm.materia_prima_id
+       WHERE p.puesto_id = ?
+         AND p.estado NOT IN ('cancelado')
+         AND p.creado_en >= NOW() - INTERVAL 7 DAY
+       GROUP BY pm.materia_prima_id, mp.nombre, mp.unidad_medida, HOUR(p.creado_en)
+       ORDER BY pm.materia_prima_id, hora_dia`,
+      [puestoId]
+    );
+
+    // 2. Stock actual de cada MP en este puesto
+    const [stockRows] = await db.query(
+      `SELECT sp.materia_prima_id, sp.stock_actual, sp.stock_minimo, sp.stock_maximo
+       FROM stock_puesto sp
+       WHERE sp.puesto_id = ?`,
+      [puestoId]
+    );
+
+    const stockMap = {};
+    stockRows.forEach(s => {
+      stockMap[s.materia_prima_id] = {
+        stock_actual: Number(s.stock_actual),
+        stock_minimo: Number(s.stock_minimo),
+        stock_maximo: Number(s.stock_maximo)
+      };
+    });
+
+    // 3. Agrupar consumo por materia prima y calcular métricas
+    const byMP = {};
+    for (const row of consumoHorario) {
+      const id = row.materia_prima_id;
+      if (!byMP[id]) {
+        byMP[id] = {
+          materia_prima_id: id,
+          nombre: row.nombre,
+          unidad_medida: row.unidad_medida,
+          horas: {}  // hora_dia → consumo_medio_ese_dia
+        };
+      }
+      // Consumo medio para esa hora (promedio sobre días con datos)
+      const diasConDatos = Math.max(Number(row.dias_con_datos), 1);
+      byMP[id].horas[row.hora_dia] = Number(row.consumo_hora_total) / diasConDatos;
+    }
+
+    const horaActual = new Date().getHours();
+
+    const predicciones = Object.values(byMP).map(mp => {
+      const stock = stockMap[mp.materia_prima_id];
+      if (!stock) return null;
+
+      const horasData = mp.horas;  // { 0: 0.5, 13: 2.3, 20: 4.1, ... }
+      const consumos = Object.values(horasData);
+
+      // Consumo promedio por hora (sobre todas las horas del día con actividad)
+      const consumoTotalDia = consumos.reduce((a, b) => a + b, 0);
+      const horasConActividad = consumos.length || 1;
+      const consumoPromedioHora = consumoTotalDia / 24; // distribuido sobre el día
+
+      // Horas pico: las 3 horas con mayor consumo medio
+      const sortedHoras = Object.entries(horasData)
+        .sort((a, b) => Number(b[1]) - Number(a[1]));
+      const horasPico = sortedHoras.slice(0, 3).map(([h]) => Number(h));
+      const enHoraPico = horasPico.includes(horaActual);
+
+      // Consumo para la hora actual (o promedio si no hay dato)
+      const consumoHoraActual = horasData[horaActual] ?? consumoPromedioHora;
+
+      // Stock disponible antes de llegar al mínimo
+      const stockDisponible = Math.max(stock.stock_actual - stock.stock_minimo, 0);
+
+      // Horas hasta mínimo al ritmo actual
+      const horasHastaMinimo = consumoHoraActual > 0
+        ? stockDisponible / consumoHoraActual
+        : null;
+
+      // Horas hasta mínimo al ritmo promedio (si la hora actual = 0 consumo)
+      const horasHastaMinimoPromedio = consumoPromedioHora > 0
+        ? stockDisponible / consumoPromedioHora
+        : null;
+
+      // Momento estimado de agotamiento (hora actual o promedio, el más conservador)
+      const rateUsado = consumoHoraActual > 0 ? consumoHoraActual : consumoPromedioHora;
+      let prediccionFecha = null;
+      if (rateUsado > 0 && stockDisponible >= 0) {
+        const msHastaMinimo = (stockDisponible / rateUsado) * 3600 * 1000;
+        prediccionFecha = new Date(Date.now() + msHastaMinimo).toISOString();
+      }
+
+      return {
+        materia_prima_id: mp.materia_prima_id,
+        nombre: mp.nombre,
+        unidad_medida: mp.unidad_medida,
+        stock_actual: stock.stock_actual,
+        stock_minimo: stock.stock_minimo,
+        stock_maximo: stock.stock_maximo,
+        consumo_promedio_hora: Math.round(consumoPromedioHora * 1000) / 1000,
+        consumo_hora_actual: Math.round(consumoHoraActual * 1000) / 1000,
+        consumo_total_dia: Math.round(consumoTotalDia * 100) / 100,
+        horas_pico: horasPico,
+        en_hora_pico: enHoraPico,
+        horas_hasta_minimo: horasHastaMinimo !== null ? Math.round(horasHastaMinimo * 10) / 10 : null,
+        horas_hasta_minimo_promedio: horasHastaMinimoPromedio !== null ? Math.round(horasHastaMinimoPromedio * 10) / 10 : null,
+        prediccion_agotamiento: prediccionFecha,
+        dias_analizados: horasConActividad > 0 ? Math.max(...Object.values(mp.horas).map(() => 1)) : 0,
+        sin_datos: consumoTotalDia === 0
+      };
+    }).filter(Boolean);
+
+    // Ordenar: primero los más críticos (menor horas_hasta_minimo)
+    predicciones.sort((a, b) => {
+      if (a.sin_datos && !b.sin_datos) return 1;
+      if (!a.sin_datos && b.sin_datos) return -1;
+      if (a.horas_hasta_minimo === null) return 1;
+      if (b.horas_hasta_minimo === null) return -1;
+      return a.horas_hasta_minimo - b.horas_hasta_minimo;
+    });
+
+    res.json({
+      puesto_id: puestoId,
+      hora_actual: horaActual,
+      generado_en: new Date().toISOString(),
+      predicciones
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 app.get('/api/pedidos/puesto/:id', auth, async (req, res) => {
   try {
     const puestoId = Number(req.params.id);
