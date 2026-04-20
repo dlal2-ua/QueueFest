@@ -5,13 +5,12 @@ import {
   crearFestival, getFestivales, eliminarFestival, desactivarFestival, activarFestival, actualizarFestival, subirFotoFestival,
   crearPuesto, actualizarPuesto, getPuestosByFestival, eliminarPuesto, subirFotoPuesto,
   getProductos, getAdminProductos, crearProducto, actualizarProducto, eliminarProducto, subirFotoProducto,
-  getPromociones, crearPromocion, actualizarPromocion, eliminarPromocion,
   getParametros, actualizarParametros,
   getUsuariosStaff, getUsuarios, crearUsuario, eliminarUsuario
 } from '../api';
 import {
   PlusCircle, Calendar, Settings, Users, Package,
-  Store, CheckCircle2, XCircle, LogOut, Trash2, Tag, Eye, PowerOff, Pencil, X
+  Store, CheckCircle2, XCircle, LogOut, Trash2, Eye, PowerOff, Pencil, X
 } from 'lucide-react';
 
 export function AdminScreen() {
@@ -19,7 +18,7 @@ export function AdminScreen() {
 
   const tabsRef = useRef<HTMLDivElement>(null);
 
-  const [tab, setTab] = useState<'festival' | 'puestos' | 'productos' | 'promociones' | 'parametros' | 'usuarios'>('festival');
+  const [tab, setTab] = useState<'festival' | 'puestos' | 'productos' | 'parametros' | 'usuarios'>('festival');
   const [loading, setLoading] = useState(false);
 
   // ── Festival activo en contexto ──────────────────────────────────────────
@@ -198,7 +197,7 @@ export function AdminScreen() {
   useEffect(() => {
     if (tab === 'festival') {
       loadFestivales();
-    } else if (['puestos', 'productos', 'promociones'].includes(tab)) {
+    } else if (['puestos', 'productos'].includes(tab)) {
       if (festivalActivo?.id) {
         loadPuestos(festivalActivo);
       } else {
@@ -566,26 +565,39 @@ export function AdminScreen() {
         </div>
 
         {/* Banner festival activo */}
-        {festivalActivo ? (
-          <div className="mt-3 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2 border border-gray-700">
-            <Calendar className="w-4 h-4 text-red-400 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-400 leading-none">Evento en contexto</p>
-              <p className="text-sm font-bold text-white truncate">{festivalActivo.nombre}</p>
+        <div className="mt-3 flex gap-2">
+          {/* Caja 1: Evento en contexto */}
+          {festivalActivo ? (
+            <div className="flex-1 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2 border border-gray-700 min-w-0">
+              <Calendar className="w-4 h-4 text-red-400 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-400 leading-none">Evento en contexto</p>
+                <p className="text-sm font-bold text-white truncate">{festivalActivo.nombre}</p>
+              </div>
+              <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border flex-shrink-0 ${festivalActivo.activo ? 'bg-green-900 text-green-300 border-green-700' : 'bg-gray-700 text-gray-400 border-gray-600'}`}>
+                {festivalActivo.activo ? 'ACTIVO' : 'INACTIVO'}
+              </span>
             </div>
-            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border flex-shrink-0 ${festivalActivo.activo ? 'bg-green-900 text-green-300 border-green-700' : 'bg-gray-700 text-gray-400 border-gray-600'
-              }`}>
-              {festivalActivo.activo ? 'ACTIVO' : 'INACTIVO'}
-            </span>
-          </div>
-        ) : (
-          <div className="mt-3 flex items-center gap-2 bg-yellow-900/40 rounded-lg px-3 py-2 border border-yellow-700/50">
-            <Calendar className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-            <p className="text-xs text-yellow-300">
-              Sin evento seleccionado — ve a <strong>Evento</strong> y pulsa <strong>Ver</strong>
-            </p>
-          </div>
-        )}
+          ) : (
+            <div className="flex-1 flex items-center gap-2 bg-yellow-900/40 rounded-lg px-3 py-2 border border-yellow-700/50 min-w-0">
+              <Calendar className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+              <p className="text-xs text-yellow-300 truncate">
+                Sin evento — ve a <strong>Evento → Ver</strong>
+              </p>
+            </div>
+          )}
+
+          {/* Caja 2: Dashboard */}
+          <button
+            onClick={() => (window as any).navigateTo('/admin/dashboard')}
+            className="group relative flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-gray-800 border border-red-600 rounded-lg overflow-hidden transition-all duration-300 hover:border-red-400 hover:shadow-lg hover:shadow-red-900/50 hover:scale-105 active:scale-95"
+          >
+            {/* fondo animado que sube al hover */}
+            <span className="absolute inset-0 bg-gradient-to-t from-red-700 to-red-500 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
+            <span className="relative text-base transition-transform duration-300 group-hover:rotate-12 group-hover:scale-125">📊</span>
+            <span className="relative text-[11px] font-bold text-gray-300 group-hover:text-white transition-colors duration-200">Dashboard</span>
+          </button>
+        </div>
       </div>
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
@@ -594,7 +606,6 @@ export function AdminScreen() {
           { id: 'festival', label: 'Evento', icon: Calendar },
           { id: 'puestos', label: 'Puestos', icon: Store },
           { id: 'productos', label: 'Catálogo', icon: Package },
-          { id: 'promociones', label: 'Ofertas', icon: Tag },
           { id: 'parametros', label: 'Ajustes', icon: Settings },
           { id: 'usuarios', label: 'Usuarios', icon: Users },
         ].map((t) => (
@@ -1052,165 +1063,9 @@ export function AdminScreen() {
           </div>
         )}
 
-        {/* ── 3.5 PROMOCIONES ─────────────────────────────────────────── */}
-        {tab === 'promociones' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-            <div className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-gray-100">
-              <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
-                <Tag className="w-5 h-5 text-red-600" /> Promociones y Ofertas
-                {festivalActivo && <span className="text-xs font-normal text-gray-500 ml-auto">{festivalActivo.nombre}</span>}
-              </h2>
-              <div>
-                <label className="block text-sm font-medium mb-1">Selecciona Puesto</label>
-                <select
-                  value={selectedPuestoIdPromo}
-                  onChange={e => setSelectedPuestoIdPromo(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg font-medium"
-                >
-                  <option value="">-- Seleccionar Puesto --</option>
-                  {puestosList.map(p => <option key={p.id} value={p.id}>{p.nombre} ({p.tipo})</option>)}
-                </select>
-              </div>
-            </div>
-
-            {selectedPuestoIdPromo && (
-              <>
-                <form onSubmit={handleCrearPromocion} className="bg-white rounded-xl p-4 shadow-sm space-y-4 border border-gray-100">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
-                      <label className="text-xs font-medium text-gray-500 uppercase">Título</label>
-                      <input type="text" value={promocion.titulo} onChange={e => setPromocion({ ...promocion, titulo: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-medium" required placeholder="Ej. 2x1 en Cervezas" />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="text-xs font-medium text-gray-500 uppercase">Descripción</label>
-                      <input type="text" value={promocion.descripcion} onChange={e => setPromocion({ ...promocion, descripcion: e.target.value })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none text-sm" placeholder="Condiciones" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase">Precio Promo (€)</label>
-                      <input type="number" step="0.5" value={promocion.precio_promo} onChange={e => setPromocion({ ...promocion, precio_promo: Number(e.target.value) })} className="w-full p-2 border-b-2 border-gray-200 focus:border-red-500 outline-none font-bold text-red-700" required />
-                    </div>
-                  </div>
-                  <button type="submit" className="w-full bg-red-50 text-red-700 py-2.5 rounded-lg border border-red-200 font-semibold text-sm hover:bg-red-100 transition-colors">
-                    + Insertar Oferta Activa
-                  </button>
-                </form>
-                <div className="space-y-2">
-                  <h3 className="font-bold text-gray-700 text-sm mb-3">Ofertas vigentes</h3>
-                  {promocionesList.length === 0
-                    ? <p className="text-xs text-center text-gray-400">Sin ofertas configuradas.</p>
-                    : promocionesList.map(promo => (
-                      <div key={promo.id} className={`flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border transition-colors ${promo.activa ? 'border-gray-100' : 'border-red-100 bg-red-50/30'}`}>
-                        {editandoPromocionId === promo.id ? (
-                          <div className="w-full space-y-3">
-                            <div className="grid grid-cols-1 gap-2">
-                              <div>
-                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Título</label>
-                                <input type="text" value={promocionEditFormData.titulo} onChange={e => setPromocionEditFormData({ ...promocionEditFormData, titulo: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
-                              </div>
-                              <div>
-                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Descripción</label>
-                                <input type="text" value={promocionEditFormData.descripcion} onChange={e => setPromocionEditFormData({ ...promocionEditFormData, descripcion: e.target.value })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
-                              </div>
-                              <div>
-                                <label className="text-[10px] text-gray-500 font-bold uppercase block ml-1">Precio Promo</label>
-                                <input type="number" step="0.5" value={promocionEditFormData.precio_promo} onChange={e => setPromocionEditFormData({ ...promocionEditFormData, precio_promo: Number(e.target.value) })} className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500" />
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button onClick={() => handleSavePromocion(promo.id)} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded-lg text-xs font-bold">Guardar</button>
-                              <button onClick={() => setEditandoPromocionId(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded-lg text-xs font-bold">Cancelar</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex-1 min-w-0 mr-2">
-                              <p className={`font-semibold ${promo.activa ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{promo.titulo}</p>
-                              <p className="text-xs text-gray-500 font-medium">{promo.precio_promo}€ • {promo.descripcion}</p>
-                            </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              <button
-                                onClick={() => handleTogglePromocion(promo)}
-                                title={promo.activa ? 'Desactivar oferta' : 'Activar oferta'}
-                                className="p-1.5 rounded-full transition-colors hover:bg-gray-100"
-                              >
-                                {promo.activa
-                                  ? <CheckCircle2 className="w-5 h-5 text-green-500" />
-                                  : <XCircle className="w-5 h-5 text-red-500" />}
-                              </button>
-                              <button onClick={() => handleEditPromocion(promo)} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button onClick={() => handleEliminarPromocion(promo.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
         {/* ── 4. AJUSTES ──────────────────────────────────────────────── */}
         {tab === 'parametros' && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-            <form onSubmit={handleGuardarParametros} className="bg-white rounded-xl p-5 shadow-sm space-y-6 border border-gray-100">
-              <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
-                <Settings className="w-5 h-5 text-red-600" /> Reglas de Negocio
-              </h2>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-gray-900">Pricing Dinámico</h4>
-                  <p className="text-xs text-gray-500 pr-4">Sube precios cuando hay picos de demanda.</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={parametros.pricing_dinamico_activo} onChange={e => setParametros({ ...parametros, pricing_dinamico_activo: e.target.checked })} />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
-                </label>
-              </div>
-
-              {parametros.pricing_dinamico_activo && (
-                <div className="grid grid-cols-2 gap-4 bg-red-50 p-4 rounded-lg border border-red-100">
-                  <div>
-                    <label className="block text-xs font-semibold mb-1 text-red-900">Umbral (pedidos en cola)</label>
-                    <input type="number" value={parametros.umbral_cola} onChange={e => setParametros({ ...parametros, umbral_cola: Number(e.target.value) })} className="w-full p-2 border border-red-200 rounded text-sm text-center font-bold" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold mb-1 text-red-900">Subida de precio (%)</label>
-                    <input type="number" value={parametros.porcentaje_subida} onChange={e => setParametros({ ...parametros, porcentaje_subida: Number(e.target.value) })} className="w-full p-2 border border-red-200 rounded text-sm text-center font-bold" />
-                  </div>
-                </div>
-              )}
-
-              <hr className="border-gray-100" />
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-gray-900">Promociones Automáticas</h4>
-                  <p className="text-xs text-gray-500 pr-4">Happy hours en horas valle detectadas.</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={parametros.promociones_activas} onChange={e => setParametros({ ...parametros, promociones_activas: e.target.checked })} />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
-                </label>
-              </div>
-
-              <hr className="border-gray-100" />
-
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-800">Alerta Stock Crítico (unidades mínimas)</label>
-                <input type="number" value={parametros.stock_minimo} onChange={e => setParametros({ ...parametros, stock_minimo: Number(e.target.value) })} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 font-bold" />
-              </div>
-
-              <button type="submit" disabled={loading} className="w-full bg-gray-900 hover:bg-black text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors">
-                Guardar y Propagar Reglas
-              </button>
-            </form>
-
             {/* Desactivar evento */}
             <div className="bg-white rounded-xl p-5 shadow-sm border border-red-100 space-y-3">
               <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">

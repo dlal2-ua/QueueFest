@@ -54,6 +54,7 @@ import { OperatorOrderDetailScreen } from './screens/OperatorOrderDetailScreen';
 
 import { GestorScreen } from './screens/GestorScreen';
 import { AdminScreen } from './screens/AdminScreen';
+import { AdminDashboardScreen } from './screens/AdminDashboardScreen';
 
 function AppRoutes() {
   const { user, isLoading } = useAuth();
@@ -113,7 +114,10 @@ function AppRoutes() {
   }
 
   if (user.rol === 'gestor') return <GestorScreen />;
-  if (user.rol === 'administrador') return <AdminScreen />;
+  if (user.rol === 'administrador') {
+    if (path === '/admin/dashboard') return <AdminDashboardScreen />;
+    return <AdminScreen />;
+  }
 
   // Usuario final
   if (path === '/festival-select') return <FestivalSelectScreen />;

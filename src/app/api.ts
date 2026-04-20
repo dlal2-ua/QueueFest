@@ -557,4 +557,173 @@ export const eliminarPromocion = async (id: number) => {
     return res.json();
 };
 
+// ==================== ADMIN DASHBOARD (queuefest_dw — puerto 3001) ====================
+// Todos los endpoints de esta sección apuntan al servidor de Data Warehouse (index-adminDashboard.js)
+// que corre en http://localhost:3001 y conecta con la base de datos queuefest_dw.
 
+const DW_URL = 'http://localhost:3001/api';
+
+// Cabeceras con token JWT para el servidor DW (mismo JWT_SECRET que el principal)
+const dwHeaders = () => ({
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${getToken()}`,
+});
+
+// Helper genérico: construye query string a partir de un objeto de filtros
+function buildDwQuery(filters: { [k: string]: string | number | undefined }): string {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+    });
+    const qs = params.toString();
+    return qs ? '?' + qs : '';
+}
+
+// ── Tipos de filtros globales del dashboard ───────────────────────────────
+export interface DwFilters {
+    periodo?: 'hoy' | 'sem' | 'mes' | 'todo';
+    festival_id?: number | string;
+    tipo_puesto?: 'barra' | 'foodtruck' | '';
+    sort_by?: string;
+    [key: string]: string | number | undefined;  // index signature — necesario para pasar DwFilters a buildDwQuery
+}
+
+// ── Festivales (selector de filtro) ──────────────────────────────────────
+export const getDwFestivales = async () => {
+    const res = await fetch(`${DW_URL}/festivales`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar festivales del DW');
+    return res.json();
+};
+
+// ── Sección 1: Resumen global ─────────────────────────────────────────────
+export const getDwResumen = async (filters: DwFilters = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/resumen${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar resumen');
+    return res.json();
+};
+
+export const getDwIngresosPorPuesto = async (filters: DwFilters = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/ingresos-por-puesto${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar ingresos por puesto');
+    return res.json();
+};
+
+export const getDwPedidosPorTipo = async (filters: DwFilters = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/pedidos-por-tipo${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar pedidos por tipo');
+    return res.json();
+};
+
+// ── Sección 2: Ingresos y actividad ──────────────────────────────────────
+export const getDwIngresosActividad = async (filters: DwFilters = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/ingresos-actividad${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar ingresos y actividad');
+    return res.json();
+};
+
+// ── Sección 3: Rendimiento por puesto ────────────────────────────────────
+export const getDwPuestosKpis = async (filters: DwFilters = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/puestos/kpis${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar KPIs de puestos');
+    return res.json();
+};
+
+export const getDwPuestosTabla = async (filters: DwFilters & { sort_by?: string } = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/puestos/tabla${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar tabla de puestos');
+    return res.json();
+};
+
+export const getDwPuestosEspera = async (filters: DwFilters = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/puestos/espera${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar esperas de puestos');
+    return res.json();
+};
+
+// ── Sección 4: Productos y rentabilidad ──────────────────────────────────
+export const getDwProductos = async (filters: DwFilters = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/productos${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar productos del dashboard');
+    return res.json();
+};
+
+// ── Sección 5: Stock y operaciones ───────────────────────────────────────
+export const getDwStock = async (filters: Pick<DwFilters, 'festival_id'> = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/stock${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar stock');
+    return res.json();
+};
+
+// ── Sección 6: Usuarios y comportamiento ─────────────────────────────────
+export const getDwUsuarios = async (filters: DwFilters = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/usuarios${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar usuarios');
+    return res.json();
+};
+
+// ── Sección 7: Loyalty ────────────────────────────────────────────────────
+export const getDwLoyalty = async (filters: Pick<DwFilters, 'festival_id'> = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/loyalty${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar loyalty');
+    return res.json();
+};
+
+// ── Sección 8: Promociones ────────────────────────────────────────────────
+export const getDwPromociones = async (filters: DwFilters = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/promociones${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar promociones');
+    return res.json();
+};
+
+// ── Sección 9: Alertas ────────────────────────────────────────────────────
+export const getDwAlertas = async (filters: Pick<DwFilters, 'festival_id'> = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/alertas${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar alertas');
+    return res.json();
+};
+
+export const getDwAlertasCount = async () => {
+    const res = await fetch(`${DW_URL}/dashboard/alertas/count`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar conteo de alertas');
+    return res.json();
+};
+
+export const resolverAlertaDw = async (id: number) => {
+    const res = await fetch(`${DW_URL}/alertas/${id}/resolver`, {
+        method: 'PATCH',
+        headers: dwHeaders(),
+    });
+    if (!res.ok) throw new Error('Error al resolver alerta');
+    return res.json();
+};
+
+export const resolverTodasAlertasDw = async (categoria?: string) => {
+    const qs = categoria ? `?categoria=${categoria}` : '';
+    const res = await fetch(`${DW_URL}/alertas/resolver-todas${qs}`, {
+        method: 'POST',
+        headers: dwHeaders(),
+    });
+    if (!res.ok) throw new Error('Error al marcar alertas como resueltas');
+    return res.json();
+};
+
+// ── Sección 10: Predicción de demanda ────────────────────────────────────
+export const getDwPrediccion = async (filters: DwFilters = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/prediccion${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar predicción');
+    return res.json();
+};
+
+// ── Sección 11: Heatmap del festival ─────────────────────────────────────
+export const getDwHeatmap = async (filters: Required<Pick<DwFilters, 'festival_id'>> & Partial<DwFilters>) => {
+    const res = await fetch(`${DW_URL}/dashboard/heatmap${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar heatmap');
+    return res.json();
+};
+
+// ── Sección 12: CLV ───────────────────────────────────────────────────────
+export const getDwClv = async (filters: Pick<DwFilters, 'festival_id'> = {}) => {
+    const res = await fetch(`${DW_URL}/dashboard/clv${buildDwQuery(filters)}`, { headers: dwHeaders() });
+    if (!res.ok) throw new Error('Error al cargar CLV');
+    return res.json();
+};
