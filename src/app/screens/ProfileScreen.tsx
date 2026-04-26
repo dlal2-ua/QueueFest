@@ -1,28 +1,60 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '../utils/navigation';
 import { User, CreditCard, Clock, Heart, HelpCircle, ChevronRight, LogOut, Globe, Coins, Sparkles, Bell } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { getRoyaltyProgram, getRoyaltyProgress, getRoyaltyTierStatus, getUserProfile } from '../data/profileData';
+import { getLoyalty, type LoyaltyResponse } from '../api';
+import { DEFAULT_ROYALTY_THRESHOLDS, getRoyaltyProgress, getRoyaltyTierStatus, getUserProfile } from '../data/profileData';
 
 export function ProfileScreen() {
   const navigate = useNavigate();
   const { t, isRTL } = useLanguage();
   const { user, logout } = useAuth();
+  const [loyalty, setLoyalty] = useState<LoyaltyResponse | null>(null);
 
   const userProfile = useMemo(
     () =>
       getUserProfile({
         fullName: user?.nombre,
-        displayName: user?.nombre,
+        displayName: user?.alias || user?.nombre,
         email: user?.email
       }),
-    [user?.email, user?.nombre]
+    [user?.alias, user?.email, user?.nombre]
   );
-  const royaltyProgram = useMemo(() => getRoyaltyProgram(), []);
-  const royaltyTier = useMemo(() => getRoyaltyTierStatus(royaltyProgram.balance), [royaltyProgram.balance]);
-  const royaltyProgress = useMemo(() => getRoyaltyProgress(royaltyProgram.balance), [royaltyProgram.balance]);
+  useEffect(() => {
+    let cancelled = false;
+
+    getLoyalty()
+      .then((data) => {
+        if (!cancelled) setLoyalty(data);
+      })
+      .catch((error) => {
+        console.error('Error cargando loyalty:', error);
+        if (!cancelled) {
+          setLoyalty({
+            puntos_total: 0,
+            puntos_pendientes: 0,
+            puntos_ganados_total: 0,
+            puntos_canjeados_total: 0,
+            nivel: 'fan',
+            activo: true,
+            tier_thresholds: DEFAULT_ROYALTY_THRESHOLDS,
+            movements: []
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const balance = loyalty?.puntos_total ?? 0;
+  const pending = loyalty?.puntos_pendientes ?? 0;
+  const thresholds = loyalty?.tier_thresholds ?? DEFAULT_ROYALTY_THRESHOLDS;
+  const royaltyTier = useMemo(() => getRoyaltyTierStatus(balance, thresholds), [balance, thresholds]);
+  const royaltyProgress = useMemo(() => getRoyaltyProgress(balance, thresholds), [balance, thresholds]);
 
   const menuItems = [
     { icon: User, label: t('profile.personalInfo'), path: '/profile/info' },
@@ -51,7 +83,10 @@ export function ProfileScreen() {
           <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-4 shadow-lg">
             <User className="w-12 h-12 text-gray-600" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-1">{userProfile.fullName}</h2>
+          <h2 className="text-2xl font-bold text-white mb-1">{userProfile.displayName}</h2>
+          {user?.alias && user?.nombre && user.alias !== user.nombre && (
+            <p className="text-sm text-white/80">{user.nombre}</p>
+          )}
           <p className="text-white/90">{userProfile.email}</p>
           <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">
             <Sparkles className="h-4 w-4" />
@@ -68,8 +103,8 @@ export function ProfileScreen() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-white/80">Saldo disponible</p>
-              <p className="mt-2 text-4xl font-black tracking-tight">{royaltyProgram.balance}</p>
-              <p className="mt-2 text-sm text-white/85">+{royaltyProgram.pending} pendientes por confirmar</p>
+              <p className="mt-2 text-4xl font-black tracking-tight">{balance}</p>
+              <p className="mt-2 text-sm text-white/85">+{pending} pendientes por confirmar</p>
             </div>
             <div className="rounded-2xl bg-white/20 p-3 backdrop-blur-sm">
               <Coins className="h-7 w-7" />
@@ -85,7 +120,7 @@ export function ProfileScreen() {
               <div className="h-2 rounded-full bg-white transition-all" style={{ width: `${royaltyProgress}%` }} />
             </div>
             <p className="mt-2 text-sm text-white/85">
-              Te faltan {Math.max(0, royaltyTier.nextTierTarget - royaltyProgram.balance)} royalties para subir de nivel.
+              Te faltan {Math.max(0, royaltyTier.nextTierTarget - balance)} royalties para subir de nivel.
             </p>
           </div>
         </button>

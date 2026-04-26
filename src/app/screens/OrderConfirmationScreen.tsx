@@ -5,7 +5,7 @@ import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { PickupQR } from '../components/PickupQR';
 import { getPaymentSession } from '../api';
-import { applyRoyaltyReward, calculateRoyaltiesForPurchase } from '../data/profileData';
+import { calculateRoyaltiesForPurchase } from '../data/profileData';
 
 export function OrderConfirmationScreen() {
   const navigate = useNavigate();
@@ -66,16 +66,6 @@ export function OrderConfirmationScreen() {
       cancelled = true;
     };
   }, [clearCart, directOrder, provider, sessionId]);
-
-  useEffect(() => {
-    if (!orderNumber || orderTotal <= 0) return;
-
-    applyRoyaltyReward({
-      orderNumber,
-      total: orderTotal,
-      vendorName
-    });
-  }, [orderNumber, orderTotal, vendorName]);
 
   const handleContinue = () => {
     navigate('/home');

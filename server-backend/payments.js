@@ -245,10 +245,32 @@ function createPaymentsModule({
       );
     }
 
-    const puntos = Math.floor(total);
+    const puntos = Math.round(Number(total) * 100);
     await conn.query(
-      'INSERT INTO loyalty (usuario_id, puntos_total) VALUES (?, ?) ON DUPLICATE KEY UPDATE puntos_total = puntos_total + ?',
+      `INSERT INTO loyalty
+        (usuario_id, puntos_total, puntos_pendientes, puntos_ganados_total, puntos_canjeados_total, nivel, activo, ultimo_movimiento_en)
+       VALUES (?, ?, 0, ?, 0, 'fan', 1, CURRENT_TIMESTAMP)
+       ON DUPLICATE KEY UPDATE
+         puntos_total = puntos_total + VALUES(puntos_total),
+         puntos_ganados_total = puntos_ganados_total + VALUES(puntos_ganados_total),
+         ultimo_movimiento_en = CURRENT_TIMESTAMP`,
       [usuarioId, puntos, puntos]
+    );
+
+    const [loyaltyRows] = await conn.query(
+      'SELECT id, puntos_total FROM loyalty WHERE usuario_id = ?',
+      [usuarioId]
+    );
+    const loyalty = loyaltyRows[0];
+    await conn.query(
+      `INSERT INTO loyalty_movimientos
+        (loyalty_id, pedido_id, tipo, origen, puntos, saldo_resultante, estado, descripcion, confirmado_en)
+       VALUES (?, ?, 'compra', 'pedido', ?, ?, 'confirmado', ?, CURRENT_TIMESTAMP)`,
+      [loyalty.id, pedidoId, puntos, loyalty.puntos_total, `Pedido #${pedidoId}`]
+    );
+    await conn.query(
+      'UPDATE pedidos SET puntos_ganados = ? WHERE id = ?',
+      [puntos, pedidoId]
     );
 
     return { pedidoId, puntos };

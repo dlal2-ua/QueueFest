@@ -19,24 +19,10 @@ export interface RoyaltyRule {
   description: string;
 }
 
-export interface RoyaltyMovement {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  amount: number;
-  status: 'credited' | 'pending' | 'redeemed';
-}
-
-export interface RoyaltyProgram {
-  balance: number;
-  pending: number;
-  lifetimeEarned: number;
-  redeemRate: number;
-  redeemValue: number;
-  benefits: string[];
-  earnRules: RoyaltyRule[];
-  movements: RoyaltyMovement[];
+export interface RoyaltyThresholds {
+  vip: number;
+  headliner: number;
+  backstage: number;
 }
 
 interface RoyaltyTier {
@@ -46,13 +32,33 @@ interface RoyaltyTier {
 }
 
 const USER_PROFILE_STORAGE_KEY = 'userProfile';
-const USER_ROYALTIES_STORAGE_KEY = 'userRoyalties';
-
-const ROYALTY_TIERS: RoyaltyTier[] = [
-  { name: 'Fan', min: 0, nextTarget: 250 },
-  { name: 'VIP', min: 250, nextTarget: 750 },
-  { name: 'Headliner', min: 750, nextTarget: 1500 },
-  { name: 'Backstage', min: 1500, nextTarget: null }
+export const ROYALTY_REDEEM_RATE = 1000;
+export const ROYALTY_REDEEM_VALUE = 1;
+export const ROYALTY_POINTS_PER_EURO = 100;
+export const ROYALTY_WELCOME_BONUS = 1000;
+export const DEFAULT_ROYALTY_THRESHOLDS: RoyaltyThresholds = {
+  vip: 10000,
+  headliner: 25000,
+  backstage: 50000
+};
+export const ROYALTY_BENEFITS = [
+  'Descuentos directos en futuras compras dentro del festival.',
+  'Acceso prioritario a promociones flash y menus especiales.',
+  'Nivel superior con ventajas exclusivas al seguir comprando.'
+];
+export const ROYALTY_EARN_RULES: RoyaltyRule[] = [
+  {
+    title: 'Compra completada',
+    description: 'Gana 100 royalties por cada euro gastado. 1000 royalties equivalen a 1 EUR.'
+  },
+  {
+    title: 'Resenas verificadas',
+    description: 'Una resena con estrellas puede darte una base de 50 puntos, mas extras por acciones complementarias.'
+  },
+  {
+    title: 'Ofertas especiales',
+    description: 'Algunas activaciones del festival multiplicaran temporalmente los royalties obtenidos.'
+  }
 ];
 
 export const defaultUserProfile: UserProfile = {
@@ -69,67 +75,6 @@ export const defaultUserProfile: UserProfile = {
   notifications: 'Avisos push para pedidos, promociones y cambios de cola',
   marketingConsent: 'Solo novedades del festival y ofertas relevantes',
   memberSince: 'Junio 2025'
-};
-
-export const defaultRoyaltyProgram: RoyaltyProgram = {
-  balance: 480,
-  pending: 35,
-  lifetimeEarned: 1280,
-  redeemRate: 100,
-  redeemValue: 5,
-  benefits: [
-    'Descuentos directos en futuras compras dentro del festival.',
-    'Acceso prioritario a promociones flash y menus especiales.',
-    'Nivel superior con ventajas exclusivas al seguir comprando.'
-  ],
-  earnRules: [
-    {
-      title: 'Compra completada',
-      description: 'Gana 1 royalty por cada euro gastado y un bonus fijo de 5 por pedido.'
-    },
-    {
-      title: 'Pedidos recurrentes',
-      description: 'El segundo pedido del dia te ayuda a acelerar el acceso al siguiente nivel.'
-    },
-    {
-      title: 'Ofertas especiales',
-      description: 'Algunas activaciones del festival multiplicaran temporalmente los royalties obtenidos.'
-    }
-  ],
-  movements: [
-    {
-      id: 'welcome-bonus',
-      title: 'Bonus de bienvenida',
-      description: 'Alta inicial en QueueFest Rewards',
-      date: '2026-03-30T10:00:00.000Z',
-      amount: 150,
-      status: 'credited'
-    },
-    {
-      id: 'order-1842',
-      title: 'Pedido #1842',
-      description: 'Compra completada en Taco Arena',
-      date: '2026-04-01T21:35:00.000Z',
-      amount: 42,
-      status: 'credited'
-    },
-    {
-      id: 'order-1846',
-      title: 'Pedido #1846',
-      description: 'Compra completada en Sunset Cocktails',
-      date: '2026-04-02T18:10:00.000Z',
-      amount: 35,
-      status: 'pending'
-    },
-    {
-      id: 'redeem-41',
-      title: 'Canje de saldo',
-      description: 'Descuento aplicado en menu premium',
-      date: '2026-04-02T19:20:00.000Z',
-      amount: -100,
-      status: 'redeemed'
-    }
-  ]
 };
 
 function readStorage<T>(key: string): T | null {
@@ -150,6 +95,13 @@ function writeStorage<T>(key: string, value: T) {
 
 function getStringValue(...values: Array<unknown>): string | undefined {
   return values.find((value) => typeof value === 'string' && value.trim().length > 0) as string | undefined;
+}
+
+export function normalizeRoyaltyThresholds(thresholds?: Partial<RoyaltyThresholds>): RoyaltyThresholds {
+  const vip = Math.max(1000, Number(thresholds?.vip ?? DEFAULT_ROYALTY_THRESHOLDS.vip));
+  const headliner = Math.max(vip + 1000, Number(thresholds?.headliner ?? DEFAULT_ROYALTY_THRESHOLDS.headliner));
+  const backstage = Math.max(headliner + 1000, Number(thresholds?.backstage ?? DEFAULT_ROYALTY_THRESHOLDS.backstage));
+  return { vip, headliner, backstage };
 }
 
 export function getUserProfile(overrides: Partial<UserProfile> = {}): UserProfile {
@@ -189,31 +141,22 @@ export function getUserProfile(overrides: Partial<UserProfile> = {}): UserProfil
   };
 }
 
-export function getRoyaltyProgram(): RoyaltyProgram {
-  const stored = readStorage<Partial<RoyaltyProgram>>(USER_ROYALTIES_STORAGE_KEY) ?? {};
-
-  return {
-    ...defaultRoyaltyProgram,
-    ...stored,
-    benefits: Array.isArray(stored.benefits) ? stored.benefits : defaultRoyaltyProgram.benefits,
-    earnRules: Array.isArray(stored.earnRules) ? stored.earnRules : defaultRoyaltyProgram.earnRules,
-    movements: Array.isArray(stored.movements) ? stored.movements : defaultRoyaltyProgram.movements
-  };
-}
-
-export function saveRoyaltyProgram(program: RoyaltyProgram) {
-  writeStorage(USER_ROYALTIES_STORAGE_KEY, program);
-}
-
 export function calculateRoyaltiesForPurchase(total: number): number {
   if (total <= 0) return 0;
-  return Math.floor(total) + 5;
+  return Math.round(total * ROYALTY_POINTS_PER_EURO);
 }
 
-export function getRoyaltyTierStatus(balance: number) {
-  const tier = [...ROYALTY_TIERS].reverse().find((item) => balance >= item.min) ?? ROYALTY_TIERS[0];
+export function getRoyaltyTierStatus(balance: number, thresholds?: Partial<RoyaltyThresholds>) {
+  const resolved = normalizeRoyaltyThresholds(thresholds);
+  const royaltyTiers: RoyaltyTier[] = [
+    { name: 'Fan', min: 0, nextTarget: resolved.vip },
+    { name: 'VIP', min: resolved.vip, nextTarget: resolved.headliner },
+    { name: 'Headliner', min: resolved.headliner, nextTarget: resolved.backstage },
+    { name: 'Backstage', min: resolved.backstage, nextTarget: null }
+  ];
+  const tier = [...royaltyTiers].reverse().find((item) => balance >= item.min) ?? royaltyTiers[0];
   const nextTarget = tier.nextTarget ?? tier.min;
-  const nextTier = ROYALTY_TIERS.find((item) => item.min === tier.nextTarget)?.name ?? tier.name;
+  const nextTier = royaltyTiers.find((item) => item.min === tier.nextTarget)?.name ?? tier.name;
 
   return {
     currentTier: tier.name,
@@ -223,8 +166,8 @@ export function getRoyaltyTierStatus(balance: number) {
   };
 }
 
-export function getRoyaltyProgress(balance: number): number {
-  const tierStatus = getRoyaltyTierStatus(balance);
+export function getRoyaltyProgress(balance: number, thresholds?: Partial<RoyaltyThresholds>): number {
+  const tierStatus = getRoyaltyTierStatus(balance, thresholds);
 
   if (tierStatus.nextTierTarget === tierStatus.currentTierMin) {
     return 100;
@@ -236,41 +179,7 @@ export function getRoyaltyProgress(balance: number): number {
   );
 }
 
-export function getRoyaltiesToNextTier(balance: number): number {
-  const tierStatus = getRoyaltyTierStatus(balance);
+export function getRoyaltiesToNextTier(balance: number, thresholds?: Partial<RoyaltyThresholds>): number {
+  const tierStatus = getRoyaltyTierStatus(balance, thresholds);
   return Math.max(0, tierStatus.nextTierTarget - balance);
-}
-
-export function applyRoyaltyReward(params: { orderNumber: string; total: number; vendorName?: string }) {
-  const reward = calculateRoyaltiesForPurchase(params.total);
-  if (!params.orderNumber || reward <= 0) {
-    return getRoyaltyProgram();
-  }
-
-  const program = getRoyaltyProgram();
-  const movementId = `order-${params.orderNumber}`;
-
-  if (program.movements.some((movement) => movement.id === movementId)) {
-    return program;
-  }
-
-  const updatedProgram: RoyaltyProgram = {
-    ...program,
-    balance: program.balance + reward,
-    lifetimeEarned: program.lifetimeEarned + reward,
-    movements: [
-      {
-        id: movementId,
-        title: `Pedido #${params.orderNumber}`,
-        description: params.vendorName ? `Compra completada en ${params.vendorName}` : 'Compra completada en QueueFest',
-        date: new Date().toISOString(),
-        amount: reward,
-        status: 'credited'
-      },
-      ...program.movements
-    ].slice(0, 10)
-  };
-
-  saveRoyaltyProgram(updatedProgram);
-  return updatedProgram;
 }

@@ -628,6 +628,82 @@ async function doesIndexExist(tableName, indexName) {
   return rows.length > 0;
 }
 
+const DEFAULT_LOYALTY_TIER_THRESHOLDS = {
+  vip: 10000,
+  headliner: 25000,
+  backstage: 50000
+};
+
+function normalizeLoyaltyTierThresholds(input = {}) {
+  const vip = Math.max(1000, Number(input.vip ?? DEFAULT_LOYALTY_TIER_THRESHOLDS.vip) || DEFAULT_LOYALTY_TIER_THRESHOLDS.vip);
+  const headliner = Math.max(
+    vip + 1000,
+    Number(input.headliner ?? DEFAULT_LOYALTY_TIER_THRESHOLDS.headliner) || DEFAULT_LOYALTY_TIER_THRESHOLDS.headliner
+  );
+  const backstage = Math.max(
+    headliner + 1000,
+    Number(input.backstage ?? DEFAULT_LOYALTY_TIER_THRESHOLDS.backstage) || DEFAULT_LOYALTY_TIER_THRESHOLDS.backstage
+  );
+
+  return { vip, headliner, backstage };
+}
+
+async function ensureParametrosSchema() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS parametros (
+      id INT NOT NULL DEFAULT 1,
+      umbral_cola INT NOT NULL DEFAULT 5,
+      umbral_ventas_bajas INT NOT NULL DEFAULT 3,
+      porcentaje_subida DECIMAL(5,2) NOT NULL DEFAULT 10.00,
+      porcentaje_bajada DECIMAL(5,2) NOT NULL DEFAULT 10.00,
+      pricing_dinamico_activo TINYINT(1) NOT NULL DEFAULT 1,
+      promociones_activas TINYINT(1) NOT NULL DEFAULT 1,
+      stock_minimo INT NOT NULL DEFAULT 10,
+      loyalty_vip_threshold INT NOT NULL DEFAULT 10000,
+      loyalty_headliner_threshold INT NOT NULL DEFAULT 25000,
+      loyalty_backstage_threshold INT NOT NULL DEFAULT 50000,
+      PRIMARY KEY (id)
+    )
+  `);
+
+  if (!(await doesColumnExist('parametros', 'stock_minimo'))) {
+    await db.query('ALTER TABLE parametros ADD COLUMN stock_minimo INT NOT NULL DEFAULT 10');
+  }
+
+  if (!(await doesColumnExist('parametros', 'loyalty_vip_threshold'))) {
+    await db.query(`ALTER TABLE parametros ADD COLUMN loyalty_vip_threshold INT NOT NULL DEFAULT ${DEFAULT_LOYALTY_TIER_THRESHOLDS.vip}`);
+  }
+
+  if (!(await doesColumnExist('parametros', 'loyalty_headliner_threshold'))) {
+    await db.query(`ALTER TABLE parametros ADD COLUMN loyalty_headliner_threshold INT NOT NULL DEFAULT ${DEFAULT_LOYALTY_TIER_THRESHOLDS.headliner}`);
+  }
+
+  if (!(await doesColumnExist('parametros', 'loyalty_backstage_threshold'))) {
+    await db.query(`ALTER TABLE parametros ADD COLUMN loyalty_backstage_threshold INT NOT NULL DEFAULT ${DEFAULT_LOYALTY_TIER_THRESHOLDS.backstage}`);
+  }
+
+  await db.query(
+    `INSERT INTO parametros (
+      id,
+      pricing_dinamico_activo,
+      umbral_cola,
+      porcentaje_subida,
+      promociones_activas,
+      stock_minimo,
+      loyalty_vip_threshold,
+      loyalty_headliner_threshold,
+      loyalty_backstage_threshold
+    )
+     VALUES (1, 1, 5, 10.00, 1, 10, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE id = id`,
+    [
+      DEFAULT_LOYALTY_TIER_THRESHOLDS.vip,
+      DEFAULT_LOYALTY_TIER_THRESHOLDS.headliner,
+      DEFAULT_LOYALTY_TIER_THRESHOLDS.backstage
+    ]
+  );
+}
+
 async function ensureNotificationsTableSchema() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS notificaciones_usuario (
@@ -944,6 +1020,9 @@ async function initDB() {
     await ensurePromotionsTableSchema();
     console.log('SQL Migration promociones checked.');
 
+    await ensureParametrosSchema();
+    console.log('SQL Migration parametros checked.');
+
     await paymentsModule.initDb(db);
   } catch (err) {
     console.error('DB Init Failed:', err);
@@ -1016,15 +1095,37 @@ app.post('/api/auth/login', async (req, res) => {
 // Register
 app.post('/api/auth/register', async (req, res) => {
   const { email, password, nombre } = req.body;
+  const conn = await db.getConnection();
   try {
     const hash = await bcrypt.hash(password, 10);
-    await db.query(
+    await conn.beginTransaction();
+    const [userResult] = await conn.query(
       'INSERT INTO usuarios (email, password_hash, nombre, rol_id) VALUES (?, ?, ?, 4)',
       [email, hash, nombre]
     );
+    const userId = userResult.insertId;
+
+    const [loyaltyResult] = await conn.query(
+      `INSERT INTO loyalty
+        (usuario_id, puntos_total, puntos_pendientes, puntos_ganados_total, puntos_canjeados_total, nivel, activo, ultimo_movimiento_en)
+       VALUES (?, 1000, 0, 1000, 0, 'fan', 1, CURRENT_TIMESTAMP)`,
+      [userId]
+    );
+
+    await conn.query(
+      `INSERT INTO loyalty_movimientos
+        (loyalty_id, pedido_id, tipo, origen, puntos, saldo_resultante, estado, descripcion, confirmado_en)
+       VALUES (?, NULL, 'bonus', 'sistema', 1000, 1000, 'confirmado', 'Bonus de bienvenida', CURRENT_TIMESTAMP)`,
+      [loyaltyResult.insertId]
+    );
+
+    await conn.commit();
     res.json({ message: 'Usuario registrado correctamente' });
   } catch (err) {
+    await conn.rollback();
     res.status(500).json({ error: err.message });
+  } finally {
+    conn.release();
   }
 });
 
@@ -1082,7 +1183,7 @@ app.patch('/api/perfil', auth, async (req, res) => {
     }
     if (fecha_nacimiento !== undefined) {
       updates.push('fecha_nacimiento = ?');
-      values.push(fecha_nacimiento);
+      values.push(fecha_nacimiento === '' ? null : fecha_nacimiento);
     }
     if (ciudad !== undefined) {
       updates.push('ciudad = ?');
@@ -1506,11 +1607,32 @@ app.post('/api/pedidos', auth, async (req, res) => {
         ]
       );
     }
-    // Sumar puntos loyalty (1 punto por euro)
-    const puntos = Math.floor(total);
+    // Sumar puntos loyalty (100 puntos por euro; 100 puntos = 1 EUR)
+    const puntos = Math.round(Number(total) * 100);
     await conn.query(
-      'INSERT INTO loyalty (usuario_id, puntos_total) VALUES (?, ?) ON DUPLICATE KEY UPDATE puntos_total = puntos_total + ?',
+      `INSERT INTO loyalty
+        (usuario_id, puntos_total, puntos_pendientes, puntos_ganados_total, puntos_canjeados_total, nivel, activo, ultimo_movimiento_en)
+       VALUES (?, ?, 0, ?, 0, 'fan', 1, CURRENT_TIMESTAMP)
+       ON DUPLICATE KEY UPDATE
+         puntos_total = puntos_total + VALUES(puntos_total),
+         puntos_ganados_total = puntos_ganados_total + VALUES(puntos_ganados_total),
+         ultimo_movimiento_en = CURRENT_TIMESTAMP`,
       [req.user.id, puntos, puntos]
+    );
+    const [loyaltyRows] = await conn.query(
+      'SELECT id, puntos_total FROM loyalty WHERE usuario_id = ?',
+      [req.user.id]
+    );
+    const loyalty = loyaltyRows[0];
+    await conn.query(
+      `INSERT INTO loyalty_movimientos
+        (loyalty_id, pedido_id, tipo, origen, puntos, saldo_resultante, estado, descripcion, confirmado_en)
+       VALUES (?, ?, 'compra', 'pedido', ?, ?, 'confirmado', ?, CURRENT_TIMESTAMP)`,
+      [loyalty.id, pedidoId, puntos, loyalty.puntos_total, `Pedido #${pedidoId}`]
+    );
+    await conn.query(
+      'UPDATE pedidos SET puntos_ganados = ? WHERE id = ?',
+      [puntos, pedidoId]
     );
     await conn.commit();
     await evaluateWaitZeroTriggerForPuesto(Number(puesto_id), 'pedido_creado');
@@ -1957,11 +2079,53 @@ app.get('/api/puestos/:id/estado', auth, async (req, res) => {
 
 app.get('/api/loyalty', auth, async (req, res) => {
   try {
+    const [paramRows] = await db.query(
+      `SELECT loyalty_vip_threshold, loyalty_headliner_threshold, loyalty_backstage_threshold
+       FROM parametros
+       WHERE id = 1
+       LIMIT 1`
+    );
+    const tierThresholds = normalizeLoyaltyTierThresholds({
+      vip: paramRows[0]?.loyalty_vip_threshold,
+      headliner: paramRows[0]?.loyalty_headliner_threshold,
+      backstage: paramRows[0]?.loyalty_backstage_threshold
+    });
+
     const [rows] = await db.query(
-      'SELECT puntos_total FROM loyalty WHERE usuario_id = ?',
+      `SELECT id, usuario_id, puntos_total, puntos_pendientes, puntos_ganados_total, puntos_canjeados_total,
+              nivel, activo, ultimo_movimiento_en, ultimo_canje_en
+       FROM loyalty
+       WHERE usuario_id = ?`,
       [req.user.id]
     );
-    res.json(rows[0] || { puntos_total: 0 });
+    if (rows.length === 0) {
+      return res.json({
+        puntos_total: 0,
+        puntos_pendientes: 0,
+        puntos_ganados_total: 0,
+        puntos_canjeados_total: 0,
+        nivel: 'fan',
+        activo: true,
+        tier_thresholds: tierThresholds,
+        movements: []
+      });
+    }
+
+    const loyalty = rows[0];
+    const [movements] = await db.query(
+      `SELECT id, loyalty_id, pedido_id, tipo, origen, puntos, saldo_resultante, estado, descripcion, creado_en, confirmado_en
+       FROM loyalty_movimientos
+       WHERE loyalty_id = ?
+       ORDER BY creado_en DESC
+       LIMIT 10`,
+      [loyalty.id]
+    );
+
+    res.json({
+      ...loyalty,
+      tier_thresholds: tierThresholds,
+      movements
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2123,18 +2287,48 @@ app.get('/api/admin/parametros', auth, async (req, res) => {
 });
 
 app.put('/api/admin/parametros', auth, async (req, res) => {
-  const { pricing_dinamico_activo, umbral_cola, porcentaje_subida, promociones_activas, stock_minimo } = req.body;
+  const {
+    pricing_dinamico_activo,
+    umbral_cola,
+    porcentaje_subida,
+    promociones_activas,
+    stock_minimo,
+    loyalty_vip_threshold,
+    loyalty_headliner_threshold,
+    loyalty_backstage_threshold
+  } = req.body;
   try {
+    const thresholds = normalizeLoyaltyTierThresholds({
+      vip: loyalty_vip_threshold,
+      headliner: loyalty_headliner_threshold,
+      backstage: loyalty_backstage_threshold
+    });
+
     await db.query(
-      `INSERT INTO parametros (id, pricing_dinamico_activo, umbral_cola, porcentaje_subida, promociones_activas, stock_minimo)
-       VALUES (1, ?, ?, ?, ?, ?)
+      `INSERT INTO parametros (
+         id, pricing_dinamico_activo, umbral_cola, porcentaje_subida, promociones_activas, stock_minimo,
+         loyalty_vip_threshold, loyalty_headliner_threshold, loyalty_backstage_threshold
+       )
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          pricing_dinamico_activo = VALUES(pricing_dinamico_activo),
          umbral_cola = VALUES(umbral_cola),
          porcentaje_subida = VALUES(porcentaje_subida),
          promociones_activas = VALUES(promociones_activas),
-         stock_minimo = VALUES(stock_minimo)`,
-      [pricing_dinamico_activo, umbral_cola, porcentaje_subida, promociones_activas, stock_minimo]
+         stock_minimo = VALUES(stock_minimo),
+         loyalty_vip_threshold = VALUES(loyalty_vip_threshold),
+         loyalty_headliner_threshold = VALUES(loyalty_headliner_threshold),
+         loyalty_backstage_threshold = VALUES(loyalty_backstage_threshold)`,
+      [
+        pricing_dinamico_activo,
+        umbral_cola,
+        porcentaje_subida,
+        promociones_activas,
+        stock_minimo,
+        thresholds.vip,
+        thresholds.headliner,
+        thresholds.backstage
+      ]
     );
     res.json({ message: 'Parámetros actualizados' });
   } catch (err) {

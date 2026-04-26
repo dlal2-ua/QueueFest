@@ -21,6 +21,7 @@ import { SplashScreen } from './screens/SplashScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
+import { WelcomeBonusScreen } from './screens/WelcomeBonusScreen';
 
 // Pantallas para usuarios finales
 import { HomeScreen } from './screens/HomeScreen';
@@ -144,6 +145,7 @@ function AppRoutes() {
       {path === '/cart' && <CartScreen />}
       {path === '/payment' && <PaymentScreen />}
       {path === '/confirmation' && <OrderConfirmationScreen />}
+      {path === '/welcome-bonus' && <WelcomeBonusScreen />}
       {path === '/profile/info' && <PersonalInfoScreen />}
       {path === '/profile/royalties' && <RoyaltiesScreen />}
       {path === '/profile/payments' && <PaymentMethodsScreen />}

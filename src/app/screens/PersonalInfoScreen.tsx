@@ -1,25 +1,34 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronLeft, Loader2 } from 'lucide-react';
 import { useNavigate } from '../utils/navigation';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { getUserProfile } from '../data/profileData';
 import { BottomNav } from '../components/BottomNav';
 import { updateProfile } from '../api';
 import { toast } from 'sonner';
+
+function normalizeDateInput(value?: string | null) {
+  if (!value) return '';
+  const normalized = String(value).trim();
+  if (!normalized) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
 
 export function PersonalInfoScreen() {
   const navigate = useNavigate();
   const { t, isRTL } = useLanguage();
   const { user, refreshUser } = useAuth();
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Estado del formulario con todos los campos editables
   const [formData, setFormData] = useState({
     alias: user?.alias || '',
     telefono: user?.telefono || '',
-    fecha_nacimiento: user?.fecha_nacimiento || '',
+    fecha_nacimiento: normalizeDateInput(user?.fecha_nacimiento),
     ciudad: user?.ciudad || '',
     idioma_preferido: user?.idioma_preferido || 'es',
     festival_favorito: user?.festival_favorito || '',
@@ -36,7 +45,7 @@ export function PersonalInfoScreen() {
       setFormData({
         alias: user.alias || '',
         telefono: user.telefono || '',
-        fecha_nacimiento: user.fecha_nacimiento || '',
+        fecha_nacimiento: normalizeDateInput(user.fecha_nacimiento),
         ciudad: user.ciudad || '',
         idioma_preferido: user.idioma_preferido || 'es',
         festival_favorito: user.festival_favorito || '',
@@ -60,7 +69,10 @@ export function PersonalInfoScreen() {
     e.preventDefault();
     setSaving(true);
     try {
-      await updateProfile(formData);
+      await updateProfile({
+        ...formData,
+        fecha_nacimiento: formData.fecha_nacimiento.trim() ? formData.fecha_nacimiento : null
+      });
       toast.success('Perfil actualizado correctamente');
       // Refrescar datos del usuario en el contexto
       if (refreshUser) {

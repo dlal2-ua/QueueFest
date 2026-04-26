@@ -214,7 +214,7 @@ export function PaymentScreen() {
             <Coins className="w-5 h-5 mt-0.5" />
             <div>
               <p className="font-semibold">Esta compra te dara +{estimatedRoyalties} royalties</p>
-              <p className="text-sm text-amber-800 mt-1">Regla base actual: 1 royalty por euro gastado y bonus de 5 por pedido confirmado.</p>
+              <p className="text-sm text-amber-800 mt-1">Regla base actual: 100 royalties por cada euro gastado.</p>
             </div>
           </div>
         </div>

@@ -10,8 +10,22 @@ import {
 } from '../api';
 import {
   PlusCircle, Calendar, Settings, Users, Package,
-  Store, CheckCircle2, XCircle, LogOut, Trash2, Eye, PowerOff, Pencil, X
+  Store, CheckCircle2, XCircle, LogOut, Trash2, Eye, PowerOff, Pencil, X, Coins
 } from 'lucide-react';
+
+const DEFAULT_ADMIN_PARAMS = {
+  pricing_dinamico_activo: false,
+  umbral_cola: 20,
+  porcentaje_subida: 10,
+  promociones_activas: false,
+  stock_minimo: 10,
+  loyalty_vip_threshold: 10000,
+  loyalty_headliner_threshold: 25000,
+  loyalty_backstage_threshold: 50000
+};
+
+const pointsToEuros = (points: number) => ((Number(points) || 0) / 100).toFixed(2);
+const eurosToPoints = (value: string) => Math.max(0, Math.round((Number(value) || 0) * 100));
 
 export function AdminScreen() {
   const { user, logout } = useAuth();
@@ -82,10 +96,7 @@ export function AdminScreen() {
   const [promocionEditFormData, setPromocionEditFormData] = useState({ titulo: '', descripcion: '', precio_promo: 0 });
 
   // States: Parámetros
-  const [parametros, setParametros] = useState({
-    pricing_dinamico_activo: false, umbral_cola: 20,
-    porcentaje_subida: 10, promociones_activas: false, stock_minimo: 10
-  });
+  const [parametros, setParametros] = useState(DEFAULT_ADMIN_PARAMS);
 
   // States: Usuarios staff
   const [usuariosList, setUsuariosList] = useState<any[]>([]);
@@ -152,7 +163,12 @@ export function AdminScreen() {
   const loadParametros = useCallback(async () => {
     try {
       const data = await getParametros();
-      if (data && data.id) setParametros(data);
+      if (data && data.id) {
+        setParametros({
+          ...DEFAULT_ADMIN_PARAMS,
+          ...data
+        });
+      }
     } catch { toast.error('Error al cargar parámetros'); }
   }, []);
 
@@ -208,6 +224,7 @@ export function AdminScreen() {
       loadParametros();
     } else if (tab === 'usuarios') {
       if (festivalActivo?.id) loadPuestos(festivalActivo);
+      loadParametros();
       loadUsuarios();
     }
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -351,6 +368,7 @@ export function AdminScreen() {
     setLoading(true);
     try {
       await actualizarParametros(parametros);
+      await loadParametros();
       toast.success('Parámetros actualizados');
     } catch { toast.error('Error al actualizar parámetros'); }
     finally { setLoading(false); }
@@ -1110,6 +1128,64 @@ export function AdminScreen() {
         {/* ── 5. USUARIOS ─────────────────────────────────────────────── */}
         {tab === 'usuarios' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+            <form onSubmit={handleGuardarParametros} className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-amber-100">
+              <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
+                <Coins className="w-5 h-5 text-amber-600" /> Niveles globales de Royalties
+              </h2>
+              <p className="text-sm text-gray-600">
+                Estos objetivos son comunes a toda la app. El admin los edita en euros y QueueFest los guarda en puntos internamente.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="rounded-xl bg-amber-50 border border-amber-100 p-4 space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wide text-amber-800">VIP</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={pointsToEuros(parametros.loyalty_vip_threshold)}
+                    onChange={(e) => setParametros({ ...parametros, loyalty_vip_threshold: eurosToPoints(e.target.value) })}
+                    className="w-full px-4 py-2 bg-white border border-amber-200 rounded-lg text-sm font-semibold"
+                  />
+                  <p className="text-xs text-amber-800">{Number(parametros.loyalty_vip_threshold || 0).toLocaleString('es-ES')} puntos</p>
+                </div>
+
+                <div className="rounded-xl bg-sky-50 border border-sky-100 p-4 space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wide text-sky-800">Headliner</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={pointsToEuros(parametros.loyalty_headliner_threshold)}
+                    onChange={(e) => setParametros({ ...parametros, loyalty_headliner_threshold: eurosToPoints(e.target.value) })}
+                    className="w-full px-4 py-2 bg-white border border-sky-200 rounded-lg text-sm font-semibold"
+                  />
+                  <p className="text-xs text-sky-800">{Number(parametros.loyalty_headliner_threshold || 0).toLocaleString('es-ES')} puntos</p>
+                </div>
+
+                <div className="rounded-xl bg-fuchsia-50 border border-fuchsia-100 p-4 space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wide text-fuchsia-800">Backstage</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={pointsToEuros(parametros.loyalty_backstage_threshold)}
+                    onChange={(e) => setParametros({ ...parametros, loyalty_backstage_threshold: eurosToPoints(e.target.value) })}
+                    className="w-full px-4 py-2 bg-white border border-fuchsia-200 rounded-lg text-sm font-semibold"
+                  />
+                  <p className="text-xs text-fuchsia-800">{Number(parametros.loyalty_backstage_threshold || 0).toLocaleString('es-ES')} puntos</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 text-xs text-gray-600">
+                Regla actual del programa: 100 puntos por cada 1 EUR gastado y 1000 puntos canjeables por 1 EUR.
+              </div>
+
+              <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-lg font-semibold text-sm transition-colors">
+                Guardar niveles de loyalty
+              </button>
+            </form>
+
             <form onSubmit={handleCrearUsuario} className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-gray-100">
               <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
                 <Users className="w-5 h-5 text-red-600" /> Control de Acceso (RBAC)

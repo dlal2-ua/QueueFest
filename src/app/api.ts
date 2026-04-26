@@ -79,7 +79,7 @@ export const getProfile = async () => {
 export const updateProfile = async (profileData: {
     alias?: string;
     telefono?: string;
-    fecha_nacimiento?: string;
+    fecha_nacimiento?: string | null;
     ciudad?: string;
     idioma_preferido?: string;
     festival_favorito?: string;
@@ -310,9 +310,45 @@ export const marcarNotificacionLeida = async (notificationId: number) => {
 };
 
 // ==================== LOYALTY ====================
+export interface LoyaltyMovementRecord {
+    id: number;
+    loyalty_id: number;
+    pedido_id?: number | null;
+    tipo: string;
+    origen?: string | null;
+    puntos: number;
+    saldo_resultante?: number | null;
+    estado: string;
+    descripcion?: string | null;
+    creado_en: string;
+    confirmado_en?: string | null;
+}
+
+export interface LoyaltyTierThresholds {
+    vip: number;
+    headliner: number;
+    backstage: number;
+}
+
+export interface LoyaltyResponse {
+    id?: number;
+    usuario_id?: number;
+    puntos_total: number;
+    puntos_pendientes: number;
+    puntos_ganados_total: number;
+    puntos_canjeados_total: number;
+    nivel: string;
+    activo: boolean;
+    ultimo_movimiento_en?: string | null;
+    ultimo_canje_en?: string | null;
+    tier_thresholds: LoyaltyTierThresholds;
+    movements: LoyaltyMovementRecord[];
+}
+
 // Obtiene los puntos acumulados del usuario logueado
-export const getLoyalty = async () => {
+export const getLoyalty = async (): Promise<LoyaltyResponse> => {
     const res = await fetch(`${API_URL}/loyalty`, { headers: headers() });
+    if (!res.ok) throw new Error('Error al cargar loyalty');
     return res.json();
 };
 
