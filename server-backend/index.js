@@ -2536,96 +2536,225 @@ app.post('/api/notifications/subscribe', auth, async (req, res) => {
 
 // ==================== GESTOR — DECISIONES AUTOMÁTICAS ====================
 
-const UMBRAL_COLA = 5; // Pedidos activos a partir de los cuales se recomienda actuar
+// ── Helpers de parámetros ────────────────────────────────────────────────────
 
-// Inserta una decisión si no existe una equivalente reciente.
-// Evita que, en modo manual, reaparezca instantáneamente tras aprobar/rechazar.
-async function insertarSiNoPendiente(festival_id, tipo, descripcion, puesto_id = null) {
-  const [existing] = await db.query(
-    `SELECT id FROM decisiones_automaticas
-     WHERE festival_id = ? AND tipo = ?
-     AND (puesto_id = ? OR (puesto_id IS NULL AND ? IS NULL))`,
-    [festival_id, tipo, puesto_id, puesto_id]
-  );
+async function getParametros() {
+  try {
+    const [rows] = await db.query('SELECT * FROM parametros LIMIT 1');
+    const p = rows[0] || {};
+    return {
+      umbral_cola:         Number(p.umbral_cola)         || 5,
+      umbral_ventas_bajas: Number(p.umbral_ventas_bajas) || 3,
+      porcentaje_subida:   Number(p.porcentaje_subida)   || 10,
+      porcentaje_bajada:   Number(p.porcentaje_bajada)   || 10,
+    };
+  } catch {
+    return { umbral_cola: 5, umbral_ventas_bajas: 3, porcentaje_subida: 10, porcentaje_bajada: 10 };
+  }
+}
 
-  // Cooldown de 15 min por tipo+puesto+festival
+// Cooldown de 15 min por tipo+puesto+producto para decisiones individuales
+async function insertarSiNoPendiente(festival_id, tipo, descripcion, puesto_id = null, producto_id = null, extra = {}) {
   const [recent] = await db.query(
     `SELECT id FROM decisiones_automaticas
      WHERE festival_id = ? AND tipo = ?
-     AND (puesto_id = ? OR (puesto_id IS NULL AND ? IS NULL))
-     AND creado_en >= (NOW() - INTERVAL 15 MINUTE)
+       AND (puesto_id = ? OR (puesto_id IS NULL AND ? IS NULL))
+       AND (producto_id = ? OR (producto_id IS NULL AND ? IS NULL))
+       AND creado_en >= (NOW() - INTERVAL 15 MINUTE)
      LIMIT 1`,
-    [festival_id, tipo, puesto_id, puesto_id]
+    [festival_id, tipo, puesto_id, puesto_id, producto_id, producto_id]
   );
+  if (recent.length > 0) return;
 
-  if (existing.length === 0 && recent.length === 0) {
+  const cols = ['festival_id', 'puesto_id', 'tipo', 'descripcion'];
+  const vals = [festival_id, puesto_id, tipo, descripcion];
+  if (producto_id  !== null)       { cols.push('producto_id');  vals.push(producto_id); }
+  if (extra.porcentaje !== undefined) { cols.push('porcentaje');  vals.push(extra.porcentaje); }
+  if (extra.ventas_antes !== undefined) { cols.push('ventas_antes'); vals.push(extra.ventas_antes); }
+
+  await db.query(
+    `INSERT INTO decisiones_automaticas (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+    vals
+  );
+}
+
+// Inserta par A/B de descuento para los 2 productos más lentos de un puesto
+async function insertarParAB(festival_id, puesto_id, productosLentos, pctBajada) {
+  const [recent] = await db.query(
+    `SELECT id FROM decisiones_automaticas
+     WHERE festival_id = ? AND tipo = 'descuento_producto' AND puesto_id = ?
+       AND creado_en >= (NOW() - INTERVAL 15 MINUTE)
+     LIMIT 1`,
+    [festival_id, puesto_id]
+  );
+  if (recent.length > 0) return;
+
+  const grupoAb = `${puesto_id}-${Date.now()}`;
+  for (let i = 0; i < Math.min(productosLentos.length, 2); i++) {
+    const prod = productosLentos[i];
+    const variante = i === 0 ? 'A' : 'B';
+    const fmtEur = (v) => parseFloat(Number(v).toFixed(2));
+    const precioNuevo = fmtEur(Math.round(prod.precio * (1 - pctBajada / 100) * 100) / 100);
     await db.query(
-      `INSERT INTO decisiones_automaticas (festival_id, puesto_id, tipo, descripcion) VALUES (?, ?, ?, ?)`,
-      [festival_id, puesto_id, tipo, descripcion]
+      `INSERT INTO decisiones_automaticas
+         (festival_id, puesto_id, producto_id, tipo, descripcion, grupo_ab, variante, porcentaje, ventas_antes)
+       VALUES (?, ?, ?, 'descuento_producto', ?, ?, ?, ?, ?)`,
+      [
+        festival_id, puesto_id, prod.id,
+        `Variante ${variante}: -${pctBajada}% en "${prod.nombre}" (${prod.vendidos_hoy} vendidos hoy). ${fmtEur(prod.precio)}€ → ${precioNuevo}€`,
+        grupoAb, variante, -pctBajada, prod.vendidos_hoy
+      ]
     );
   }
 }
 
-// Evalúa los puestos del festival y genera decisiones si se cumplen las reglas
+// Evalúa todos los puestos del festival y genera decisiones según reglas reales
 async function generarDecisiones(festival_id) {
-  const [puestos] = await db.query(
-    'SELECT * FROM puestos WHERE festival_id = ?', [festival_id]
-  );
+  const { umbral_cola, umbral_ventas_bajas, porcentaje_subida, porcentaje_bajada } = await getParametros();
+  const [puestos] = await db.query('SELECT * FROM puestos WHERE festival_id = ?', [festival_id]);
 
   for (const puesto of puestos) {
-    // Pedidos activos (en cola) de este puesto
+    // Cola activa: pedidos que el operador aún no ha terminado
     const [[{ pendientes }]] = await db.query(
       `SELECT COUNT(*) as pendientes FROM pedidos
        WHERE puesto_id = ? AND estado IN ('pendiente','confirmado','preparando')`,
       [puesto.id]
     );
 
-    // Pedidos del día en este puesto
-    const [[{ hoy }]] = await db.query(
-      `SELECT COUNT(*) as hoy FROM pedidos
-       WHERE puesto_id = ? AND DATE(creado_en) = CURDATE()`,
+    // Pedidos completados hoy — indica si el festival lleva suficiente actividad
+    const [[{ completados_hoy }]] = await db.query(
+      `SELECT COUNT(*) as completados_hoy FROM pedidos
+       WHERE puesto_id = ? AND DATE(creado_en) = CURDATE() AND estado NOT IN ('cancelado')`,
       [puesto.id]
     );
 
-    // Regla 1: cerrar_barra — cola desbordada
-    if (puesto.abierto && pendientes >= UMBRAL_COLA) {
+    // Regla 1: pausar pedidos (cerrar_barra) — cola saturada
+    if (puesto.abierto && pendientes >= umbral_cola) {
       await insertarSiNoPendiente(
         festival_id, 'cerrar_barra',
-        `Puesto "${puesto.nombre}" tiene ${pendientes} pedidos en cola (umbral: ${UMBRAL_COLA}). Recomendado: cerrar temporalmente.`,
+        `Cola saturada en "${puesto.nombre}": ${pendientes} pedidos activos (umbral: ${umbral_cola}). Pausar aceptación de nuevos pedidos.`,
         puesto.id
       );
     }
 
-    // Regla 2: abrir_barra — puesto cerrado y cola normalizada
-    if (!puesto.abierto && pendientes < Math.floor(UMBRAL_COLA / 2)) {
+    // Regla 2: reanudar pedidos (abrir_barra) — cola normalizada
+    if (!puesto.abierto && pendientes < Math.floor(umbral_cola / 2)) {
       await insertarSiNoPendiente(
         festival_id, 'abrir_barra',
-        `Puesto "${puesto.nombre}" está cerrado y la cola ha bajado (${pendientes} pedidos). Recomendado: reabrir.`,
+        `Cola normalizada en "${puesto.nombre}" (${pendientes} pedidos activos). Reanudar aceptación de pedidos.`,
         puesto.id
       );
     }
 
-    // Regla 3: activar_promocion — ventas bajas hoy
-    if (hoy < 3) {
-      await insertarSiNoPendiente(
-        festival_id, 'activar_promocion',
-        `Puesto "${puesto.nombre}" tiene pocas ventas hoy (${hoy} pedidos). Recomendado: activar una promoción.`,
-        puesto.id
+    // Regla 3: A/B descuento_producto — solo con ≥5 pedidos hoy (festival activo)
+    if (completados_hoy >= 5) {
+      const [ventasPorProducto] = await db.query(
+        `SELECT pr.id, pr.nombre, pr.precio,
+                COALESCE(SUM(pi.cantidad), 0) AS vendidos_hoy
+         FROM productos pr
+         LEFT JOIN pedido_items pi ON pi.producto_id = pr.id
+         LEFT JOIN pedidos pe ON pe.id = pi.pedido_id
+           AND DATE(pe.creado_en) = CURDATE()
+           AND pe.estado NOT IN ('cancelado')
+         WHERE pr.puesto_id = ? AND pr.activo = 1
+         GROUP BY pr.id, pr.nombre, pr.precio
+         ORDER BY vendidos_hoy ASC`,
+        [puesto.id]
       );
+
+      if (ventasPorProducto.length >= 2) {
+        const maxVentas = Math.max(...ventasPorProducto.map(p => Number(p.vendidos_hoy)));
+        const lentos = ventasPorProducto.filter(p => {
+          const v = Number(p.vendidos_hoy);
+          return v < umbral_ventas_bajas && (maxVentas === 0 || v < maxVentas * 0.3);
+        }).slice(0, 2);
+
+        if (lentos.length >= 2) {
+          await insertarParAB(festival_id, puesto.id, lentos, porcentaje_bajada);
+        }
+      }
     }
 
-    // Regla 4: ajuste_precio — alta demanda activa
-    if (puesto.abierto && pendientes > Math.floor(UMBRAL_COLA * 0.7)) {
-      await insertarSiNoPendiente(
-        festival_id, 'ajuste_precio',
-        `Alta demanda en "${puesto.nombre}" (${pendientes} pedidos activos). Recomendado: activar precio dinámico (+10%).`,
-        puesto.id
+    // Regla 4: ajuste_precio — producto más pedido en cola activa
+    if (puesto.abierto && pendientes > Math.floor(umbral_cola * 0.7)) {
+      const [calientes] = await db.query(
+        `SELECT pr.id, pr.nombre, pr.precio, COUNT(*) AS en_cola
+         FROM pedido_items pi
+         JOIN pedidos pe ON pe.id = pi.pedido_id
+         JOIN productos pr ON pr.id = pi.producto_id
+         WHERE pe.puesto_id = ? AND pe.estado IN ('pendiente','confirmado','preparando')
+         GROUP BY pr.id, pr.nombre, pr.precio
+         ORDER BY en_cola DESC
+         LIMIT 1`,
+        [puesto.id]
+      );
+      if (calientes.length > 0) {
+        const prod = calientes[0];
+        const fmtEur = (v) => parseFloat(Number(v).toFixed(2));
+        const precioNuevo = fmtEur(Math.round(prod.precio * (1 + porcentaje_subida / 100) * 100) / 100);
+        await insertarSiNoPendiente(
+          festival_id, 'ajuste_precio',
+          `Alta demanda en "${puesto.nombre}": "${prod.nombre}" con ${prod.en_cola} pedidos activos. ${fmtEur(prod.precio)}€ → ${precioNuevo}€ (+${porcentaje_subida}%)`,
+          puesto.id, prod.id,
+          { porcentaje: porcentaje_subida, ventas_antes: prod.en_cola }
+        );
+      }
+    }
+
+    // Regla 4b: normalizar precio cuando la cola ya bajó y hay precio dinámico inflado
+    if (pendientes <= Math.floor(umbral_cola * 0.3)) {
+      const [preciosAlterados] = await db.query(
+        `SELECT id, nombre, precio, precio_dinamico FROM productos
+         WHERE puesto_id = ? AND activo = 1
+           AND precio_dinamico IS NOT NULL AND precio_dinamico > precio`,
+        [puesto.id]
+      );
+      for (const prod of preciosAlterados) {
+        const fmtEur = (v) => parseFloat(Number(v).toFixed(2));
+        await insertarSiNoPendiente(
+          festival_id, 'ajuste_precio',
+          `Cola normalizada en "${puesto.nombre}": "${prod.nombre}" vuelve a ${fmtEur(prod.precio)}€ (precio dinámico activo: ${fmtEur(prod.precio_dinamico)}€)`,
+          puesto.id, prod.id,
+          { porcentaje: 0 }
+        );
+      }
+    }
+
+    // Regla 5: reposicion_stock — materia prima bajo mínimo en el puesto
+    const [stockBajo] = await db.query(
+      `SELECT sp.materia_prima_id, mp.nombre AS mp_nombre, mp.unidad_medida,
+              ROUND(sp.stock_actual, 2) AS stock_actual,
+              ROUND(sp.stock_minimo, 2) AS stock_minimo
+       FROM stock_puesto sp
+       JOIN materias_primas mp ON mp.id = sp.materia_prima_id
+       WHERE sp.puesto_id = ? AND sp.stock_actual < sp.stock_minimo AND sp.stock_minimo > 0`,
+      [puesto.id]
+    );
+    for (const mat of stockBajo) {
+      const [recentRepo] = await db.query(
+        `SELECT id FROM decisiones_automaticas
+         WHERE festival_id = ? AND tipo = 'reposicion_stock' AND puesto_id = ?
+           AND creado_en >= (NOW() - INTERVAL 30 MINUTE)
+           AND descripcion LIKE ? LIMIT 1`,
+        [festival_id, puesto.id, `%${mat.mp_nombre}%`]
+      );
+      if (recentRepo.length > 0) continue;
+      await db.query(
+        `INSERT INTO decisiones_automaticas (festival_id, puesto_id, tipo, descripcion)
+         VALUES (?, ?, 'reposicion_stock', ?)`,
+        [
+          festival_id, puesto.id,
+          (() => {
+            const fmt = (v) => mat.unidad_medida === 'unidad' ? Math.floor(v) : parseFloat(v);
+            return `Stock bajo en "${puesto.nombre}": ${mat.mp_nombre} tiene ${fmt(mat.stock_actual)} ${mat.unidad_medida} (mínimo: ${fmt(mat.stock_minimo)} ${mat.unidad_medida}). Reponer desde almacén central.`;
+          })()
+        ]
       );
     }
   }
 }
 
-// Ejecuta la lógica real de una decisión aprobada
+// Ejecuta la acción real de una decisión aprobada/auto-ejecutada
 async function ejecutarDecision(decision) {
   switch (decision.tipo) {
     case 'cerrar_barra':
@@ -2638,30 +2767,108 @@ async function ejecutarDecision(decision) {
     case 'abrir_barra':
       if (decision.puesto_id) {
         await db.query('UPDATE puestos SET abierto = 1 WHERE id = ?', [decision.puesto_id]);
+        await db.query(
+          'UPDATE productos SET precio_dinamico = NULL WHERE puesto_id = ? AND precio_dinamico > precio',
+          [decision.puesto_id]
+        );
         await evaluateWaitZeroTriggerForPuesto(Number(decision.puesto_id), 'decision_abrir_barra');
       }
       break;
 
-    case 'activar_promocion':
-      if (decision.puesto_id) {
+    case 'descuento_producto':
+      if (decision.producto_id) {
+        const pct = Math.abs(Number(decision.porcentaje) || 10);
         await db.query(
-          `UPDATE promociones SET activa = 1
-           WHERE puesto_id = ? AND activa = 0
-           ORDER BY id ASC LIMIT 1`,
-          [decision.puesto_id]
+          'UPDATE productos SET precio_dinamico = ROUND(precio * ?, 2) WHERE id = ?',
+          [(1 - pct / 100), decision.producto_id]
         );
       }
       break;
 
     case 'ajuste_precio':
-      if (decision.puesto_id) {
+      if (decision.producto_id) {
+        if (Number(decision.porcentaje) === 0) {
+          await db.query('UPDATE productos SET precio_dinamico = NULL WHERE id = ?', [decision.producto_id]);
+        } else {
+          const pct = Math.abs(Number(decision.porcentaje) || 10);
+          await db.query(
+            'UPDATE productos SET precio_dinamico = ROUND(precio * ?, 2) WHERE id = ?',
+            [(1 + pct / 100), decision.producto_id]
+          );
+        }
+      } else if (decision.puesto_id) {
         await db.query(
-          `UPDATE productos SET precio_dinamico = ROUND(precio * 1.10, 2)
-           WHERE puesto_id = ? AND activo = 1`,
+          'UPDATE productos SET precio_dinamico = ROUND(precio * 1.10, 2) WHERE puesto_id = ? AND activo = 1',
           [decision.puesto_id]
         );
       }
       break;
+
+    case 'activar_promocion':
+      if (decision.puesto_id) {
+        if (decision.producto_id) {
+          await db.query(
+            'UPDATE promociones SET activa = 1 WHERE puesto_id = ? AND producto_id = ? AND activa = 0 LIMIT 1',
+            [decision.puesto_id, decision.producto_id]
+          );
+        } else {
+          await db.query(
+            'UPDATE promociones SET activa = 1 WHERE puesto_id = ? AND activa = 0 ORDER BY id ASC LIMIT 1',
+            [decision.puesto_id]
+          );
+        }
+      }
+      break;
+
+    case 'reposicion_stock':
+      // Solo alerta — acción manual del operador
+      break;
+  }
+}
+
+// Evalúa pares A/B ejecutados hace >30 min y marca ganadora
+async function evaluarGanadoresAB(festival_id) {
+  const [grupos] = await db.query(
+    `SELECT grupo_ab FROM decisiones_automaticas
+     WHERE festival_id = ? AND tipo = 'descuento_producto'
+       AND estado IN ('ejecutada','aprobada')
+       AND grupo_ab IS NOT NULL
+       AND ganadora IS NULL
+       AND creado_en <= (NOW() - INTERVAL 30 MINUTE)
+     GROUP BY grupo_ab
+     HAVING COUNT(*) >= 2`,
+    [festival_id]
+  );
+
+  for (const { grupo_ab } of grupos) {
+    const [variantes] = await db.query(
+      `SELECT id, producto_id, creado_en FROM decisiones_automaticas
+       WHERE festival_id = ? AND grupo_ab = ? AND tipo = 'descuento_producto'`,
+      [festival_id, grupo_ab]
+    );
+    if (variantes.length < 2) continue;
+
+    const resultados = await Promise.all(variantes.map(async (v) => {
+      const [[{ ventas_post }]] = await db.query(
+        `SELECT COALESCE(SUM(pi.cantidad), 0) AS ventas_post
+         FROM pedido_items pi
+         JOIN pedidos pe ON pe.id = pi.pedido_id
+         WHERE pi.producto_id = ? AND pe.creado_en > ?
+           AND pe.estado NOT IN ('cancelado')`,
+        [v.producto_id, v.creado_en]
+      );
+      return { id: v.id, ventas_post: Number(ventas_post) };
+    }));
+
+    const [primero, segundo] = resultados.sort((a, b) => b.ventas_post - a.ventas_post);
+    const hayGanador = primero.ventas_post > segundo.ventas_post;
+
+    for (const r of resultados) {
+      await db.query(
+        'UPDATE decisiones_automaticas SET ventas_despues = ?, ganadora = ? WHERE id = ?',
+        [r.ventas_post, hayGanador ? (r.id === primero.id ? 1 : 0) : null, r.id]
+      );
+    }
   }
 }
 
@@ -2698,21 +2905,20 @@ app.put('/api/gestor/modo-auto', auth, async (req, res) => {
 });
 
 // GET /api/gestor/decisiones?festival_id=X
-// Genera nuevas decisiones según las reglas, y si el modo es auto las ejecuta directamente
 app.get('/api/gestor/decisiones', auth, async (req, res) => {
   const { festival_id } = req.query;
   if (!festival_id) return res.status(400).json({ error: 'festival_id requerido' });
   try {
-    // 1. Generar decisiones nuevas si procede
+    // 1. Generar decisiones nuevas según reglas
     await generarDecisiones(Number(festival_id));
 
-    // 2. Leer el modo del festival
+    // 2. Leer modo del festival
     const [configRows] = await db.query(
       'SELECT modo_auto FROM gestor_config WHERE festival_id = ?', [festival_id]
     );
     const modoAuto = configRows.length > 0 ? Boolean(configRows[0].modo_auto) : true;
 
-    // 3. Si modo automático: ejecutar todas las pendientes
+    // 3. Modo automático: ejecutar todas las pendientes
     if (modoAuto) {
       const [pendientes] = await db.query(
         `SELECT * FROM decisiones_automaticas WHERE festival_id = ? AND estado = 'pendiente'`,
@@ -2726,12 +2932,18 @@ app.get('/api/gestor/decisiones', auth, async (req, res) => {
       }
     }
 
-    // 4. Devolver todas las decisiones (pendientes + historial reciente)
+    // 4. Evaluar ganadores de pares A/B maduros (>30 min ejecutados)
+    await evaluarGanadoresAB(Number(festival_id));
+
+    // 5. Devolver decisiones con info de puesto y producto
     const [decisiones] = await db.query(
-      `SELECT d.*, p.nombre as puesto_nombre,
+      `SELECT d.*,
+              p.nombre  AS puesto_nombre,
+              pr.nombre AS producto_nombre,
               TIMESTAMPDIFF(MINUTE, d.creado_en, NOW()) AS minutos_desde_creacion
        FROM decisiones_automaticas d
-       LEFT JOIN puestos p ON d.puesto_id = p.id
+       LEFT JOIN puestos   p  ON p.id  = d.puesto_id
+       LEFT JOIN productos pr ON pr.id = d.producto_id
        WHERE d.festival_id = ?
        ORDER BY d.creado_en DESC
        LIMIT 50`,

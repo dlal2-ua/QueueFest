@@ -1,19 +1,17 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getEstadisticas } from '../../api';
-import { Zap, Hand, ChevronLeft, Store, Euro, Map, ShoppingBag, Clock, LogOut, Tag } from 'lucide-react';
+import { ChevronLeft, Store, Euro, Map, ShoppingBag, Clock, LogOut, Tag } from 'lucide-react';
 import { formatWait } from '../../utils/formatTime';
 
 interface Props {
   festivalId: number;
   festivalNombre: string;
-  modoAuto: boolean;
-  onToggleModo: () => void;
   onChangeFestival: () => void;
   onLogout: () => void;
   navigate: (view: string) => void;
 }
 
-export function MainPanelView({ festivalId, festivalNombre, modoAuto, onToggleModo, onChangeFestival, onLogout, navigate }: Props) {
+export function MainPanelView({ festivalId, festivalNombre, onChangeFestival, onLogout, navigate }: Props) {
   const [stats, setStats] = useState<any>(null);
 
   const cargarStats = useCallback(async () => {
@@ -85,68 +83,7 @@ export function MainPanelView({ festivalId, festivalNombre, modoAuto, onToggleMo
             width: '100%',
           }}
         >
-          {/* 1 — Toggle Modo Automático */}
-          <div
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              backgroundColor: '#FFF3E4',
-              border: '1px solid #E8D5C0',
-              borderRadius: 20,
-              padding: '18px 20px',
-              boxShadow: '0 4px 20px rgba(166,124,82,0.10)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {modoAuto
-                ? <Zap style={{ width: 20, height: 20, color: '#F59E0B' }} />
-                : <Hand style={{ width: 20, height: 20, color: '#A67C52' }} />}
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 700, color: '#2C1810', lineHeight: 1.2 }}>
-                  Modo Automático
-                </p>
-                <p style={{ fontSize: 11, color: '#8B6650', marginTop: 2 }}>
-                  {modoAuto ? 'El sistema actúa solo' : 'Tú apruebas cada decisión'}
-                </p>
-              </div>
-            </div>
-
-            <button
-              id="gestor-toggle-modo"
-              onClick={onToggleModo}
-              style={{
-                position: 'relative',
-                width: 48,
-                height: 24,
-                borderRadius: 12,
-                backgroundColor: modoAuto ? '#F59E0B' : '#D1C4B8',
-                border: 'none',
-                cursor: 'pointer',
-                flexShrink: 0,
-                transition: 'background-color 0.3s',
-              }}
-            >
-              <span
-                style={{
-                  position: 'absolute',
-                  top: 3,
-                  left: 3,
-                  width: 18,
-                  height: 18,
-                  borderRadius: '50%',
-                  backgroundColor: '#fff',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-                  transition: 'transform 0.3s',
-                  transform: modoAuto ? 'translateX(24px)' : 'translateX(0)',
-                  display: 'block',
-                }}
-              />
-            </button>
-          </div>
-
-          {/* 2 — Botón Mapa (pill, ancho completo) */}
+          {/* 1 — Botón Mapa (pill, ancho completo) */}
           <button
             onClick={() => navigate('map')}
             style={{
@@ -173,7 +110,7 @@ export function MainPanelView({ festivalId, festivalNombre, modoAuto, onToggleMo
             Ver mapa del festival
           </button>
 
-          {/* 3 — Fila de 2 métricas */}
+          {/* 2 — Fila de 2 métricas */}
           <button
             onClick={() => navigate('promotions')}
             style={{
@@ -220,7 +157,7 @@ export function MainPanelView({ festivalId, festivalNombre, modoAuto, onToggleMo
             ))}
           </div>
 
-          {/* 4 — Segunda fila de 2 métricas */}
+          {/* 3 — Segunda fila de 2 métricas */}
           <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {metricas.slice(2, 4).map(({ icon: Icon, valor, label, color }) => (
               <div

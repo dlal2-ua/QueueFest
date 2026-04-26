@@ -119,8 +119,6 @@ export function GestorScreen() {
             <MainPanelView
               festivalId={festivalId}
               festivalNombre={festivalNombre}
-              modoAuto={modoAuto}
-              onToggleModo={handleToggleModo}
               onChangeFestival={() => setView('welcome')}
               onLogout={logout}
               navigate={navigate}
@@ -140,6 +138,7 @@ export function GestorScreen() {
               festivalId={festivalId}
               festivalNombre={festivalNombre}
               modoAuto={modoAuto}
+              onToggleModo={handleToggleModo}
             />
           )}
 
