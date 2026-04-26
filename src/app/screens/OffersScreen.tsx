@@ -3,8 +3,9 @@ import { BottomNav } from '../components/BottomNav';
 import { OfferCard } from '../components/OfferCard';
 import { RoyaltiesPanel } from '../components/RoyaltiesPanel';
 import { useCart } from '../context/CartContext';
-import { getPuestosByFestival, getPromociones } from '../api';
+import { getFestivalPromociones } from '../api';
 import { Loader2, Tag, Coins } from 'lucide-react';
+import { buildPromotionOffer } from '../utils/promotions';
 
 export function OffersScreen() {
   const { addItem } = useCart();
@@ -23,41 +24,20 @@ export function OffersScreen() {
       }
 
       try {
-        const puestos = await getPuestosByFestival(festival.id);
-        if (!Array.isArray(puestos) || puestos.length === 0) {
+        const promociones = await getFestivalPromociones(festival.id);
+        if (!Array.isArray(promociones) || promociones.length === 0) {
           setLoading(false);
           return;
         }
 
-        const resultados = await Promise.allSettled(
-          puestos.map((p: any) => getPromociones(p.id).then((ofertas: any[]) => ({ puesto: p, ofertas })))
+        setAllOffers(
+          promociones.map((offer: any) => ({
+            ...buildPromotionOffer(offer),
+            vendorId: String(offer.puesto_id),
+            vendorName: offer.puesto_nombre || 'Puesto',
+            vendorType: offer.puesto_tipo === 'foodtruck' ? 'food-truck' : 'bar'
+          }))
         );
-
-        const combinadas: any[] = [];
-        resultados.forEach((result) => {
-          if (result.status === 'fulfilled') {
-            const { puesto, ofertas } = result.value;
-            if (Array.isArray(ofertas)) {
-              ofertas
-                .filter((offer: any) => offer.activa)
-                .forEach((offer: any) => {
-                  combinadas.push({
-                    id: offer.id,
-                    title: offer.titulo,
-                    description: offer.descripcion,
-                    price: offer.precio_promo,
-                    discount: 'PROMO',
-                    originalPrice: undefined,
-                    vendorId: String(puesto.id),
-                    vendorName: puesto.nombre,
-                    vendorType: puesto.tipo === 'foodtruck' ? 'food-truck' : 'bar'
-                  });
-                });
-            }
-          }
-        });
-
-        setAllOffers(combinadas);
       } catch (err) {
         console.error('Error cargando ofertas:', err);
       } finally {
@@ -71,6 +51,11 @@ export function OffersScreen() {
   const handleAddOffer = (offer: any) => {
     return addItem({
       id: offer.id,
+      productId: offer.productId,
+      promotionId: offer.promotionId,
+      promotionType: offer.promotionType,
+      promotionLabel: offer.discount,
+      unitsPerPromotion: offer.unitsPerPromotion,
       vendorId: offer.vendorId,
       vendorName: offer.vendorName,
       vendorType: offer.vendorType,
@@ -103,6 +88,7 @@ export function OffersScreen() {
             discount={offer.discount}
             originalPrice={offer.originalPrice}
             price={offer.price}
+            priceCaption={offer.priceCaption}
             onAdd={() => handleAddOffer(offer)}
           />
         </div>

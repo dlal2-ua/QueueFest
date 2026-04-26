@@ -16,9 +16,12 @@ type DBStatus = 'pendiente' | 'confirmado' | 'preparando' | 'listo' | 'entregado
 
 interface PedidoItem {
   nombre: string;
+  item_nombre?: string;
   producto_nombre?: string;
+  promocion_titulo?: string;
   cantidad: number;
   precio_unitario: number;
+  importe_total?: number | string;
 }
 
 interface PedidoDetail {
@@ -165,10 +168,10 @@ export function TrackOrderScreen() {
             {items.map((item, index) => (
               <div key={index} className="flex justify-between text-sm">
                 <span className="text-gray-600">
-                  {item.cantidad}x {item.producto_nombre || item.nombre}
+                  {item.cantidad}x {item.item_nombre || item.promocion_titulo || item.producto_nombre || item.nombre}
                 </span>
                 <span className="text-gray-600">
-                  {formatPrice(item.precio_unitario * item.cantidad)}
+                  {formatPrice(Number(item.importe_total ?? (item.precio_unitario * item.cantidad)))}
                 </span>
               </div>
             ))}

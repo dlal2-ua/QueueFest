@@ -4,7 +4,8 @@ import { ChevronLeft, Loader2 } from 'lucide-react';
 import { OfferCard } from '../components/OfferCard';
 import { BottomNav } from '../components/BottomNav';
 import { useCart } from '../context/CartContext';
-import { getPromociones, getPuesto } from '../api';
+import { getPuestoPromociones, getPuesto } from '../api';
+import { buildPromotionOffer } from '../utils/promotions';
 
 export function BarOffersScreen() {
   const { id } = useParams();
@@ -29,19 +30,9 @@ export function BarOffersScreen() {
         }
 
         // Ofertas del puesto
-        const data = await getPromociones(Number(id));
+        const data = await getPuestoPromociones(Number(id));
         if (Array.isArray(data)) {
-          setOffers(data
-            .filter((p: any) => p.activa)
-            .map((p: any) => ({
-              id: p.id,
-              title: p.titulo,
-              description: p.descripcion,
-              price: p.precio_promo,
-              discount: 'PROMO',
-              originalPrice: undefined
-            }))
-          );
+          setOffers(data.map((promotion: any) => buildPromotionOffer(promotion)));
         }
       } catch (err) {
         console.error('Error cargando ofertas de barra:', err);
@@ -55,6 +46,11 @@ export function BarOffersScreen() {
   const handleAddOffer = (offer: any) => {
     return addItem({
       id: offer.id,
+      productId: offer.productId,
+      promotionId: offer.promotionId,
+      promotionType: offer.promotionType,
+      promotionLabel: offer.discount,
+      unitsPerPromotion: offer.unitsPerPromotion,
       vendorId: String(id),
       vendorName: barNombre,
       vendorType: 'bar',
@@ -93,6 +89,7 @@ export function BarOffersScreen() {
               discount={offer.discount}
               originalPrice={offer.originalPrice}
               price={offer.price}
+              priceCaption={offer.priceCaption}
               onAdd={() => handleAddOffer(offer)}
             />
           ))

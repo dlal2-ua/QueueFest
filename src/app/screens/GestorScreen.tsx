@@ -3,21 +3,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getModoAuto, setModoAuto } from '../api';
 import { toast } from 'sonner';
-import { Map, CheckSquare, Home, LayoutGrid } from 'lucide-react';
+import { Map, CheckSquare, Home, LayoutGrid, Tag } from 'lucide-react';
 
 import { WelcomeView }   from './gestor/WelcomeView';
 import { MainPanelView } from './gestor/MainPanelView';
 import { MapView }       from './gestor/MapView';
 import { DecisionsView } from './gestor/DecisionsView';
 import { StandsView }    from './gestor/StandsView';
+import { PromotionsView } from './gestor/PromotionsView';
 
-type View = 'welcome' | 'main' | 'map' | 'decisions' | 'stands';
+type View = 'welcome' | 'main' | 'map' | 'decisions' | 'stands' | 'promotions';
 
 const BOTTOM_NAV: { id: View; icon: typeof Map }[] = [
   { id: 'map',       icon: Map         },
   { id: 'decisions', icon: CheckSquare },
   { id: 'main',      icon: Home        },
   { id: 'stands',    icon: LayoutGrid  },
+  { id: 'promotions', icon: Tag        },
 ];
 
 export function GestorScreen() {
@@ -143,6 +145,10 @@ export function GestorScreen() {
 
           {view === 'stands' && festivalId && (
             <StandsView festivalId={festivalId} navigate={navigate} />
+          )}
+
+          {view === 'promotions' && festivalId && (
+            <PromotionsView festivalId={festivalId} festivalNombre={festivalNombre} />
           )}
         </div>
 

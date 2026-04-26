@@ -1,4 +1,10 @@
 const Stripe = require('stripe');
+const {
+  getPromotionBundle,
+  getReferencePrice,
+  resolvePromotionPricing,
+  roundCurrency
+} = require('./promotions');
 
 function createHttpError(message, statusCode = 500) {
   const error = new Error(message);
@@ -32,6 +38,19 @@ function createPaymentsModule({
     return Math.round(Number(amount) * 100);
   }
 
+  async function doesColumnExist(db, tableName, columnName) {
+    const [rows] = await db.query(
+      `SELECT 1
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = ?
+         AND COLUMN_NAME = ?
+       LIMIT 1`,
+      [tableName, columnName]
+    );
+    return rows.length > 0;
+  }
+
   async function initDb(db) {
     await db.query(`
       CREATE TABLE IF NOT EXISTS payment_sessions (
@@ -52,6 +71,20 @@ function createPaymentsModule({
       )
     `);
     console.log('SQL Migration payment_sessions checked.');
+
+    if (!(await doesColumnExist(db, 'pedido_items', 'promocion_id'))) {
+      await db.query('ALTER TABLE pedido_items ADD COLUMN promocion_id INT NULL AFTER producto_id');
+    }
+
+    if (!(await doesColumnExist(db, 'pedido_items', 'importe_total'))) {
+      await db.query('ALTER TABLE pedido_items ADD COLUMN importe_total DECIMAL(10,2) NULL AFTER precio_unitario');
+    }
+
+    await db.query(`
+      UPDATE pedido_items
+      SET importe_total = ROUND(cantidad * precio_unitario, 2)
+      WHERE importe_total IS NULL
+    `);
   }
 
   async function validateOrderPayload(conn, puestoId, rawItems) {
@@ -78,20 +111,38 @@ function createPaymentsModule({
 
     const normalizedItems = rawItems.map((item) => ({
       producto_id: Number(item.producto_id),
-      cantidad: Number(item.cantidad)
+      cantidad: Number(item.cantidad),
+      promocion_id: item.promocion_id == null || item.promocion_id === ''
+        ? null
+        : Number(item.promocion_id)
     }));
 
-    if (normalizedItems.some((item) => !Number.isInteger(item.producto_id) || !Number.isInteger(item.cantidad) || item.cantidad <= 0)) {
+    if (normalizedItems.some((item) =>
+      !Number.isInteger(item.producto_id)
+      || !Number.isInteger(item.cantidad)
+      || item.cantidad <= 0
+      || (item.promocion_id != null && !Number.isInteger(item.promocion_id))
+    )) {
       throw createHttpError('Formato de carrito invalido', 400);
     }
 
     const productIds = [...new Set(normalizedItems.map((item) => item.producto_id))];
+    const promotionIds = [...new Set(normalizedItems
+      .map((item) => item.promocion_id)
+      .filter((promotionId) => promotionId != null))];
     const [products] = await conn.query(
       'SELECT id, puesto_id, nombre, descripcion, precio, precio_dinamico, activo, stock FROM productos WHERE id IN (?)',
       [productIds]
     );
+    const [promotions] = promotionIds.length > 0
+      ? await conn.query(
+        'SELECT id, puesto_id, producto_id, titulo, descripcion, precio_promo, tipo, valor_descuento, activa FROM promociones WHERE id IN (?)',
+        [promotionIds]
+      )
+      : [[]];
 
     const productsById = new Map(products.map((product) => [Number(product.id), product]));
+    const promotionsById = new Map(promotions.map((promotion) => [Number(promotion.id), promotion]));
     let total = 0;
 
     const items = normalizedItems.map((item) => {
@@ -109,19 +160,66 @@ function createPaymentsModule({
         throw createHttpError(`El producto ${product.nombre} ya no esta disponible`, 400);
       }
 
-      if (product.stock != null && Number(product.stock) < item.cantidad) {
+      let precioUnitario = Number(product.precio_dinamico) > 0 ? Number(product.precio_dinamico) : Number(product.precio);
+      let nombre = product.nombre;
+      let descripcion = product.descripcion || '';
+      let cantidadReal = item.cantidad;
+      let importeTotal = roundCurrency(precioUnitario * cantidadReal);
+      let checkoutQuantity = item.cantidad;
+      let checkoutUnitPrice = precioUnitario;
+
+      if (item.promocion_id != null) {
+        const promotion = promotionsById.get(item.promocion_id);
+
+        if (!promotion) {
+          throw createHttpError(`Promocion ${item.promocion_id} no encontrada`, 404);
+        }
+
+        if (!promotion.activa) {
+          throw createHttpError(`La promocion ${promotion.titulo} ya no esta activa`, 400);
+        }
+
+        if (Number(promotion.puesto_id) !== Number(puestoId)) {
+          throw createHttpError('La promocion no pertenece al puesto seleccionado', 400);
+        }
+
+        if (Number(promotion.producto_id) !== Number(product.id)) {
+          throw createHttpError('La promocion no corresponde con el producto seleccionado', 400);
+        }
+
+        const resolvedPromotion = resolvePromotionPricing({
+          type: promotion.tipo,
+          referencePrice: getReferencePrice(product),
+          fixedPrice: promotion.precio_promo,
+          discountValue: promotion.valor_descuento
+        });
+        const bundle = getPromotionBundle(resolvedPromotion.tipo);
+
+        cantidadReal = item.cantidad * bundle.unitsPerApplication;
+        importeTotal = roundCurrency(resolvedPromotion.precio_total_promocion * item.cantidad);
+        checkoutQuantity = item.cantidad;
+        checkoutUnitPrice = resolvedPromotion.precio_total_promocion;
+        precioUnitario = roundCurrency(importeTotal / cantidadReal);
+        nombre = promotion.titulo || product.nombre;
+        descripcion = promotion.descripcion || product.descripcion || '';
+      }
+
+      if (product.stock != null && Number(product.stock) < cantidadReal) {
         throw createHttpError(`Stock insuficiente para ${product.nombre}`, 400);
       }
 
-      const precioUnitario = Number(product.precio_dinamico) > 0 ? Number(product.precio_dinamico) : Number(product.precio);
-      total += precioUnitario * item.cantidad;
+      total += importeTotal;
 
       return {
         producto_id: Number(product.id),
-        cantidad: item.cantidad,
+        promocion_id: item.promocion_id,
+        cantidad: cantidadReal,
         precio_unitario: precioUnitario,
-        nombre: product.nombre,
-        descripcion: product.descripcion || ''
+        importe_total: importeTotal,
+        checkout_quantity: checkoutQuantity,
+        checkout_unit_price: checkoutUnitPrice,
+        nombre,
+        descripcion
       };
     });
 
@@ -142,8 +240,8 @@ function createPaymentsModule({
 
     for (const item of items) {
       await conn.query(
-        'INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?)',
-        [pedidoId, item.producto_id, item.cantidad, item.precio_unitario]
+        'INSERT INTO pedido_items (pedido_id, producto_id, promocion_id, cantidad, precio_unitario, importe_total) VALUES (?, ?, ?, ?, ?, ?)',
+        [pedidoId, item.producto_id, item.promocion_id ?? null, item.cantidad, item.precio_unitario, item.importe_total]
       );
     }
 
@@ -335,10 +433,10 @@ function createPaymentsModule({
             success_url: `${frontendUrl}/confirmation?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${frontendUrl}/payment?checkout_cancelled=1`,
             line_items: validated.items.map((item) => ({
-              quantity: item.cantidad,
+              quantity: item.checkout_quantity,
               price_data: {
                 currency: 'eur',
-                unit_amount: toStripeAmount(item.precio_unitario),
+                unit_amount: toStripeAmount(item.checkout_unit_price),
                 product_data: {
                   name: item.nombre,
                   description: item.descripcion || undefined

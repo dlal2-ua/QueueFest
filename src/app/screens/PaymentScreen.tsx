@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '../utils/navigation';
 import { ChevronLeft, CreditCard, FlaskConical, MapPin, Clock, Coins } from 'lucide-react';
-import { useCart } from '../context/CartContext';
+import { getCartItemApplications, useCart } from '../context/CartContext';
 import { formatPrice } from '../utils/formatPrice';
 import { createPayment, getPaymentConfig, getPuestoEstado } from '../api';
 import { toast } from 'sonner';
@@ -81,8 +81,9 @@ export function PaymentScreen() {
         provider: selectedPayment,
         puesto_id: isNaN(puestoId) ? 1 : puestoId,
         items: items.map((item) => ({
-          producto_id: parseInt(item.id, 10) || 1,
-          cantidad: item.quantity
+          producto_id: parseInt(item.productId || item.id, 10) || 1,
+          cantidad: getCartItemApplications(item),
+          promocion_id: item.promotionId ? parseInt(item.promotionId, 10) : undefined
         }))
       };
 

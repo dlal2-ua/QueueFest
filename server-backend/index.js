@@ -9,6 +9,12 @@ const multer = require('multer');
 const { Client } = require('ssh2');
 const net = require('net');
 const { createPaymentsModule } = require('./payments');
+const {
+  getPromotionBundle,
+  getReferencePrice,
+  resolvePromotionPricing,
+  roundCurrency
+} = require('./promotions');
 require('dotenv').config();
 
 const app = express();
@@ -87,6 +93,7 @@ let db; // Será inicializado tras establecer el túnel SSH
 // ─── TUNEL SSH PARA BASE DE DATOS LOCAL ───
 const sshClient = new Client();
 const privateKeyPath = process.env.SSH_PRIVATE_KEY_PATH;
+const localMysqlForwardPort = Number(process.env.DB_TUNNEL_LOCAL_PORT || 12345);
 let privateKey = '';
 try {
   privateKey = fs.readFileSync(privateKeyPath, 'utf8').replace(/\r\n/g, '\n');
@@ -109,11 +116,11 @@ sshClient.on('ready', () => {
     );
   });
 
-  forwardServer.listen(12345, '127.0.0.1', () => {
-    console.log('MySQL Forwarding escuchando en 127.0.0.1:12345');
+  forwardServer.listen(localMysqlForwardPort, '127.0.0.1', () => {
+    console.log(`MySQL Forwarding escuchando en 127.0.0.1:${localMysqlForwardPort}`);
     db = mysql2.createPool({
       host: '127.0.0.1',
-      port: 12345,
+      port: localMysqlForwardPort,
       user: 'admin',
       password: 'Proyecto_Seguro2026!',
       database: 'queuefest'
@@ -653,6 +660,267 @@ async function ensureNotificationsTableSchema() {
   }
 }
 
+async function ensurePromotionsTableSchema() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS promociones (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      puesto_id INT NOT NULL,
+      producto_id INT NULL,
+      titulo VARCHAR(255) NOT NULL,
+      descripcion TEXT NULL,
+      precio_promo DECIMAL(10,2) NOT NULL,
+      tipo VARCHAR(40) NOT NULL DEFAULT 'precio_fijo',
+      valor_descuento DECIMAL(10,2) NULL,
+      activa TINYINT(1) DEFAULT 1,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_promociones_puesto_activa (puesto_id, activa),
+      INDEX idx_promociones_producto (producto_id)
+    )
+  `);
+
+  if (!(await doesColumnExist('promociones', 'producto_id'))) {
+    await db.query('ALTER TABLE promociones ADD COLUMN producto_id INT NULL AFTER puesto_id');
+  }
+
+  if (!(await doesColumnExist('promociones', 'actualizado_en'))) {
+    await db.query('ALTER TABLE promociones ADD COLUMN actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER creado_en');
+  }
+
+  if (!(await doesColumnExist('promociones', 'tipo'))) {
+    await db.query("ALTER TABLE promociones ADD COLUMN tipo VARCHAR(40) NOT NULL DEFAULT 'precio_fijo' AFTER precio_promo");
+  }
+
+  if (!(await doesColumnExist('promociones', 'valor_descuento'))) {
+    await db.query('ALTER TABLE promociones ADD COLUMN valor_descuento DECIMAL(10,2) NULL AFTER tipo');
+  }
+
+  if (!(await doesIndexExist('promociones', 'idx_promociones_puesto_activa'))) {
+    await db.query('ALTER TABLE promociones ADD INDEX idx_promociones_puesto_activa (puesto_id, activa)');
+  }
+
+  if (!(await doesIndexExist('promociones', 'idx_promociones_producto'))) {
+    await db.query('ALTER TABLE promociones ADD INDEX idx_promociones_producto (producto_id)');
+  }
+
+  // Backfill seguro: solo enlaza promociones antiguas cuando el puesto tiene un unico producto activo.
+  await db.query(`
+    UPDATE promociones pr
+    INNER JOIN (
+      SELECT puesto_id, MIN(id) AS producto_id
+      FROM productos
+      WHERE activo = 1
+      GROUP BY puesto_id
+      HAVING COUNT(*) = 1
+    ) unico_producto ON unico_producto.puesto_id = pr.puesto_id
+    SET pr.producto_id = unico_producto.producto_id
+    WHERE pr.producto_id IS NULL
+  `);
+
+  await db.query(`
+    UPDATE promociones
+    SET tipo = 'precio_fijo'
+    WHERE tipo IS NULL OR TRIM(tipo) = ''
+  `);
+}
+
+function mapPromotionRow(row) {
+  const mappedRow = {
+    ...row,
+    puesto_id: Number(row.puesto_id),
+    producto_id: row.producto_id == null ? null : Number(row.producto_id),
+    precio_promo: Number(row.precio_promo),
+    valor_descuento: row.valor_descuento == null ? null : Number(row.valor_descuento),
+    producto_precio: row.producto_precio == null ? null : Number(row.producto_precio),
+    producto_precio_dinamico: row.producto_precio_dinamico == null ? null : Number(row.producto_precio_dinamico),
+    activa: Boolean(row.activa),
+    producto_activo: row.producto_activo == null ? null : Boolean(row.producto_activo)
+  };
+
+  try {
+    const resolvedPromotion = resolvePromotionPricing({
+      type: row.tipo,
+      referencePrice: getReferencePrice({
+        precio: row.producto_precio,
+        precio_dinamico: row.producto_precio_dinamico
+      }),
+      fixedPrice: row.precio_promo,
+      discountValue: row.valor_descuento
+    });
+    const bundle = getPromotionBundle(resolvedPromotion.tipo);
+
+    mappedRow.tipo = resolvedPromotion.tipo;
+    mappedRow.valor_descuento = resolvedPromotion.valor_descuento;
+    mappedRow.precio_promo = resolvedPromotion.precio_total_promocion;
+    mappedRow.cantidad_promocion = bundle.unitsPerApplication;
+    mappedRow.cantidad_cobrada = bundle.paidUnitsPerApplication;
+  } catch {
+    const bundle = getPromotionBundle(row.tipo);
+    mappedRow.tipo = row.tipo || 'precio_fijo';
+    mappedRow.cantidad_promocion = bundle.unitsPerApplication;
+    mappedRow.cantidad_cobrada = bundle.paidUnitsPerApplication;
+  }
+
+  return mappedRow;
+}
+
+async function getPromotionById(promotionId) {
+  const [rows] = await db.query(
+    `SELECT
+       pr.id,
+       pr.puesto_id,
+       pr.producto_id,
+       pr.titulo,
+       pr.descripcion,
+       pr.precio_promo,
+       pr.tipo,
+       pr.valor_descuento,
+       pr.activa,
+       pr.creado_en,
+       pr.actualizado_en,
+       pu.nombre AS puesto_nombre,
+       pu.tipo AS puesto_tipo,
+       pu.festival_id,
+       prod.nombre AS producto_nombre,
+       prod.precio AS producto_precio,
+       prod.precio_dinamico AS producto_precio_dinamico,
+       prod.activo AS producto_activo
+     FROM promociones pr
+     INNER JOIN puestos pu ON pu.id = pr.puesto_id
+     LEFT JOIN productos prod ON prod.id = pr.producto_id
+     WHERE pr.id = ?
+     LIMIT 1`,
+    [Number(promotionId)]
+  );
+
+  return rows[0] ? mapPromotionRow(rows[0]) : null;
+}
+
+async function listPromotions({ puestoId, festivalId, includeInactive = false, onlyPurchasable = false } = {}) {
+  const where = [];
+  const params = [];
+
+  if (puestoId) {
+    where.push('pr.puesto_id = ?');
+    params.push(Number(puestoId));
+  }
+
+  if (festivalId) {
+    where.push('pu.festival_id = ?');
+    params.push(Number(festivalId));
+  }
+
+  if (!includeInactive) {
+    where.push('pr.activa = 1');
+  }
+
+  if (onlyPurchasable) {
+    where.push('pr.producto_id IS NOT NULL');
+    where.push('prod.id IS NOT NULL');
+    where.push('prod.activo = 1');
+  }
+
+  const [rows] = await db.query(
+    `SELECT
+       pr.id,
+       pr.puesto_id,
+       pr.producto_id,
+       pr.titulo,
+       pr.descripcion,
+       pr.precio_promo,
+       pr.tipo,
+       pr.valor_descuento,
+       pr.activa,
+       pr.creado_en,
+       pr.actualizado_en,
+       pu.nombre AS puesto_nombre,
+       pu.tipo AS puesto_tipo,
+       pu.festival_id,
+       prod.nombre AS producto_nombre,
+       prod.precio AS producto_precio,
+       prod.precio_dinamico AS producto_precio_dinamico,
+       prod.activo AS producto_activo
+     FROM promociones pr
+     INNER JOIN puestos pu ON pu.id = pr.puesto_id
+     LEFT JOIN productos prod ON prod.id = pr.producto_id
+     ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+     ORDER BY pr.creado_en DESC, pr.id DESC`,
+    params
+  );
+
+  return rows.map(mapPromotionRow);
+}
+
+async function validatePromotionPayload({ puestoId, productoId, titulo, descripcion, precioPromo, tipo, valorDescuento }) {
+  const normalizedPuestoId = Number(puestoId);
+  const normalizedProductoId = Number(productoId);
+  const normalizedTitle = String(titulo || '').trim();
+  const normalizedDescription = descripcion == null ? null : String(descripcion).trim();
+
+  if (!Number.isInteger(normalizedPuestoId) || normalizedPuestoId <= 0) {
+    throw new Error('puesto_id invalido');
+  }
+
+  if (!Number.isInteger(normalizedProductoId) || normalizedProductoId <= 0) {
+    throw new Error('producto_id invalido');
+  }
+
+  if (!normalizedTitle) {
+    throw new Error('titulo requerido');
+  }
+
+  const [puestos] = await db.query(
+    'SELECT id, festival_id, nombre FROM puestos WHERE id = ? LIMIT 1',
+    [normalizedPuestoId]
+  );
+
+  if (puestos.length === 0) {
+    throw new Error('El puesto indicado no existe');
+  }
+
+  const [productos] = await db.query(
+    'SELECT id, puesto_id, nombre, precio, precio_dinamico, activo FROM productos WHERE id = ? LIMIT 1',
+    [normalizedProductoId]
+  );
+
+  if (productos.length === 0) {
+    throw new Error('El producto indicado no existe');
+  }
+
+  const producto = productos[0];
+  if (Number(producto.puesto_id) !== normalizedPuestoId) {
+    throw new Error('El producto debe pertenecer al puesto seleccionado');
+  }
+
+  if (!producto.activo) {
+    throw new Error('El producto seleccionado no esta activo');
+  }
+
+  const precioReferencia = Number(producto.precio_dinamico) > 0
+    ? Number(producto.precio_dinamico)
+    : Number(producto.precio);
+  const resolvedPromotion = resolvePromotionPricing({
+    type: tipo,
+    referencePrice: precioReferencia,
+    fixedPrice: precioPromo,
+    discountValue: valorDescuento
+  });
+
+  return {
+    puesto: puestos[0],
+    producto,
+    values: {
+      puesto_id: normalizedPuestoId,
+      producto_id: normalizedProductoId,
+      titulo: normalizedTitle,
+      descripcion: normalizedDescription || null,
+      precio_promo: roundCurrency(resolvedPromotion.precio_promo),
+      tipo: resolvedPromotion.tipo,
+      valor_descuento: resolvedPromotion.valor_descuento
+    }
+  };
+}
+
 // Asegurar que las tablas existen al arrancar
 async function initDB() {
   try {
@@ -672,6 +940,9 @@ async function initDB() {
 
     await ensureNotificationsTableSchema();
     console.log('SQL Migration notificaciones_usuario checked.');
+
+    await ensurePromotionsTableSchema();
+    console.log('SQL Migration promociones checked.');
 
     await paymentsModule.initDb(db);
   } catch (err) {
@@ -706,6 +977,13 @@ const auth = async (req, res, next) => {
   } catch {
     res.status(401).json({ error: 'Token inválido' });
   }
+};
+
+const requireRoles = (...roles) => (req, res, next) => {
+  if (!req.user || !roles.includes(req.user.rol)) {
+    return res.status(403).json({ error: 'No tienes permisos para esta accion' });
+  }
+  next();
 };
 
 paymentsModule.registerRoutes(app, auth, () => db);
@@ -1178,9 +1456,15 @@ app.get('/api/pedidos/:id', auth, async (req, res) => {
 
     // 2. Obtener items del pedido
     const [items] = await db.query(`
-      SELECT pi.*, pr.nombre AS producto_nombre
+      SELECT
+        pi.*,
+        pr.nombre AS producto_nombre,
+        promo.titulo AS promocion_titulo,
+        promo.tipo AS promocion_tipo,
+        COALESCE(promo.titulo, pr.nombre) AS item_nombre
       FROM pedido_items pi
       JOIN productos pr ON pi.producto_id = pr.id
+      LEFT JOIN promociones promo ON pi.promocion_id = promo.id
       WHERE pi.pedido_id = ?
     `, [pedidoId]);
 
@@ -1211,8 +1495,15 @@ app.post('/api/pedidos', auth, async (req, res) => {
     const pedidoId = result.insertId;
     for (const item of items) {
       await conn.query(
-        'INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?)',
-        [pedidoId, item.producto_id, item.cantidad, item.precio_unitario]
+        'INSERT INTO pedido_items (pedido_id, producto_id, promocion_id, cantidad, precio_unitario, importe_total) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          pedidoId,
+          item.producto_id,
+          item.promocion_id ?? null,
+          item.cantidad,
+          item.precio_unitario,
+          item.importe_total ?? roundCurrency(Number(item.precio_unitario) * Number(item.cantidad))
+        ]
       );
     }
     // Sumar puntos loyalty (1 punto por euro)
@@ -1909,6 +2200,222 @@ app.delete('/api/admin/usuarios/:id', auth, async (req, res) => {
 });
 
 // ── Promociones ───────────────────────────────────────────────────────────
+
+app.get('/api/promociones', async (req, res) => {
+  try {
+    const promociones = await listPromotions({
+      puestoId: req.query.puesto_id,
+      festivalId: req.query.festival_id,
+      includeInactive: false,
+      onlyPurchasable: true
+    });
+    res.json(promociones);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/gestor/promociones', auth, requireRoles('gestor', 'administrador'), async (req, res) => {
+  if (!req.query.festival_id) {
+    return res.status(400).json({ error: 'festival_id requerido' });
+  }
+
+  try {
+    const promociones = await listPromotions({
+      puestoId: req.query.puesto_id,
+      festivalId: req.query.festival_id,
+      includeInactive: true,
+      onlyPurchasable: false
+    });
+    res.json(promociones);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/gestor/promociones', auth, requireRoles('gestor', 'administrador'), async (req, res) => {
+  const { puesto_id, producto_id, titulo, descripcion, precio_promo, tipo, valor_descuento, activa } = req.body;
+  try {
+    const validated = await validatePromotionPayload({
+      puestoId: puesto_id,
+      productoId: producto_id,
+      titulo,
+      descripcion,
+      precioPromo: precio_promo,
+      tipo,
+      valorDescuento: valor_descuento
+    });
+
+    const [result] = await db.query(
+      `INSERT INTO promociones (puesto_id, producto_id, titulo, descripcion, precio_promo, tipo, valor_descuento, activa)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        validated.values.puesto_id,
+        validated.values.producto_id,
+        validated.values.titulo,
+        validated.values.descripcion,
+        validated.values.precio_promo,
+        validated.values.tipo,
+        validated.values.valor_descuento,
+        activa === undefined ? 1 : (activa ? 1 : 0)
+      ]
+    );
+
+    res.json({ id: result.insertId });
+  } catch (err) {
+    const status = /invalido|requerido|debe|no existe|no esta activo|descuento|referencia/i.test(err.message) ? 400 : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+app.put('/api/gestor/promociones/:id', auth, requireRoles('gestor', 'administrador'), async (req, res) => {
+  try {
+    const current = await getPromotionById(req.params.id);
+    if (!current) return res.status(404).json({ error: 'Promocion no encontrada' });
+
+    const validated = await validatePromotionPayload({
+      puestoId: req.body.puesto_id ?? current.puesto_id,
+      productoId: req.body.producto_id ?? current.producto_id,
+      titulo: req.body.titulo ?? current.titulo,
+      descripcion: req.body.descripcion ?? current.descripcion,
+      precioPromo: req.body.precio_promo ?? current.precio_promo,
+      tipo: req.body.tipo ?? current.tipo,
+      valorDescuento: req.body.valor_descuento ?? current.valor_descuento
+    });
+
+    await db.query(
+      `UPDATE promociones
+       SET puesto_id = ?, producto_id = ?, titulo = ?, descripcion = ?, precio_promo = ?, tipo = ?, valor_descuento = ?, activa = ?
+       WHERE id = ?`,
+      [
+        validated.values.puesto_id,
+        validated.values.producto_id,
+        validated.values.titulo,
+        validated.values.descripcion,
+        validated.values.precio_promo,
+        validated.values.tipo,
+        validated.values.valor_descuento,
+        req.body.activa === undefined ? (current.activa ? 1 : 0) : (req.body.activa ? 1 : 0),
+        req.params.id
+      ]
+    );
+
+    res.json({ message: 'Promocion actualizada' });
+  } catch (err) {
+    const status = /invalido|requerido|debe|no existe|no esta activo|pertenecer|descuento|referencia/i.test(err.message) ? 400 : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+app.delete('/api/gestor/promociones/:id', auth, requireRoles('gestor', 'administrador'), async (req, res) => {
+  try {
+    await db.query('DELETE FROM promociones WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Promocion eliminada' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/promociones', auth, async (req, res) => {
+  try {
+    const promociones = await listPromotions({
+      puestoId: req.query.puesto_id,
+      festivalId: req.query.festival_id,
+      includeInactive: true,
+      onlyPurchasable: false
+    });
+    return res.json(promociones);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/promociones', auth, async (req, res) => {
+  const { puesto_id, producto_id, titulo, descripcion, precio_promo, tipo, valor_descuento, activa } = req.body;
+  try {
+    const validated = await validatePromotionPayload({
+      puestoId: puesto_id,
+      productoId: producto_id,
+      titulo,
+      descripcion,
+      precioPromo: precio_promo,
+      tipo,
+      valorDescuento: valor_descuento
+    });
+
+    const [result] = await db.query(
+      `INSERT INTO promociones (puesto_id, producto_id, titulo, descripcion, precio_promo, tipo, valor_descuento, activa)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        validated.values.puesto_id,
+        validated.values.producto_id,
+        validated.values.titulo,
+        validated.values.descripcion,
+        validated.values.precio_promo,
+        validated.values.tipo,
+        validated.values.valor_descuento,
+        activa === undefined ? 1 : (activa ? 1 : 0)
+      ]
+    );
+
+    return res.json({ id: result.insertId });
+  } catch (err) {
+    if (/invalido|requerido|debe|no existe|no esta activo|descuento|referencia/i.test(err.message)) {
+      return res.status(400).json({ error: err.message });
+    }
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/promociones/:id', auth, async (req, res) => {
+  try {
+    const current = await getPromotionById(req.params.id);
+    if (!current) return res.status(404).json({ error: 'Promocion no encontrada' });
+
+    const validated = await validatePromotionPayload({
+      puestoId: req.body.puesto_id ?? current.puesto_id,
+      productoId: req.body.producto_id ?? current.producto_id,
+      titulo: req.body.titulo ?? current.titulo,
+      descripcion: req.body.descripcion ?? current.descripcion,
+      precioPromo: req.body.precio_promo ?? current.precio_promo,
+      tipo: req.body.tipo ?? current.tipo,
+      valorDescuento: req.body.valor_descuento ?? current.valor_descuento
+    });
+
+    await db.query(
+      `UPDATE promociones
+       SET puesto_id = ?, producto_id = ?, titulo = ?, descripcion = ?, precio_promo = ?, tipo = ?, valor_descuento = ?, activa = ?
+       WHERE id = ?`,
+      [
+        validated.values.puesto_id,
+        validated.values.producto_id,
+        validated.values.titulo,
+        validated.values.descripcion,
+        validated.values.precio_promo,
+        validated.values.tipo,
+        validated.values.valor_descuento,
+        req.body.activa === undefined ? (current.activa ? 1 : 0) : (req.body.activa ? 1 : 0),
+        req.params.id
+      ]
+    );
+
+    return res.json({ message: 'Promocion actualizada' });
+  } catch (err) {
+    if (/invalido|requerido|debe|no existe|no esta activo|pertenecer|descuento|referencia/i.test(err.message)) {
+      return res.status(400).json({ error: err.message });
+    }
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/promociones/:id', auth, async (req, res) => {
+  try {
+    await db.query('DELETE FROM promociones WHERE id = ?', [req.params.id]);
+    return res.json({ message: 'Promocion eliminada' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/api/admin/promociones', auth, async (req, res) => {
   try {

@@ -609,6 +609,70 @@ export const eliminarUsuario = async (id: number) => {
 
 // ── Promociones ───────────────────────────────────────────────────────────
 
+export type PromotionType =
+    | 'precio_fijo'
+    | 'dos_por_uno'
+    | 'tres_por_dos'
+    | 'descuento_porcentaje'
+    | 'descuento_valor';
+
+export interface PromotionRecord {
+    id: number;
+    puesto_id: number;
+    producto_id: number | null;
+    titulo: string;
+    descripcion: string | null;
+    precio_promo: number;
+    tipo?: PromotionType | string;
+    valor_descuento?: number | null;
+    cantidad_promocion?: number;
+    cantidad_cobrada?: number;
+    activa: boolean;
+    creado_en?: string;
+    actualizado_en?: string;
+    puesto_nombre?: string;
+    puesto_tipo?: string;
+    festival_id?: number;
+    producto_nombre?: string | null;
+    producto_precio?: number | null;
+    producto_precio_dinamico?: number | null;
+    producto_activo?: boolean | null;
+}
+
+export interface PromotionMutationPayload {
+    puesto_id: number;
+    producto_id: number;
+    titulo: string;
+    descripcion?: string | null;
+    precio_promo?: number | null;
+    tipo?: PromotionType | string;
+    valor_descuento?: number | null;
+    activa?: boolean;
+}
+
+export const getPuestoPromociones = async (puestoId: number): Promise<PromotionRecord[]> => {
+    const res = await fetch(`${API_URL}/promociones?puesto_id=${puestoId}`);
+    if (!res.ok) throw new Error('Error al cargar promociones del puesto');
+    const data = await res.json().catch(() => []);
+    return Array.isArray(data) ? data : [];
+};
+
+export const getFestivalPromociones = async (festivalId: number): Promise<PromotionRecord[]> => {
+    const res = await fetch(`${API_URL}/promociones?festival_id=${festivalId}`);
+    if (!res.ok) throw new Error('Error al cargar promociones del festival');
+    const data = await res.json().catch(() => []);
+    return Array.isArray(data) ? data : [];
+};
+
+export const getGestorPromociones = async (festivalId: number, puestoId?: number): Promise<PromotionRecord[]> => {
+    const query = new URLSearchParams({ festival_id: String(festivalId) });
+    if (puestoId) query.set('puesto_id', String(puestoId));
+    const res = await fetch(`${API_URL}/gestor/promociones?${query.toString()}`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar promociones del gestor'));
+    const data = await res.json().catch(() => []);
+    return Array.isArray(data) ? data : [];
+};
+
 export const getPromociones = async (puestoId?: number) => {
     const query = puestoId ? `?puesto_id=${puestoId}` : '';
     const res = await fetch(`${API_URL}/admin/promociones${query}`, { headers: headers() });
@@ -647,6 +711,35 @@ export const eliminarPromocion = async (id: number) => {
 // ==================== ADMIN DASHBOARD (queuefest_dw — puerto 3001) ====================
 // Todos los endpoints de esta sección apuntan al servidor de Data Warehouse (index-adminDashboard.js)
 // que corre en http://localhost:3001 y conecta con la base de datos queuefest_dw.
+
+export const crearPromocionGestor = async (data: PromotionMutationPayload) => {
+    const res = await fetch(`${API_URL}/gestor/promociones`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al crear promocion'));
+    return res.json();
+};
+
+export const actualizarPromocionGestor = async (id: number, data: Partial<PromotionMutationPayload>) => {
+    const res = await fetch(`${API_URL}/gestor/promociones/${id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al actualizar promocion'));
+    return res.json();
+};
+
+export const eliminarPromocionGestor = async (id: number) => {
+    const res = await fetch(`${API_URL}/gestor/promociones/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al eliminar promocion'));
+    return res.json();
+};
 
 const DW_URL = 'http://localhost:3001/api';
 

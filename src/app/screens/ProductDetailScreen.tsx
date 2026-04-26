@@ -6,9 +6,10 @@ import { useCart } from '../context/CartContext';
 import { useLanguage } from '../context/LanguageContext';
 import { BottomNav } from '../components/BottomNav';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
-import { getProductos, getPuesto, buildImageUrl } from '../api';
+import { getProductos, getPuesto, buildImageUrl, getPuestoPromociones } from '../api';
 import { formatPrice } from '../utils/formatPrice';
 import { getProductImage, isProductFavorite, toggleFavoriteProduct } from '../utils/productHelpers';
+import { getBestPromotionForProduct } from '../utils/promotions';
 
 interface ProductDetail {
   id: string;
@@ -29,6 +30,7 @@ export function ProductDetailScreen() {
   const { addItem } = useCart();
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [vendor, setVendor] = useState<any | null>(null);
+  const [activePromotion, setActivePromotion] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(() => isProductFavorite(String(id || '')));
 
@@ -48,12 +50,14 @@ export function ProductDetailScreen() {
       }
 
       try {
-        const [puesto, productos] = await Promise.all([
+        const [puesto, productos, promociones] = await Promise.all([
           getPuesto(Number(vendorId)),
-          getProductos(Number(vendorId))
+          getProductos(Number(vendorId)),
+          getPuestoPromociones(Number(vendorId))
         ]);
 
         setVendor(puesto);
+        const promotionsData = Array.isArray(promociones) ? promociones : [];
 
         if (Array.isArray(productos)) {
           const foundProduct = productos.find((item: any) => String(item.id) === String(id));
@@ -69,16 +73,20 @@ export function ProductDetailScreen() {
               stock: Number(foundProduct.stock ?? 0),
               activo: foundProduct.activo ?? 1
             });
+            setActivePromotion(getBestPromotionForProduct(promotionsData, foundProduct.id));
           } else {
             setProduct(null);
+            setActivePromotion(null);
           }
         } else {
           setProduct(null);
+          setActivePromotion(null);
         }
       } catch (error) {
         console.error('Error cargando detalle de producto:', error);
         setProduct(null);
         setVendor(null);
+        setActivePromotion(null);
       } finally {
         setLoading(false);
       }
@@ -87,7 +95,8 @@ export function ProductDetailScreen() {
     load();
   }, [id, vendorId]);
 
-  const displayPrice = product ? (product.precio_dinamico > 0 ? product.precio_dinamico : product.precio) : 0;
+  const standardDisplayPrice = product ? (product.precio_dinamico > 0 ? product.precio_dinamico : product.precio) : 0;
+  const displayPrice = activePromotion?.price ?? standardDisplayPrice;
   const productImage = useMemo(
     () => buildImageUrl(product?.foto_url),
     [product?.foto_url]
@@ -101,7 +110,7 @@ export function ProductDetailScreen() {
       id: product.id,
       name: product.nombre,
       description: product.descripcion,
-      price: displayPrice,
+      price: standardDisplayPrice,
       image: productImage,
       vendorId: String(vendor.id),
       vendorName: vendor.nombre || 'Puesto',
@@ -115,23 +124,40 @@ export function ProductDetailScreen() {
   const handleAddToCart = () => {
     if (!product || !vendor) return;
 
-    const result = addItem({
-      id: product.id,
-      name: product.nombre,
-      description: product.descripcion,
-      price: displayPrice,
-      quantity: 1,
-      vendorId: String(vendor.id),
-      vendorName: vendor.nombre || 'Puesto',
-      vendorType
-    });
+    const result = activePromotion
+      ? addItem({
+          id: activePromotion.id,
+          productId: activePromotion.productId,
+          promotionId: activePromotion.promotionId,
+          promotionType: activePromotion.promotionType,
+          promotionLabel: activePromotion.discount,
+          unitsPerPromotion: activePromotion.unitsPerPromotion,
+          name: activePromotion.title,
+          description: activePromotion.description,
+          price: activePromotion.price,
+          quantity: 1,
+          vendorId: String(vendor.id),
+          vendorName: vendor.nombre || 'Puesto',
+          vendorType
+        })
+      : addItem({
+          id: product.id,
+          productId: product.id,
+          name: product.nombre,
+          description: product.descripcion,
+          price: displayPrice,
+          quantity: 1,
+          vendorId: String(vendor.id),
+          vendorName: vendor.nombre || 'Puesto',
+          vendorType
+        });
 
     if (!result.ok) {
       toast.error('Solo puedes pedir de un puesto cada vez');
       return;
     }
 
-    toast.success(`${product.nombre} - anadido al carrito`);
+    toast.success(`${activePromotion?.title || product.nombre} - anadido al carrito`);
   };
 
   if (loading) {
@@ -187,6 +213,11 @@ export function ProductDetailScreen() {
         <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">Detalle del producto</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight">{product.nombre}</h1>
+          {activePromotion?.discount && (
+            <p className="mt-3 inline-flex rounded-full bg-green-500 px-3 py-1 text-xs font-bold text-white shadow-sm">
+              {activePromotion.discount}
+            </p>
+          )}
           <p className="mt-3 inline-flex rounded-full bg-white/15 px-4 py-2 text-lg font-bold backdrop-blur-sm">
             {formatPrice(displayPrice)}
           </p>
@@ -204,10 +235,25 @@ export function ProductDetailScreen() {
               <p className="mt-2 text-lg font-bold text-gray-900">{formatPrice(product.precio)}</p>
             </div>
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Precio actual</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{activePromotion ? 'Precio promocional' : 'Precio actual'}</p>
               <p className="mt-2 text-lg font-bold text-orange-600">{formatPrice(displayPrice)}</p>
             </div>
           </div>
+
+          {activePromotion && (
+            <div className="mt-5 rounded-2xl border border-green-100 bg-green-50 p-4">
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-green-600 px-2 py-1 text-[10px] font-bold text-white">
+                  {activePromotion.discount}
+                </span>
+                <p className="text-sm font-semibold text-green-800">{activePromotion.title}</p>
+              </div>
+              <p className="mt-2 text-sm text-green-700">{activePromotion.description}</p>
+              {activePromotion.priceCaption && (
+                <p className="mt-1 text-xs text-green-700">{activePromotion.priceCaption}</p>
+              )}
+            </div>
+          )}
 
           <button
             onClick={handleAddToCart}
@@ -223,7 +269,7 @@ export function ProductDetailScreen() {
             ) : (
               <>
                 <Plus className="h-4 w-4" />
-                Anadir al carrito
+                {activePromotion ? 'Anadir promocion' : 'Anadir al carrito'}
               </>
             )}
           </button>

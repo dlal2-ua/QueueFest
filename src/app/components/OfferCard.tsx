@@ -10,10 +10,11 @@ interface OfferCardProps {
   discount?: string;
   originalPrice?: number;
   price: number;
+  priceCaption?: string;
   onAdd: () => AddItemResult;
 }
 
-export function OfferCard({ title, description, discount, originalPrice, price, onAdd }: OfferCardProps) {
+export function OfferCard({ title, description, discount, originalPrice, price, priceCaption, onAdd }: OfferCardProps) {
   const { t } = useLanguage();
 
   const handleAdd = () => {
@@ -48,7 +49,12 @@ export function OfferCard({ title, description, discount, originalPrice, price, 
           {originalPrice && (
             <span className="text-sm text-gray-500 line-through">{formatPrice(originalPrice)}</span>
           )}
-          <span className="text-lg font-bold text-green-700">{formatPrice(price)}</span>
+          <div>
+            <span className="text-lg font-bold text-green-700">{formatPrice(price)}</span>
+            {priceCaption && (
+              <p className="text-xs text-gray-500">{priceCaption}</p>
+            )}
+          </div>
         </div>
         <button
           onClick={handleAdd}

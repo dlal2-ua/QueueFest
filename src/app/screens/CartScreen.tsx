@@ -3,11 +3,12 @@ import { Trash2, ChevronLeft, ArrowUp } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { QuantitySelector } from '../components/QuantitySelector';
 import { CouponInput } from '../components/CouponInput';
-import { useCart } from '../context/CartContext';
+import { getCartItemApplications, getCartItemDisplayQuantity, getCartItemLineTotal, getCartItemStep, useCart } from '../context/CartContext';
 import { formatPrice } from '../utils/formatPrice';
 import { useLanguage } from '../context/LanguageContext';
 import { getPuestoEstado } from '../api';
 import { useEffect, useState } from 'react';
+import { getPromotionBundle } from '../utils/promotions';
 
 export function CartScreen() {
   const navigate = useNavigate();
@@ -46,7 +47,7 @@ export function CartScreen() {
     return acc;
   }, {} as Record<string, { vendorName: string; vendorType: string; items: typeof items }>);
 
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + getCartItemLineTotal(item), 0);
   const total = getTotal();
 
   const handleCheckout = () => {
@@ -132,30 +133,47 @@ export function CartScreen() {
                   </div>
                 </div>
                 <div className="space-y-4">
-                  {vendor.items.map((item) => (
-                    <div key={item.id} className="flex gap-3 pb-4 border-b border-gray-100 last:border-b-0">
-                      <div className="flex-1">
-                        <h4 className="font-medium mb-1">{item.name}</h4>
-                        {item.description && (
-                          <p className="text-sm text-gray-600 mb-2">{item.description}</p>
-                        )}
-                        <p className="font-semibold">{formatPrice(item.price * item.quantity)}</p>
+                  {vendor.items.map((item) => {
+                    const quantity = getCartItemDisplayQuantity(item);
+                    const applications = getCartItemApplications(item);
+                    const step = getCartItemStep(item);
+                    const bundle = getPromotionBundle(item.promotionType);
+                    const paidUnits = applications * bundle.paidUnitsPerPromotion;
+
+                    return (
+                      <div key={item.id} className="flex gap-3 pb-4 border-b border-gray-100 last:border-b-0">
+                        <div className="flex-1">
+                          <h4 className="font-medium mb-1">{item.name}</h4>
+                          {item.promotionLabel && (
+                            <p className="text-xs font-semibold text-green-700 mb-1">{item.promotionLabel}</p>
+                          )}
+                          {item.description && (
+                            <p className="text-sm text-gray-600 mb-2">{item.description}</p>
+                          )}
+                          {step > 1 && (
+                            <p className="text-xs text-gray-500 mb-2">
+                              Llevas {quantity} unidades y pagas {paidUnits}.
+                            </p>
+                          )}
+                          <p className="font-semibold">{formatPrice(getCartItemLineTotal(item))}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <button
+                            onClick={() => removeItem(item.id, item.vendorId)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                          <QuantitySelector
+                            quantity={quantity}
+                            min={step}
+                            onIncrease={() => updateQuantity(item.id, quantity + step, item.vendorId)}
+                            onDecrease={() => updateQuantity(item.id, quantity - step, item.vendorId)}
+                          />
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <button
-                          onClick={() => removeItem(item.id, item.vendorId)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                        <QuantitySelector
-                          quantity={item.quantity}
-                          onIncrease={() => updateQuantity(item.id, item.quantity + 1, item.vendorId)}
-                          onDecrease={() => updateQuantity(item.id, item.quantity - 1, item.vendorId)}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}

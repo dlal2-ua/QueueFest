@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getEstadisticas } from '../../api';
-import { Zap, Hand, ChevronLeft, Store, Euro, Map, ShoppingBag, Clock, LogOut } from 'lucide-react';
+import { Zap, Hand, ChevronLeft, Store, Euro, Map, ShoppingBag, Clock, LogOut, Tag } from 'lucide-react';
 import { formatWait } from '../../utils/formatTime';
 
 interface Props {
@@ -174,6 +174,29 @@ export function MainPanelView({ festivalId, festivalNombre, modoAuto, onToggleMo
           </button>
 
           {/* 3 — Fila de 2 métricas */}
+          <button
+            onClick={() => navigate('promotions')}
+            style={{
+              width: '100%',
+              backgroundColor: '#FFF3E4',
+              color: '#A67C52',
+              fontWeight: 800,
+              fontSize: 14,
+              borderRadius: 18,
+              padding: '14px 18px',
+              border: '1px solid #E8D5C0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              cursor: 'pointer',
+              boxShadow: '0 4px 14px rgba(166,124,82,0.10)',
+            }}
+          >
+            <Tag style={{ width: 18, height: 18 }} />
+            Gestionar promociones
+          </button>
+
           <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {metricas.slice(0, 2).map(({ icon: Icon, valor, label, color }) => (
               <div

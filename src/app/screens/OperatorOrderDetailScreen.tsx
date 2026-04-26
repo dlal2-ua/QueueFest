@@ -145,9 +145,9 @@ export function OperatorOrderDetailScreen({ readOnly = false }: Props) {
                         </div>
                         {pedido.items?.map((it: any, idx: number) => (
                             <div key={idx} className="grid grid-cols-3 px-3 py-2 text-xs border-t" style={{ borderColor: '#E8D5C0', color: '#2C1810' }}>
-                                <span>{it.producto_nombre}</span>
+                                <span>{it.item_nombre || it.promocion_titulo || it.producto_nombre}</span>
                                 <span className="text-center">{it.cantidad}</span>
-                                <span className="text-right">{formatPrice(Number(it.precio_unitario) * Number(it.cantidad))}</span>
+                                <span className="text-right">{formatPrice(Number(it.importe_total ?? (Number(it.precio_unitario) * Number(it.cantidad))))}</span>
                             </div>
                         ))}
                     </div>
