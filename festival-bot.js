@@ -1,14 +1,12 @@
 #!/usr/bin/env node
-/**
- * festival-bot.js — Bot comprador para QueueFest
- *
+/*
  * Uso:
  *   node festival-bot.js --festival 1
  *   node festival-bot.js --festival 2 --speed fast --verbose
  *
  * Parámetros:
- *   --festival  <id>   ID del festival (obligatorio)
- *   --speed     <mode> slow | normal | fast  (default: normal)
+ *   --festival  <id>   ID del festival
+ *   --speed    <mode> slow | normal | fast  (default: normal) velocidad de compra
  *   --verbose          Log detallado de cada acción
  *   --dry-run          Solo leer datos, no escribir nada
  *
