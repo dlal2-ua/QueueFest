@@ -39,6 +39,7 @@ interface DecisionCardProps {
   onAprobar: (id: number) => void;
   onRechazar: (id: number) => void;
   loading?: boolean;
+  ocultarAcciones?: boolean;
 }
 
 const TIPO_CONFIG: Record<DecisionTipo, {
@@ -84,7 +85,7 @@ function formatRelative(dateStr: string, minutesFromServer?: number): string {
   return new Date(dateStr).toLocaleDateString('es-ES');
 }
 
-export function DecisionCard({ decision, modoAuto, onAprobar, onRechazar, loading }: DecisionCardProps) {
+export function DecisionCard({ decision, modoAuto, onAprobar, onRechazar, loading, ocultarAcciones }: DecisionCardProps) {
   const config = TIPO_CONFIG[decision.tipo] ?? TIPO_CONFIG.reposicion_stock;
   const badge  = ESTADO_BADGE[decision.estado];
   const Icon   = config.icon;
@@ -175,8 +176,8 @@ export function DecisionCard({ decision, modoAuto, onAprobar, onRechazar, loadin
         </div>
       </div>
 
-      {/* Botones — solo en modo manual y si está pendiente */}
-      {esPendiente && !modoAuto && (
+      {/* Botones — solo en modo manual, pendiente, y sin override de par A/B */}
+      {esPendiente && !modoAuto && !ocultarAcciones && (
         <div className="flex gap-2 mt-3">
           <button
             id={`decision-aprobar-${decision.id}`}

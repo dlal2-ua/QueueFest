@@ -6,7 +6,6 @@
 3. [Reglas automáticas](#reglas)
 4. [Test A/B](#test-ab)
 5. [Integración con Promociones](#promociones)
-6. [Guía de población de datos](#poblacion)
 
 ---
 
