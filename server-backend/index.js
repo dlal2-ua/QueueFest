@@ -3358,7 +3358,7 @@ async function insertarSiNoPendiente(festival_id, tipo, descripcion, puesto_id =
      WHERE festival_id = ? AND tipo = ?
        AND (puesto_id = ? OR (puesto_id IS NULL AND ? IS NULL))
        AND (producto_id = ? OR (producto_id IS NULL AND ? IS NULL))
-       AND creado_en >= (NOW() - INTERVAL 15 MINUTE)
+       AND (estado = 'pendiente' OR creado_en >= (NOW() - INTERVAL 15 MINUTE))
      LIMIT 1`,
     [festival_id, tipo, puesto_id, puesto_id, producto_id, producto_id]
   );
@@ -3381,7 +3381,7 @@ async function insertarParAB(festival_id, puesto_id, productosLentos, pctBajada)
   const [recent] = await db.query(
     `SELECT id FROM decisiones_automaticas
      WHERE festival_id = ? AND tipo = 'descuento_producto' AND puesto_id = ?
-       AND creado_en >= (NOW() - INTERVAL 15 MINUTE)
+       AND (estado = 'pendiente' OR creado_en >= (NOW() - INTERVAL 15 MINUTE))
      LIMIT 1`,
     [festival_id, puesto_id]
   );
@@ -3471,6 +3471,20 @@ async function generarDecisiones(festival_id) {
           await insertarParAB(festival_id, puesto.id, lentos, porcentaje_bajada);
         }
       }
+    }
+
+    // Regla 4: activar_promocion — promociones inactivas en el puesto
+    const [promosInactivas] = await db.query(
+      `SELECT id, titulo, producto_id FROM promociones
+       WHERE puesto_id = ? AND (activa = 0 OR activa IS NULL)`,
+      [puesto.id]
+    );
+    for (const promo of promosInactivas) {
+      await insertarSiNoPendiente(
+        festival_id, 'activar_promocion',
+        `Promoción inactiva en "${puesto.nombre}": "${promo.titulo}". Activar para que los clientes puedan verla.`,
+        puesto.id, promo.producto_id ?? null
+      );
     }
 
     // Regla 5: reposicion_stock — materia prima bajo mínimo en el puesto
@@ -3700,10 +3714,10 @@ app.get('/api/gestor/decisiones', auth, async (req, res) => {
     );
     const modoAuto = configRows.length > 0 ? Boolean(configRows[0].modo_auto) : true;
 
-    // 3. Modo automático: ejecutar todas las pendientes
+    // 3. Modo automático: ejecutar todas las pendientes excepto reposicion_stock (requiere acción manual)
     if (modoAuto) {
       const [pendientes] = await db.query(
-        `SELECT * FROM decisiones_automaticas WHERE festival_id = ? AND estado = 'pendiente'`,
+        `SELECT * FROM decisiones_automaticas WHERE festival_id = ? AND estado = 'pendiente' AND tipo != 'reposicion_stock'`,
         [festival_id]
       );
       for (const d of pendientes) {
@@ -3772,6 +3786,35 @@ app.post('/api/gestor/decisiones/:id/rechazar', auth, async (req, res) => {
       `UPDATE decisiones_automaticas SET estado = 'rechazada' WHERE id = ?`, [req.params.id]
     );
     res.json({ message: 'Decisión rechazada' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/operador/stock/:puestoId/reposiciones-aprobadas
+app.get('/api/operador/stock/:puestoId/reposiciones-aprobadas', auth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id, descripcion, creado_en
+       FROM decisiones_automaticas
+       WHERE puesto_id = ? AND tipo = 'reposicion_stock' AND estado = 'aprobada'
+       ORDER BY creado_en DESC`,
+      [req.params.puestoId]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/operador/decisiones/:id/ejecutar — operador confirma que repuso el stock
+app.post('/api/operador/decisiones/:id/ejecutar', auth, async (req, res) => {
+  try {
+    await db.query(
+      `UPDATE decisiones_automaticas SET estado = 'ejecutada' WHERE id = ? AND tipo = 'reposicion_stock' AND estado = 'aprobada'`,
+      [req.params.id]
+    );
+    res.json({ message: 'Reposición confirmada' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
