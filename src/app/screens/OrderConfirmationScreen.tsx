@@ -1,14 +1,16 @@
 import { useNavigate } from '../utils/navigation';
-import { CheckCircle, Clock, Loader2, Coins } from 'lucide-react';
+import { CheckCircle, Clock, Loader2, Coins, Star } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { PickupQR } from '../components/PickupQR';
 import { getPaymentSession } from '../api';
-import { applyRoyaltyReward, calculateRoyaltiesForPurchase } from '../data/profileData';
+import { calculateRoyaltiesForPurchase } from '../data/profileData';
+import { useLanguage } from '../context/LanguageContext';
 
 export function OrderConfirmationScreen() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const { clearCart, items, getTotal } = useCart();
   const [orderTotal] = useState(() => getTotal());
   const [vendorName] = useState(() => items[0]?.vendorName || 'QueueFest');
@@ -67,16 +69,6 @@ export function OrderConfirmationScreen() {
     };
   }, [clearCart, directOrder, provider, sessionId]);
 
-  useEffect(() => {
-    if (!orderNumber || orderTotal <= 0) return;
-
-    applyRoyaltyReward({
-      orderNumber,
-      total: orderTotal,
-      vendorName
-    });
-  }, [orderNumber, orderTotal, vendorName]);
-
   const handleContinue = () => {
     navigate('/home');
   };
@@ -84,6 +76,12 @@ export function OrderConfirmationScreen() {
   const handleTrackOrder = () => {
     if (orderNumber) {
       navigate(`/track-order/${orderNumber}`);
+    }
+  };
+
+  const handleReviewOrder = () => {
+    if (orderNumber) {
+      navigate(`/reviews/new?pedidoId=${orderNumber}`);
     }
   };
 
@@ -151,8 +149,8 @@ export function OrderConfirmationScreen() {
             <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-xl mb-6 text-left">
               <Coins className="w-6 h-6 text-amber-600" />
               <div>
-                <p className="font-medium text-amber-900">Has ganado +{royaltiesEarned} royalties</p>
-                <p className="text-sm text-amber-800">Los hemos sumado a tu perfil para que sigas progresando dentro del programa.</p>
+                <p className="font-medium text-amber-900">{t('loyalty.confirmEarned').replace('{points}', String(royaltiesEarned))}</p>
+                <p className="text-sm text-amber-800">{t('loyalty.confirmEarnedDesc')}</p>
               </div>
             </div>
           )}
@@ -168,6 +166,13 @@ export function OrderConfirmationScreen() {
               className="w-full bg-black text-white rounded-full py-3 font-medium hover:bg-gray-800 transition-colors"
             >
               Track Order
+            </button>
+            <button
+              onClick={handleReviewOrder}
+              className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-amber-300 bg-amber-50 py-3 font-medium text-amber-800 transition-colors hover:bg-amber-100"
+            >
+              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+              {t('reviews.orderConfirmationCta')}
             </button>
             <button
               onClick={handleContinue}

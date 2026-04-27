@@ -21,6 +21,7 @@ import { SplashScreen } from './screens/SplashScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
+import { WelcomeBonusScreen } from './screens/WelcomeBonusScreen';
 
 // Pantallas para usuarios finales
 import { HomeScreen } from './screens/HomeScreen';
@@ -33,6 +34,8 @@ import { CartScreen } from './screens/CartScreen';
 import { PaymentScreen } from './screens/PaymentScreen';
 import { ProductDetailScreen } from './screens/ProductDetailScreen';
 import { OrderConfirmationScreen } from './screens/OrderConfirmationScreen';
+import { ReviewFormScreen } from './screens/ReviewFormScreen';
+import { ReviewsScreen } from './screens/ReviewsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { PersonalInfoScreen } from './screens/PersonalInfoScreen';
 import { PaymentMethodsScreen } from './screens/PaymentMethodsScreen';
@@ -139,15 +142,19 @@ function AppRoutes() {
       {path.startsWith('/food-truck/') && !path.endsWith('/offers') && <FoodTruckDetailScreen />}
       {path.startsWith('/bar/') && path.endsWith('/offers') && <BarOffersScreen />}
       {path.startsWith('/bar/') && !path.endsWith('/offers') && <BarDetailScreen />}
+      {path.startsWith('/reviews/new') && <ReviewFormScreen />}
+      {path === '/reviews' && <ReviewsScreen />}
       {path.startsWith('/product/') && <ProductDetailScreen />}
       {path === '/offers' && <OffersScreen />}
       {path === '/cart' && <CartScreen />}
       {path === '/payment' && <PaymentScreen />}
       {path === '/confirmation' && <OrderConfirmationScreen />}
+      {path === '/welcome-bonus' && <WelcomeBonusScreen />}
       {path === '/profile/info' && <PersonalInfoScreen />}
       {path === '/profile/royalties' && <RoyaltiesScreen />}
       {path === '/profile/payments' && <PaymentMethodsScreen />}
       {path === '/profile/orders' && <OrderHistoryScreen />}
+      {path === '/profile/reviews' && <ReviewsScreen />}
       {path === '/profile/notifications' && <ProfileNotificationsScreen />}
       {path === '/profile/favorites' && <FavoritesScreen />}
       {path === '/profile/support' && <HelpSupportScreen />}
@@ -156,6 +163,7 @@ function AppRoutes() {
       {path.startsWith('/profile') && !path.includes('/profile/') && <ProfileScreen />}
       {!path.startsWith('/festival-select') && !path.startsWith('/selection') && !path.startsWith('/home')
         && !path.startsWith('/food-truck/') && !path.startsWith('/bar/') && !path.startsWith('/product/')
+        && !path.startsWith('/reviews')
         && path !== '/offers' && path !== '/cart' && path !== '/payment' && path !== '/confirmation'
         && !path.startsWith('/profile') && !path.startsWith('/track-order/') && <SelectionScreen />}
     </PhoneFrameShell>

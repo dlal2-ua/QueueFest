@@ -6,9 +6,11 @@ import { useCart } from '../context/CartContext';
 import { getFestivalPromociones } from '../api';
 import { Loader2, Tag, Coins } from 'lucide-react';
 import { buildPromotionOffer } from '../utils/promotions';
+import { useLanguage } from '../context/LanguageContext';
 
 export function OffersScreen() {
   const { addItem } = useCart();
+  const { t } = useLanguage();
 
   const [allOffers, setAllOffers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,13 +115,13 @@ export function OffersScreen() {
     <div className="min-h-screen bg-gray-50 pb-24">
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="p-4">
-          <h1 className="text-2xl font-bold">Ofertas y Royalties</h1>
+          <h1 className="text-2xl font-bold">{t('loyalty.offersTitle')}</h1>
           <p className="text-gray-500 text-sm">
             {selectedTab === 'offers'
               ? festival?.nombre
                 ? `${festival.nombre} - Promociones y combos del momento`
                 : 'Promociones y combos del momento'
-              : 'Consulta tu saldo, tu QR y la actividad de loyalty'}
+              : t('loyalty.offersSubtitle')}
           </p>
         </div>
 
@@ -131,7 +133,7 @@ export function OffersScreen() {
                 selectedTab === 'offers' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
               }`}
             >
-              Ofertas
+              {t('nav.offers')}
             </button>
             <button
               onClick={() => setSelectedTab('royalties')}
@@ -139,7 +141,7 @@ export function OffersScreen() {
                 selectedTab === 'royalties' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
               }`}
             >
-              Royalties
+              {t('loyalty.title')}
             </button>
           </div>
         </div>
@@ -152,7 +154,7 @@ export function OffersScreen() {
           <>
             <div className="flex items-center gap-2 px-1 text-sm text-gray-500">
               <Coins className="w-4 h-4 text-amber-500" />
-              <span>Este QR sirve para identificar al usuario en compras presenciales.</span>
+              <span>{t('loyalty.offersQrHint')}</span>
             </div>
             <RoyaltiesPanel />
           </>

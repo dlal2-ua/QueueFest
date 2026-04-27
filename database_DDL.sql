@@ -24,6 +24,10 @@ CREATE TABLE `parametros` (
   `porcentaje_bajada` decimal(5,2) NOT NULL DEFAULT '10.00',
   `pricing_dinamico_activo` tinyint(1) NOT NULL DEFAULT '1',
   `promociones_activas` tinyint(1) NOT NULL DEFAULT '1',
+  `stock_minimo` int NOT NULL DEFAULT '10',
+  `loyalty_vip_threshold` int NOT NULL DEFAULT '10000',
+  `loyalty_headliner_threshold` int NOT NULL DEFAULT '25000',
+  `loyalty_backstage_threshold` int NOT NULL DEFAULT '50000',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

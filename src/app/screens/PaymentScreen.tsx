@@ -6,11 +6,13 @@ import { formatPrice } from '../utils/formatPrice';
 import { createPayment, getPaymentConfig, getPuestoEstado } from '../api';
 import { toast } from 'sonner';
 import { calculateRoyaltiesForPurchase } from '../data/profileData';
+import { useLanguage } from '../context/LanguageContext';
 
 type PaymentMethod = 'mock' | 'stripe';
 
 export function PaymentScreen() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const { getTotal, items } = useCart();
   const orderTotal = getTotal();
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('mock');
@@ -213,8 +215,8 @@ export function PaymentScreen() {
           <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
             <Coins className="w-5 h-5 mt-0.5" />
             <div>
-              <p className="font-semibold">Esta compra te dara +{estimatedRoyalties} royalties</p>
-              <p className="text-sm text-amber-800 mt-1">Regla base actual: 1 royalty por euro gastado y bonus de 5 por pedido confirmado.</p>
+              <p className="font-semibold">{t('loyalty.paymentEarn').replace('{points}', String(estimatedRoyalties))}</p>
+              <p className="text-sm text-amber-800 mt-1">{t('loyalty.paymentRule')}</p>
             </div>
           </div>
         </div>
@@ -228,7 +230,7 @@ export function PaymentScreen() {
               <p className="text-2xl font-black text-gray-900">{formatPrice(orderTotal)}</p>
             </div>
             <div className="rounded-full bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-              +{estimatedRoyalties} royalties
+              {t('loyalty.pointsEarned').replace('{points}', String(estimatedRoyalties))}
             </div>
           </div>
           <button
