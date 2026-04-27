@@ -2216,6 +2216,191 @@ app.get('/api/operador/stock/:puestoId', auth, async (req, res) => {
   }
 });
 
+// Operador: reabastecer una materia prima de su puesto
+app.post('/api/operador/stock/:puestoId/reabastecer', auth, async (req, res) => {
+  try {
+    const puestoId = Number(req.params.puestoId);
+    const { materia_prima_id, cantidad } = req.body;
+
+    if (!materia_prima_id || cantidad === undefined || cantidad === null) {
+      return res.status(400).json({ error: 'materia_prima_id y cantidad son obligatorios' });
+    }
+    const cantidadNum = Number(cantidad);
+    if (isNaN(cantidadNum) || cantidadNum < 0) {
+      return res.status(400).json({ error: 'cantidad debe ser un número positivo' });
+    }
+
+    // Verificar que el operador pertenece a este puesto (o es gestor/admin)
+    if (req.user.rol === 'operador') {
+      const [ops] = await db.query(
+        'SELECT id FROM puesto_operadores WHERE puesto_id = ? AND usuario_id = ?',
+        [puestoId, req.user.id]
+      );
+      if (ops.length === 0) {
+        return res.status(403).json({ error: 'No tienes permiso para reabastecer este puesto' });
+      }
+    }
+
+    // Leer stock actual y máximo
+    const [stockRows] = await db.query(
+      'SELECT stock_actual, stock_maximo FROM stock_puesto WHERE puesto_id = ? AND materia_prima_id = ?',
+      [puestoId, materia_prima_id]
+    );
+    if (stockRows.length === 0) {
+      return res.status(404).json({ error: 'Materia prima no encontrada en este puesto' });
+    }
+
+    const { stock_actual, stock_maximo } = stockRows[0];
+    const nuevoStock = Math.min(Number(stock_actual) + cantidadNum, Number(stock_maximo));
+
+    await db.query(
+      'UPDATE stock_puesto SET stock_actual = ?, actualizado_en = NOW() WHERE puesto_id = ? AND materia_prima_id = ?',
+      [nuevoStock, puestoId, materia_prima_id]
+    );
+
+    res.json({
+      success: true,
+      materia_prima_id: Number(materia_prima_id),
+      stock_anterior: Number(stock_actual),
+      cantidad_añadida: cantidadNum,
+      stock_nuevo: nuevoStock,
+      stock_maximo: Number(stock_maximo)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Operador: predicción de consumo para las próximas 5 horas
+// Basada en los pedidos históricos de los últimos 7 días, agrupados por hora del día
+app.get('/api/operador/stock/:puestoId/prediccion-5h', auth, async (req, res) => {
+  try {
+    const puestoId = Number(req.params.puestoId);
+
+    // Verificar pertenencia al puesto
+    if (req.user.rol === 'operador') {
+      const [ops] = await db.query(
+        'SELECT id FROM puesto_operadores WHERE puesto_id = ? AND usuario_id = ?',
+        [puestoId, req.user.id]
+      );
+      if (ops.length === 0) {
+        return res.status(403).json({ error: 'No tienes permiso' });
+      }
+    }
+
+    const horaActual = new Date().getHours();
+    // Próximas 5 horas (wrapping around midnight)
+    const horasObjetivo = Array.from({ length: 5 }, (_, i) => (horaActual + i) % 24);
+
+    // Consumo histórico por hora para cada materia prima (últimos 7 días)
+    const [consumoHorario] = await db.query(
+      `SELECT
+         pm.materia_prima_id,
+         mp.nombre,
+         mp.unidad_medida,
+         HOUR(p.creado_en)                              AS hora_dia,
+         SUM(pi.cantidad * pm.cantidad_por_unidad)      AS consumo_hora_total,
+         COUNT(DISTINCT DATE(p.creado_en))              AS dias_con_datos
+       FROM pedidos p
+       JOIN pedido_items pi              ON pi.pedido_id  = p.id
+       JOIN producto_materias_primas pm  ON pm.producto_id = pi.producto_id
+       JOIN materias_primas mp           ON mp.id = pm.materia_prima_id
+       WHERE p.puesto_id = ?
+         AND p.estado NOT IN ('cancelado')
+         AND p.creado_en >= NOW() - INTERVAL 7 DAY
+       GROUP BY pm.materia_prima_id, mp.nombre, mp.unidad_medida, HOUR(p.creado_en)
+       ORDER BY pm.materia_prima_id, hora_dia`,
+      [puestoId]
+    );
+
+    // Stock actual de cada MP
+    const [stockRows] = await db.query(
+      `SELECT sp.materia_prima_id, mp.nombre, mp.unidad_medida,
+              CAST(sp.stock_actual AS FLOAT) AS stock_actual,
+              CAST(sp.stock_minimo AS FLOAT) AS stock_minimo,
+              CAST(sp.stock_maximo AS FLOAT) AS stock_maximo
+       FROM stock_puesto sp
+       JOIN materias_primas mp ON mp.id = sp.materia_prima_id
+       WHERE sp.puesto_id = ?`,
+      [puestoId]
+    );
+
+    // Construir mapa de consumo medio por hora por MP
+    const consumoMap = {};
+    for (const row of consumoHorario) {
+      const id = row.materia_prima_id;
+      if (!consumoMap[id]) consumoMap[id] = {};
+      const diasConDatos = Math.max(Number(row.dias_con_datos), 1);
+      consumoMap[id][row.hora_dia] = Number(row.consumo_hora_total) / diasConDatos;
+    }
+
+    // Para cada MP en stock, calcular predicción hora a hora
+    const predicciones = stockRows.map(stock => {
+      const id = stock.materia_prima_id;
+      const horasData = consumoMap[id] || {};
+
+      // Consumo promedio global (fallback si no hay dato para una hora concreta)
+      const allValues = Object.values(horasData);
+      const consumoMedioHora = allValues.length > 0
+        ? allValues.reduce((a, b) => a + b, 0) / 24
+        : 0;
+
+      let stockSimulado = Number(stock.stock_actual);
+      const horas = horasObjetivo.map((hora, idx) => {
+        const consumo = horasData[hora] ?? consumoMedioHora;
+        const consumoRedondeado = Math.round(consumo * 1000) / 1000;
+        // El stock simulado al inicio de esta hora
+        const stockInicioHora = stockSimulado;
+        stockSimulado = Math.max(stockSimulado - consumo, 0);
+        return {
+          hora,
+          offset_horas: idx,
+          consumo_previsto: consumoRedondeado,
+          stock_tras_hora: Math.round(stockSimulado * 1000) / 1000,
+          riesgo: stockInicioHora <= stock.stock_minimo
+        };
+      });
+
+      const consumoTotal5h = horas.reduce((sum, h) => sum + h.consumo_previsto, 0);
+      const hayRiesgo = horas.some(h => h.riesgo) || (Number(stock.stock_actual) - consumoTotal5h) < Number(stock.stock_minimo);
+      const sin_datos = consumoMedioHora === 0 && Object.keys(horasData).length === 0;
+
+      return {
+        materia_prima_id: id,
+        nombre: stock.nombre,
+        unidad_medida: stock.unidad_medida,
+        stock_actual: Number(stock.stock_actual),
+        stock_minimo: Number(stock.stock_minimo),
+        stock_maximo: Number(stock.stock_maximo),
+        consumo_total_5h: Math.round(consumoTotal5h * 1000) / 1000,
+        hay_riesgo: hayRiesgo,
+        sin_datos,
+        horas
+      };
+    });
+
+    // Ordenar: riesgos primero, luego sin datos, luego el resto
+    predicciones.sort((a, b) => {
+      if (a.hay_riesgo && !b.hay_riesgo) return -1;
+      if (!a.hay_riesgo && b.hay_riesgo) return 1;
+      if (a.sin_datos && !b.sin_datos) return 1;
+      if (!a.sin_datos && b.sin_datos) return -1;
+      return a.nombre.localeCompare(b.nombre);
+    });
+
+    res.json({
+      puesto_id: puestoId,
+      hora_actual: horaActual,
+      horas_objetivo: horasObjetivo,
+      generado_en: new Date().toISOString(),
+      predicciones
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Operador: predicción de agotamiento de materias primas
 // Basada en el consumo real de los últimos 7 días y la concentración horaria de pedidos
 app.get('/api/operador/prediccion/:puestoId', auth, async (req, res) => {
@@ -3156,10 +3341,10 @@ async function getParametros() {
     const [rows] = await db.query('SELECT * FROM parametros LIMIT 1');
     const p = rows[0] || {};
     return {
-      umbral_cola:         Number(p.umbral_cola)         || 5,
+      umbral_cola: Number(p.umbral_cola) || 5,
       umbral_ventas_bajas: Number(p.umbral_ventas_bajas) || 3,
-      porcentaje_subida:   Number(p.porcentaje_subida)   || 10,
-      porcentaje_bajada:   Number(p.porcentaje_bajada)   || 10,
+      porcentaje_subida: Number(p.porcentaje_subida) || 10,
+      porcentaje_bajada: Number(p.porcentaje_bajada) || 10,
     };
   } catch {
     return { umbral_cola: 5, umbral_ventas_bajas: 3, porcentaje_subida: 10, porcentaje_bajada: 10 };
@@ -3181,8 +3366,8 @@ async function insertarSiNoPendiente(festival_id, tipo, descripcion, puesto_id =
 
   const cols = ['festival_id', 'puesto_id', 'tipo', 'descripcion'];
   const vals = [festival_id, puesto_id, tipo, descripcion];
-  if (producto_id  !== null)       { cols.push('producto_id');  vals.push(producto_id); }
-  if (extra.porcentaje !== undefined) { cols.push('porcentaje');  vals.push(extra.porcentaje); }
+  if (producto_id !== null) { cols.push('producto_id'); vals.push(producto_id); }
+  if (extra.porcentaje !== undefined) { cols.push('porcentaje'); vals.push(extra.porcentaje); }
   if (extra.ventas_antes !== undefined) { cols.push('ventas_antes'); vals.push(extra.ventas_antes); }
 
   await db.query(
@@ -3371,7 +3556,7 @@ async function ejecutarDecision(decision) {
           }
           const titulo = tipo === 'tres_por_dos' ? `3×2 en ${prod.nombre}`
             : tipo === 'dos_por_uno' ? `2×1 en ${prod.nombre}`
-            : `-${pct}% en ${prod.nombre}`;
+              : `-${pct}% en ${prod.nombre}`;
 
           const [existing] = await db.query(
             'SELECT id FROM promociones WHERE producto_id = ? AND activa = 1 LIMIT 1',
