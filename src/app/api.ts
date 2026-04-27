@@ -177,6 +177,23 @@ export const getPrediccion5h = async (puestoId: number) => {
     return res.json();
 };
 
+// Operador: reposiciones de stock aprobadas por gestor pendientes de confirmar
+export const getReposicionesAprobadas = async (puestoId: number) => {
+    const res = await fetch(`${API_URL}/operador/stock/${puestoId}/reposiciones-aprobadas`, { headers: headers() });
+    if (!res.ok) throw new Error('Error cargando reposiciones');
+    return res.json() as Promise<{ id: number; descripcion: string; creado_en: string }[]>;
+};
+
+// Operador: confirma que repuso el stock físicamente
+export const confirmarReposicion = async (decisionId: number) => {
+    const res = await fetch(`${API_URL}/operador/decisiones/${decisionId}/ejecutar`, {
+        method: 'POST',
+        headers: headers(),
+    });
+    if (!res.ok) throw new Error('Error confirmando reposición');
+    return res.json();
+};
+
 // Llama al botón pánico (pausar, reanudar o llamar camarero) (VEND-004)
 export const triggerPanico = async (puestoId: number, accion: string) => {
     const res = await fetch(`${API_URL}/puestos/${puestoId}/panico`, {

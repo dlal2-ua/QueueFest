@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { getStockPuesto, reabastecerMateriaPrima, getPrediccion5h } from '../api';
+import { getStockPuesto, reabastecerMateriaPrima, getPrediccion5h, getReposicionesAprobadas, confirmarReposicion } from '../api';
 import { useOperatorPuesto } from '../context/OperatorPuestoContext';
 import {
     RefreshCw, AlertTriangle, CheckCircle, AlertCircle,
-    Package, ChevronDown, ChevronUp, TrendingUp, X, Plus, Minus
+    Package, ChevronDown, ChevronUp, TrendingUp, X, Plus, Minus, Bell,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -493,6 +493,8 @@ function StockCard({ item, onRestock }: { item: StockItem; onRestock: (item: Sto
 
 // ─── OperatorStockScreen ──────────────────────────────────────────────────────
 
+type ReposicionAprobada = { id: number; descripcion: string; creado_en: string };
+
 export function OperatorStockScreen() {
     const { puestoId, puestoNombre } = useOperatorPuesto();
     const [stock, setStock] = useState<StockItem[]>([]);
@@ -500,6 +502,8 @@ export function OperatorStockScreen() {
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [restockItem, setRestockItem] = useState<StockItem | null>(null);
+    const [reposiciones, setReposiciones] = useState<ReposicionAprobada[]>([]);
+    const [restockDecisionId, setRestockDecisionId] = useState<number | null>(null);
 
     const cargarStock = useCallback(async () => {
         if (!puestoId) return;
@@ -515,13 +519,40 @@ export function OperatorStockScreen() {
         }
     }, [puestoId]);
 
+    const cargarReposiciones = useCallback(async () => {
+        if (!puestoId) return;
+        try {
+            const data = await getReposicionesAprobadas(puestoId);
+            setReposiciones(data);
+        } catch { /* silencioso */ }
+    }, [puestoId]);
+
     useEffect(() => {
         if (!puestoId) return;
         setLoading(true);
         cargarStock();
-        const interval = setInterval(cargarStock, 30000);
+        cargarReposiciones();
+        const interval = setInterval(() => { cargarStock(); cargarReposiciones(); }, 30000);
         return () => clearInterval(interval);
-    }, [puestoId, cargarStock]);
+    }, [puestoId, cargarStock, cargarReposiciones]);
+
+    const handleRestockFromDecision = (repo: ReposicionAprobada) => {
+        // Buscar el stock item cuyo nombre aparece en la descripción
+        const match = stock.find(s => repo.descripcion.includes(s.nombre));
+        if (match) {
+            setRestockDecisionId(repo.id);
+            setRestockItem(match);
+        }
+    };
+
+    const handleRestockSuccess = useCallback(async () => {
+        if (restockDecisionId) {
+            try { await confirmarReposicion(restockDecisionId); } catch { /* ignorar */ }
+            setRestockDecisionId(null);
+        }
+        cargarStock();
+        cargarReposiciones();
+    }, [restockDecisionId, cargarStock, cargarReposiciones]);
 
     const criticos = stock.filter(s => s.estado === 'critico').length;
     const bajos = stock.filter(s => s.estado === 'bajo').length;
@@ -592,6 +623,40 @@ export function OperatorStockScreen() {
                     </div>
                 ) : (
                     <>
+                        {/* Reposiciones aprobadas por gestor */}
+                        {reposiciones.length > 0 && (
+                            <div className="space-y-2">
+                                {reposiciones.map(repo => (
+                                    <div
+                                        key={repo.id}
+                                        className="rounded-2xl border p-3 flex items-start gap-3"
+                                        style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }}
+                                    >
+                                        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                                            style={{ backgroundColor: '#FEF3C7' }}>
+                                            <Bell className="w-4 h-4" style={{ color: '#D97706' }} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[11px] font-extrabold mb-0.5" style={{ color: '#92400E' }}>
+                                                Gestor aprobó reposición
+                                            </p>
+                                            <p className="text-[11px] leading-snug" style={{ color: '#78350F' }}>
+                                                {repo.descripcion}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleRestockFromDecision(repo)}
+                                            className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-white"
+                                            style={{ backgroundColor: '#D97706' }}
+                                        >
+                                            <Package className="w-3.5 h-3.5" />
+                                            Reabastecer
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         {/* Panel predicción 5h */}
                         {puestoId && <Prediction5hPanel puestoId={puestoId} />}
 
@@ -628,8 +693,8 @@ export function OperatorStockScreen() {
                 <RestockModal
                     item={restockItem}
                     puestoId={puestoId}
-                    onSuccess={cargarStock}
-                    onClose={() => setRestockItem(null)}
+                    onSuccess={handleRestockSuccess}
+                    onClose={() => { setRestockItem(null); setRestockDecisionId(null); }}
                 />
             )}
         </div>
