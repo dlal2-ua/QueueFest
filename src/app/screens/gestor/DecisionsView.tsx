@@ -175,7 +175,7 @@ export function DecisionsView({ festivalId, festivalNombre, modoAuto, onToggleMo
               : <Hand style={{ width: 20, height: 20, color: '#A67C52' }} />}
             <div>
               <p style={{ fontSize: 14, fontWeight: 700, color: '#2C1810', lineHeight: 1.2 }}>
-                Modo Automático
+                {modoAuto ? 'Modo Automático' : 'Modo Manual'}
               </p>
               <p style={{ fontSize: 11, color: '#8B6650', marginTop: 2 }}>
                 {modoAuto ? 'El sistema actúa solo' : 'Tú apruebas cada decisión'}
