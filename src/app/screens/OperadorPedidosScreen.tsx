@@ -5,17 +5,18 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getPedidosPuesto, getMisPuestosOperador } from '../api';
+import { getPedidosPuesto } from '../api';
 import { useNavigate } from '../utils/navigation';
 import { LogOut, RefreshCw } from 'lucide-react';
+import { useOperatorPuesto } from '../context/OperatorPuestoContext';
 
 export function OperadorScreen() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { puestoId } = useOperatorPuesto();
 
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [puestoId, setPuestoId] = useState<number | null>(null);
 
   const colorEstado: Record<string, { bg: string; text: string }> = {
     pendiente:  { bg: '#FEF3C7', text: '#92400E' },
@@ -27,20 +28,9 @@ export function OperadorScreen() {
   };
 
   const cargarDatos = async () => {
+    if (!puestoId) return;
     try {
-      let currentPuestoId = puestoId;
-      if (!currentPuestoId) {
-        const puestos = await getMisPuestosOperador();
-        if (!Array.isArray(puestos) || puestos.length === 0) {
-          setPedidos([]);
-          setLoading(false);
-          return;
-        }
-        currentPuestoId = Number(puestos[0].id);
-        setPuestoId(currentPuestoId);
-      }
-
-      const pedidosData = await getPedidosPuesto(currentPuestoId);
+      const pedidosData = await getPedidosPuesto(puestoId);
       setPedidos(Array.isArray(pedidosData) ? pedidosData : []);
     } catch (err) {
       console.error(err);
@@ -51,10 +41,12 @@ export function OperadorScreen() {
   };
 
   useEffect(() => {
+    if (!puestoId) return;
+    setLoading(true);
     cargarDatos();
     const interval = setInterval(cargarDatos, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [puestoId]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#FDF6EE' }}>

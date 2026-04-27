@@ -61,12 +61,6 @@ El gestor del festival dispone de un panel de decisiones automáticas. Cada vez 
 | `pricing_dinamico_activo` | TINYINT(1) | 1 | Reservado — no usado por el motor de decisiones aún |
 | `promociones_activas` | TINYINT(1) | 1 | Reservado — no usado por el motor de decisiones aún |
 
-**INSERT obligatorio:**
-```sql
-INSERT INTO parametros (id, umbral_cola, umbral_ventas_bajas, porcentaje_subida, porcentaje_bajada, pricing_dinamico_activo, promociones_activas)
-VALUES (1, 5, 3, 10.00, 10.00, 1, 1)
-ON DUPLICATE KEY UPDATE umbral_cola=VALUES(umbral_cola);
-```
 
 ---
 
@@ -105,14 +99,6 @@ ON DUPLICATE KEY UPDATE umbral_cola=VALUES(umbral_cola);
 | `premium` | Botellas caras, cócteles premium (precio alto) | `descuento_porcentaje` (-10%) |
 | `otro` | Sin categoría clara | `descuento_porcentaje` (-10%) |
 
-```sql
--- Ejemplo de categorización
-UPDATE productos SET categoria = 'bebida'  WHERE nombre IN ('Cerveza','Mojito','Refresco Cola 33cl','Agua mineral 50cl');
-UPDATE productos SET categoria = 'premium' WHERE nombre IN ('Jandro gi','Cocktail Premium','Cava');
-UPDATE productos SET categoria = 'comida'  WHERE nombre LIKE '%burrito%' OR nombre LIKE '%taco%' OR nombre LIKE '%pizza%';
--- El resto queda como 'otro' por defecto
-```
-
 ---
 
 ### 2.5 `gestor_config`
@@ -121,11 +107,6 @@ UPDATE productos SET categoria = 'comida'  WHERE nombre LIKE '%burrito%' OR nomb
 |---|---|---|---|
 | `festival_id` | INT PK FK | FK → `festivales.id` | Una fila por festival |
 | `modo_auto` | TINYINT(1) | `1` = automático, `0` = manual | En automático las decisiones se ejecutan solas; en manual quedan pendientes |
-
-```sql
-INSERT INTO gestor_config (festival_id, modo_auto) VALUES (1, 0)
-ON DUPLICATE KEY UPDATE modo_auto = VALUES(modo_auto);
-```
 
 ---
 
@@ -153,6 +134,8 @@ Pedidos activos = estados `pendiente`, `confirmado`, `preparando`.
 **Condición:**
 - `completados_hoy >= 5` (el festival lleva actividad suficiente)
 - El puesto tiene ≥ 2 productos con `vendidos_hoy < umbral_ventas_bajas` AND `vendidos_hoy < maxVentas * 0.3`
+
+Siendo maxVentas el producto más vendido hoy en ese puesto. 
 
 Se seleccionan los 2 productos más lentos. Se genera un par A/B (mismo `grupo_ab`, variante A y B).
 
@@ -221,52 +204,6 @@ Si ya existe una promo activa para ese producto, se actualiza en lugar de crear 
 4b. Si perdedora          → UPDATE promociones SET activa = 0
 4c. Si empate             → ambas quedan activa = 1 (el gestor decide)
 ```
-
----
-
-## 6. Guía de población de datos
-
-### Mínimo necesario para que el sistema funcione
-
-```sql
--- 1. Parámetros (obligatorio — sin esto el motor usa defaults hardcodeados)
-INSERT INTO parametros (id, umbral_cola, umbral_ventas_bajas, porcentaje_subida, porcentaje_bajada, pricing_dinamico_activo, promociones_activas)
-VALUES (1, 5, 3, 10.00, 10.00, 1, 1)
-ON DUPLICATE KEY UPDATE id = id;
-
--- 2. Modo del festival (0 = manual para ver decisiones pendientes en el panel)
-INSERT INTO gestor_config (festival_id, modo_auto) VALUES (1, 0)
-ON DUPLICATE KEY UPDATE modo_auto = 0;
-
--- 3. Categorizar productos
-UPDATE productos SET categoria = 'bebida'  WHERE puesto_id IN (1,2,3) AND precio < 10;
-UPDATE productos SET categoria = 'premium' WHERE precio >= 10;
-UPDATE productos SET categoria = 'comida'  WHERE nombre REGEXP 'burrito|taco|pizza|sandwich|wrap';
-
--- 4. Stock bajo mínimo en al menos un puesto (para que salte reposicion_stock)
--- Ajusta puesto_id y materia_prima_id según tu BD
-UPDATE stock_puesto SET stock_actual = 2 WHERE puesto_id = 1 AND stock_minimo > 2 LIMIT 1;
-```
-
-### Para probar todas las reglas a la vez
-
-Ver archivo `simulate_decisions.sql` en la raíz del proyecto.
-
-### Verificar que todo está bien antes de demostrar
-
-```sql
-SELECT 'parametros'    AS tabla, COUNT(*) AS filas FROM parametros
-UNION ALL
-SELECT 'gestor_config', COUNT(*) FROM gestor_config
-UNION ALL
-SELECT 'productos sin categoria', COUNT(*) FROM productos WHERE categoria IS NULL OR categoria = ''
-UNION ALL
-SELECT 'stock_puesto configurado', COUNT(*) FROM stock_puesto WHERE stock_minimo > 0
-UNION ALL
-SELECT 'promociones activas', COUNT(*) FROM promociones WHERE activa = 1;
-```
-
----
 
 ## Notas para el equipo
 

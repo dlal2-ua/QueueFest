@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getMisPuestosOperador, getStockPuesto } from '../api';
+import { getStockPuesto } from '../api';
+import { useOperatorPuesto } from '../context/OperatorPuestoContext';
 import { RefreshCw, AlertTriangle, CheckCircle, AlertCircle } from 'lucide-react';
 
 type StockItem = {
@@ -147,31 +148,17 @@ function StockCard({ item }: { item: StockItem }) {
 }
 
 export function OperatorStockScreen() {
-    const [puestoId, setPuestoId] = useState<number | null>(null);
-    const [puestoNombre, setPuestoNombre] = useState('');
+    const { puestoId, puestoNombre } = useOperatorPuesto();
     const [stock, setStock] = useState<StockItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-    const cargarStock = async (currentPuestoId?: number) => {
+    const cargarStock = async () => {
+        if (!puestoId) return;
         try {
             setError(null);
-            let pid = currentPuestoId ?? puestoId;
-
-            if (!pid) {
-                const puestos = await getMisPuestosOperador();
-                if (!Array.isArray(puestos) || puestos.length === 0) {
-                    setStock([]);
-                    setLoading(false);
-                    return;
-                }
-                pid = Number(puestos[0].id);
-                setPuestoId(pid);
-                setPuestoNombre(puestos[0].nombre || '');
-            }
-
-            const data = await getStockPuesto(pid);
+            const data = await getStockPuesto(puestoId);
             setStock(Array.isArray(data) ? data : []);
             setLastUpdated(new Date());
         } catch (e: any) {
@@ -182,10 +169,12 @@ export function OperatorStockScreen() {
     };
 
     useEffect(() => {
+        if (!puestoId) return;
+        setLoading(true);
         cargarStock();
-        const interval = setInterval(() => cargarStock(), 30000);
+        const interval = setInterval(cargarStock, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [puestoId]);
 
     const criticos = stock.filter(s => s.estado === 'critico').length;
     const bajos = stock.filter(s => s.estado === 'bajo').length;

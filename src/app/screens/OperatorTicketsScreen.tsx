@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getPedidosPuesto, cambiarEstadoPedido, getPuestoEstado, triggerPanico, getMisPuestosOperador } from '../api';
+import { getPedidosPuesto, cambiarEstadoPedido, getPuestoEstado, triggerPanico } from '../api';
 import { useNavigate } from '../utils/navigation';
 import { LogOut, RefreshCw } from 'lucide-react';
+import { useOperatorPuesto } from '../context/OperatorPuestoContext';
 
 export function OperatorTicketsScreen() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const { puestoId } = useOperatorPuesto();
 
     const [pedidos, setPedidos] = useState<any[]>([]);
     const [puesto, setPuesto] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [puestoId, setPuestoId] = useState<number | null>(null);
 
     const [isPanicModalOpen, setIsPanicModalOpen] = useState(false);
     const [toastMessage, setToastMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
@@ -22,24 +23,11 @@ export function OperatorTicketsScreen() {
     };
 
     const cargarDatos = async () => {
+        if (!puestoId) return;
         try {
-            let currentPuestoId = puestoId;
-
-            if (!currentPuestoId) {
-                const puestos = await getMisPuestosOperador();
-                if (!Array.isArray(puestos) || puestos.length === 0) {
-                    setPedidos([]);
-                    setPuesto(null);
-                    setLoading(false);
-                    return;
-                }
-                currentPuestoId = Number(puestos[0].id);
-                setPuestoId(currentPuestoId);
-            }
-
             const [pedidosData, puestoData] = await Promise.all([
-                getPedidosPuesto(currentPuestoId),
-                getPuestoEstado(currentPuestoId)
+                getPedidosPuesto(puestoId),
+                getPuestoEstado(puestoId)
             ]);
 
             const activos = (Array.isArray(pedidosData) ? pedidosData : []).filter(
@@ -57,10 +45,12 @@ export function OperatorTicketsScreen() {
     };
 
     useEffect(() => {
+        if (!puestoId) return;
+        setLoading(true);
         cargarDatos();
         const interval = setInterval(cargarDatos, 10000);
         return () => clearInterval(interval);
-    }, []);
+    }, [puestoId]);
 
     const cambiarEstado = async (pedidoId: number, estado: string) => {
         try {
