@@ -2675,51 +2675,6 @@ async function generarDecisiones(festival_id) {
       }
     }
 
-    // Regla 4: ajuste_precio — producto más pedido en cola activa
-    if (puesto.abierto && pendientes > Math.floor(umbral_cola * 0.7)) {
-      const [calientes] = await db.query(
-        `SELECT pr.id, pr.nombre, pr.precio, COUNT(*) AS en_cola
-         FROM pedido_items pi
-         JOIN pedidos pe ON pe.id = pi.pedido_id
-         JOIN productos pr ON pr.id = pi.producto_id
-         WHERE pe.puesto_id = ? AND pe.estado IN ('pendiente','confirmado','preparando')
-         GROUP BY pr.id, pr.nombre, pr.precio
-         ORDER BY en_cola DESC
-         LIMIT 1`,
-        [puesto.id]
-      );
-      if (calientes.length > 0) {
-        const prod = calientes[0];
-        const fmtEur = (v) => parseFloat(Number(v).toFixed(2));
-        const precioNuevo = fmtEur(Math.round(prod.precio * (1 + porcentaje_subida / 100) * 100) / 100);
-        await insertarSiNoPendiente(
-          festival_id, 'ajuste_precio',
-          `Alta demanda en "${puesto.nombre}": "${prod.nombre}" con ${prod.en_cola} pedidos activos. ${fmtEur(prod.precio)}€ → ${precioNuevo}€ (+${porcentaje_subida}%)`,
-          puesto.id, prod.id,
-          { porcentaje: porcentaje_subida, ventas_antes: prod.en_cola }
-        );
-      }
-    }
-
-    // Regla 4b: normalizar precio cuando la cola ya bajó y hay precio dinámico inflado
-    if (pendientes <= Math.floor(umbral_cola * 0.3)) {
-      const [preciosAlterados] = await db.query(
-        `SELECT id, nombre, precio, precio_dinamico FROM productos
-         WHERE puesto_id = ? AND activo = 1
-           AND precio_dinamico IS NOT NULL AND precio_dinamico > precio`,
-        [puesto.id]
-      );
-      for (const prod of preciosAlterados) {
-        const fmtEur = (v) => parseFloat(Number(v).toFixed(2));
-        await insertarSiNoPendiente(
-          festival_id, 'ajuste_precio',
-          `Cola normalizada en "${puesto.nombre}": "${prod.nombre}" vuelve a ${fmtEur(prod.precio)}€ (precio dinámico activo: ${fmtEur(prod.precio_dinamico)}€)`,
-          puesto.id, prod.id,
-          { porcentaje: 0 }
-        );
-      }
-    }
-
     // Regla 5: reposicion_stock — materia prima bajo mínimo en el puesto
     const [stockBajo] = await db.query(
       `SELECT sp.materia_prima_id, mp.nombre AS mp_nombre, mp.unidad_medida,
@@ -2778,29 +2733,50 @@ async function ejecutarDecision(decision) {
     case 'descuento_producto':
       if (decision.producto_id) {
         const pct = Math.abs(Number(decision.porcentaje) || 10);
-        await db.query(
-          'UPDATE productos SET precio_dinamico = ROUND(precio * ?, 2) WHERE id = ?',
-          [(1 - pct / 100), decision.producto_id]
+        const [[prod]] = await db.query(
+          'SELECT precio, categoria, nombre FROM productos WHERE id = ?',
+          [decision.producto_id]
         );
-      }
-      break;
+        if (prod) {
+          let tipo, precioPromo, valorDescuento;
+          const precio = Number(prod.precio);
+          switch (prod.categoria) {
+            case 'bebida':
+              tipo = 'tres_por_dos';
+              precioPromo = parseFloat((precio * 2 / 3).toFixed(2));
+              valorDescuento = null;
+              break;
+            case 'comida':
+              tipo = 'dos_por_uno';
+              precioPromo = parseFloat((precio / 2).toFixed(2));
+              valorDescuento = null;
+              break;
+            default:
+              tipo = 'descuento_porcentaje';
+              precioPromo = parseFloat((precio * (1 - pct / 100)).toFixed(2));
+              valorDescuento = pct;
+          }
+          const titulo = tipo === 'tres_por_dos' ? `3×2 en ${prod.nombre}`
+            : tipo === 'dos_por_uno' ? `2×1 en ${prod.nombre}`
+            : `-${pct}% en ${prod.nombre}`;
 
-    case 'ajuste_precio':
-      if (decision.producto_id) {
-        if (Number(decision.porcentaje) === 0) {
-          await db.query('UPDATE productos SET precio_dinamico = NULL WHERE id = ?', [decision.producto_id]);
-        } else {
-          const pct = Math.abs(Number(decision.porcentaje) || 10);
-          await db.query(
-            'UPDATE productos SET precio_dinamico = ROUND(precio * ?, 2) WHERE id = ?',
-            [(1 + pct / 100), decision.producto_id]
+          const [existing] = await db.query(
+            'SELECT id FROM promociones WHERE producto_id = ? AND activa = 1 LIMIT 1',
+            [decision.producto_id]
           );
+          if (existing.length > 0) {
+            await db.query(
+              'UPDATE promociones SET tipo=?, precio_promo=?, valor_descuento=?, titulo=? WHERE id=?',
+              [tipo, precioPromo, valorDescuento, titulo, existing[0].id]
+            );
+          } else {
+            await db.query(
+              `INSERT INTO promociones (puesto_id, producto_id, titulo, descripcion, precio_promo, tipo, valor_descuento, activa)
+               VALUES (?, ?, ?, 'Promoción automática', ?, ?, ?, 1)`,
+              [decision.puesto_id, decision.producto_id, titulo, precioPromo, tipo, valorDescuento]
+            );
+          }
         }
-      } else if (decision.puesto_id) {
-        await db.query(
-          'UPDATE productos SET precio_dinamico = ROUND(precio * 1.10, 2) WHERE puesto_id = ? AND activo = 1',
-          [decision.puesto_id]
-        );
       }
       break;
 
@@ -2857,17 +2833,25 @@ async function evaluarGanadoresAB(festival_id) {
            AND pe.estado NOT IN ('cancelado')`,
         [v.producto_id, v.creado_en]
       );
-      return { id: v.id, ventas_post: Number(ventas_post) };
+      return { id: v.id, producto_id: v.producto_id, ventas_post: Number(ventas_post) };
     }));
 
     const [primero, segundo] = resultados.sort((a, b) => b.ventas_post - a.ventas_post);
     const hayGanador = primero.ventas_post > segundo.ventas_post;
 
     for (const r of resultados) {
+      const esGanadora = hayGanador ? (r.id === primero.id ? 1 : 0) : null;
       await db.query(
         'UPDATE decisiones_automaticas SET ventas_despues = ?, ganadora = ? WHERE id = ?',
-        [r.ventas_post, hayGanador ? (r.id === primero.id ? 1 : 0) : null, r.id]
+        [r.ventas_post, esGanadora, r.id]
       );
+      // Desactivar promo del perdedor
+      if (hayGanador && esGanadora === 0 && r.producto_id) {
+        await db.query(
+          'UPDATE promociones SET activa = 0 WHERE producto_id = ? AND activa = 1',
+          [r.producto_id]
+        );
+      }
     }
   }
 }

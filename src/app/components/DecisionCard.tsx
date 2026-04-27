@@ -1,5 +1,5 @@
 import {
-  Store, XSquare, Tag, TrendingUp, TrendingDown, Package,
+  Store, XSquare, Tag, TrendingDown, Package,
   CheckCircle2, XCircle, Zap, Clock, Trophy, AlertCircle,
   PauseCircle,
 } from 'lucide-react';
@@ -8,7 +8,6 @@ export type DecisionTipo =
   | 'abrir_barra'
   | 'cerrar_barra'
   | 'activar_promocion'
-  | 'ajuste_precio'
   | 'descuento_producto'
   | 'reposicion_stock';
 
@@ -52,7 +51,6 @@ const TIPO_CONFIG: Record<DecisionTipo, {
   abrir_barra:       { label: 'Reanudar Pedidos',  icon: Store,        iconColor: 'text-emerald-600', borderColor: 'border-emerald-200', bg: 'bg-emerald-50' },
   cerrar_barra:      { label: 'Pausar Pedidos',     icon: PauseCircle,  iconColor: 'text-red-500',     borderColor: 'border-red-200',     bg: 'bg-red-50'     },
   activar_promocion: { label: 'Activar Promoción',  icon: Tag,          iconColor: 'text-orange-500',  borderColor: 'border-orange-200',  bg: 'bg-orange-50'  },
-  ajuste_precio:     { label: 'Subida de Precio',   icon: TrendingUp,   iconColor: 'text-violet-600',  borderColor: 'border-violet-200',  bg: 'bg-violet-50'  },
   descuento_producto:{ label: 'Descuento Producto', icon: TrendingDown, iconColor: 'text-blue-600',    borderColor: 'border-blue-200',    bg: 'bg-blue-50'    },
   reposicion_stock:  { label: 'Reponer Stock',      icon: Package,      iconColor: 'text-amber-600',   borderColor: 'border-amber-200',   bg: 'bg-amber-50'   },
 };
@@ -87,7 +85,7 @@ function formatRelative(dateStr: string, minutesFromServer?: number): string {
 }
 
 export function DecisionCard({ decision, modoAuto, onAprobar, onRechazar, loading }: DecisionCardProps) {
-  const config = TIPO_CONFIG[decision.tipo] ?? TIPO_CONFIG.ajuste_precio;
+  const config = TIPO_CONFIG[decision.tipo] ?? TIPO_CONFIG.reposicion_stock;
   const badge  = ESTADO_BADGE[decision.estado];
   const Icon   = config.icon;
   const esPendiente = decision.estado === 'pendiente';

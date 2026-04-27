@@ -1,47 +1,44 @@
-// GestorScreen.tsx — Phone frame + multi-view router for the gestor role
+// GestorScreen.tsx — Desktop sidebar + mobile bottom nav router for gestor role
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getModoAuto, setModoAuto } from '../api';
 import { toast } from 'sonner';
-import { Map, CheckSquare, Home, LayoutGrid, Tag } from 'lucide-react';
+import { Map, CheckSquare, Home, LayoutGrid, Tag, LogOut } from 'lucide-react';
 
-import { WelcomeView }   from './gestor/WelcomeView';
-import { MainPanelView } from './gestor/MainPanelView';
-import { MapView }       from './gestor/MapView';
-import { DecisionsView } from './gestor/DecisionsView';
-import { StandsView }    from './gestor/StandsView';
+import { WelcomeView }    from './gestor/WelcomeView';
+import { MainPanelView }  from './gestor/MainPanelView';
+import { MapView }        from './gestor/MapView';
+import { DecisionsView }  from './gestor/DecisionsView';
+import { StandsView }     from './gestor/StandsView';
 import { PromotionsView } from './gestor/PromotionsView';
 
 type View = 'welcome' | 'main' | 'map' | 'decisions' | 'stands' | 'promotions';
 
-const BOTTOM_NAV: { id: View; icon: typeof Map }[] = [
-  { id: 'map',       icon: Map         },
-  { id: 'decisions', icon: CheckSquare },
-  { id: 'main',      icon: Home        },
-  { id: 'stands',    icon: LayoutGrid  },
-  { id: 'promotions', icon: Tag        },
+const NAV_ITEMS: { id: View; icon: typeof Map; label: string }[] = [
+  { id: 'map',        icon: Map,         label: 'Mapa'        },
+  { id: 'decisions',  icon: CheckSquare, label: 'Decisiones'  },
+  { id: 'main',       icon: Home,        label: 'Inicio'      },
+  { id: 'stands',     icon: LayoutGrid,  label: 'Puestos'     },
+  { id: 'promotions', icon: Tag,         label: 'Promociones' },
 ];
 
 export function GestorScreen() {
   const { logout } = useAuth();
 
-  const [view, setView]               = useState<View>('welcome');
-  const [festivalId, setFestivalId]   = useState<number | null>(() => {
+  const [view, setView]             = useState<View>('welcome');
+  const [festivalId, setFestivalId] = useState<number | null>(() => {
     const s = localStorage.getItem('gestorFestivalId');
     return s ? Number(s) : null;
   });
   const [festivalNombre, setFestivalNombre] = useState('');
-  const [modoAuto, setModoAutoState]  = useState(true);
+  const [modoAuto, setModoAutoState]        = useState(true);
 
-  // Set orange body background
   useEffect(() => {
-    const prev = document.body.style.backgroundColor;
-    document.body.style.backgroundColor = '#FF6B35';
     document.body.style.margin = '0';
-    return () => { document.body.style.backgroundColor = prev; };
+    document.body.style.backgroundColor = '';
+    return () => { document.body.style.backgroundColor = ''; };
   }, []);
 
-  // Load auto mode when festival is set
   useEffect(() => {
     if (!festivalId) return;
     getModoAuto(festivalId)
@@ -69,51 +66,75 @@ export function GestorScreen() {
 
   const navigate = (v: string) => setView(v as View);
 
-  const showBottomNav = view !== 'welcome';
+  // ── Welcome screen ──────────────────────────────────────────────────────
+  if (view === 'welcome') {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#000000' }}>
+        <WelcomeView onEnter={handleFestivalEnter} />
+      </div>
+    );
+  }
 
+  // ── Main app layout ──────────────────────────────────────────────────────
   return (
-    // Orange browser background + centered phone
-    <div
-      className="min-h-screen flex items-start justify-center md:py-6 md:px-4"
-      style={{ backgroundColor: '#FF6B35' }}
-    >
-      {/* ── Phone mockup frame ─────────────────────────────────────────── */}
-      <div
-        className="
-          phone-frame
-          relative w-full min-h-screen flex flex-col overflow-hidden
-          md:min-h-0 md:w-[360px]
-          md:rounded-[45px]
-          md:border-[10px] md:border-[#1a1a1a]
-        "
-        style={{ backgroundColor: view === 'welcome' ? '#000000' : '#FDF6EE', transform: 'translate(0, 0)' }}
-      >
-        {/* Notch — desktop only */}
-        <div
-          className="hidden md:block absolute top-0 left-1/2 -translate-x-1/2 z-50"
-          style={{ width: 110, height: 28, backgroundColor: '#1a1a1a', borderRadius: '0 0 18px 18px' }}
-        />
+    <div className="min-h-screen flex" style={{ backgroundColor: '#FDF6EE' }}>
 
-        {/* Status bar — desktop only */}
-        <div
-          className="hidden md:flex items-center justify-between px-6 pt-1.5 pb-0 h-8 flex-shrink-0"
-          style={{ backgroundColor: view === 'welcome' ? '#000000' : '#FFF3E4' }}
-        >
-          <span className="text-[10px] font-semibold" style={{ color: view === 'welcome' ? '#FF6B35' : '#C8956C' }}>9:41</span>
-          <div className="w-20" />
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-1.5 rounded-sm border" style={{ borderColor: view === 'welcome' ? '#FF6B35' : '#C8956C' }}>
-              <div className="w-1/2 h-full" style={{ backgroundColor: view === 'welcome' ? '#FF6B35' : '#C8956C' }} />
-            </div>
-          </div>
+      {/* ── Sidebar — desktop only ──────────────────────────────────────── */}
+      <aside
+        className="hidden md:flex flex-col w-56 min-h-screen flex-shrink-0 border-r"
+        style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}
+      >
+        {/* Brand */}
+        <div className="px-5 py-5 border-b" style={{ borderColor: '#E8D5C0' }}>
+          <p className="text-lg font-black" style={{ color: '#FF6B35' }}>QueueFest</p>
+          <p className="text-xs mt-0.5 truncate" style={{ color: '#8B6650' }}>{festivalNombre}</p>
         </div>
 
-        {/* ── View content ─────────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Nav items */}
+        <nav className="flex-1 py-3 px-2 space-y-0.5">
+          {NAV_ITEMS.map(({ id, icon: Icon, label }) => {
+            const active = view === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                style={{
+                  backgroundColor: active ? '#FF6B35' : 'transparent',
+                  color: active ? '#fff' : '#8B6650',
+                }}
+                onMouseEnter={e => {
+                  if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(255,107,53,0.08)';
+                }}
+                onMouseLeave={e => {
+                  if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                }}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                {label}
+              </button>
+            );
+          })}
+        </nav>
 
-          {view === 'welcome' && (
-            <WelcomeView onEnter={handleFestivalEnter} />
-          )}
+        {/* Logout */}
+        <div className="p-3 border-t" style={{ borderColor: '#E8D5C0' }}>
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all"
+            style={{ color: '#C8956C' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(220,38,38,0.06)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+          >
+            <LogOut className="w-4 h-4" />
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Content area ────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+        <div className="flex-1 overflow-hidden flex flex-col">
 
           {view === 'main' && festivalId && (
             <MainPanelView
@@ -149,56 +170,37 @@ export function GestorScreen() {
           {view === 'promotions' && festivalId && (
             <PromotionsView festivalId={festivalId} festivalNombre={festivalNombre} />
           )}
+
         </div>
 
-        {/* ── Bottom Navigation Bar ────────────────────────────────────── */}
-        {showBottomNav && (
-          <div
-            className="flex-shrink-0 flex items-center border-t"
-            style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', height: 66 }}
-          >
-            {BOTTOM_NAV.map(({ id, icon: Icon }) => {
-              const active = view === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => setView(id)}
-                  className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-all"
-                  style={{ height: '100%' }}
-                >
-                  <Icon
-                    className={`transition-all ${id === 'main' ? 'w-7 h-7' : 'w-5 h-5'}`}
-                    style={{ color: active ? '#A67C52' : '#C4B5A5' }}
-                  />
-                  {/* Dot indicator */}
-                  <div
-                    className="w-1 h-1 rounded-full transition-all"
-                    style={{ backgroundColor: active ? '#A67C52' : 'transparent' }}
-                  />
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Home indicator — desktop only */}
+        {/* ── Bottom nav — mobile only ─────────────────────────────────── */}
         <div
-          className="hidden md:flex justify-center items-center py-1.5 flex-shrink-0"
-          style={{ backgroundColor: view === 'welcome' ? '#000000' : '#FFF3E4' }}
+          className="md:hidden flex-shrink-0 flex items-center border-t"
+          style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', height: 66 }}
         >
-          <div className="w-24 h-1 rounded-full" style={{ backgroundColor: view === 'welcome' ? '#333' : 'rgba(0,0,0,0.15)' }} />
+          {NAV_ITEMS.map(({ id, icon: Icon }) => {
+            const active = view === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-all"
+                style={{ height: '100%' }}
+              >
+                <Icon
+                  className={`transition-all ${id === 'main' ? 'w-7 h-7' : 'w-5 h-5'}`}
+                  style={{ color: active ? '#A67C52' : '#C4B5A5' }}
+                />
+                <div
+                  className="w-1 h-1 rounded-full transition-all"
+                  style={{ backgroundColor: active ? '#A67C52' : 'transparent' }}
+                />
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* CSS: sombra y alto del marco solo en desktop */}
-      <style>{`
-        @media (min-width: 768px) {
-          .phone-frame {
-            height: min(840px, 93vh);
-            box-shadow: 0 0 0 2px #333, 0 30px 80px rgba(0,0,0,0.50), inset 0 0 0 1px #555;
-          }
-        }
-      `}</style>
     </div>
   );
 }
