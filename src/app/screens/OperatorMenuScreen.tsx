@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getAdminProductos, getMisPuestosOperador, buildImageUrl, setProductoAgotado } from '../api';
+import { getAdminProductos, buildImageUrl, setProductoAgotado } from '../api';
 import { RefreshCw } from 'lucide-react';
+import { useOperatorPuesto } from '../context/OperatorPuestoContext';
 
 type Producto = {
     id: number;
@@ -15,7 +16,7 @@ type Producto = {
 };
 
 export function OperatorMenuScreen() {
-    const [puestoId, setPuestoId] = useState<number | null>(null);
+    const { puestoId } = useOperatorPuesto();
     const [productos, setProductos] = useState<Producto[]>([]);
     const [loading, setLoading] = useState(true);
     const [savingId, setSavingId] = useState<number | null>(null);
@@ -23,22 +24,10 @@ export function OperatorMenuScreen() {
     const [imageErrorMap, setImageErrorMap] = useState<Record<string, boolean>>({});
 
     const cargarDatos = async () => {
+        if (!puestoId) return;
         try {
             setError(null);
-            let currentPuestoId = puestoId;
-
-            if (!currentPuestoId) {
-                const puestos = await getMisPuestosOperador();
-                if (!Array.isArray(puestos) || puestos.length === 0) {
-                    setProductos([]);
-                    setLoading(false);
-                    return;
-                }
-                currentPuestoId = Number(puestos[0].id);
-                setPuestoId(currentPuestoId);
-            }
-
-            const data = await getAdminProductos(currentPuestoId);
+            const data = await getAdminProductos(puestoId);
             setProductos(Array.isArray(data) ? data : []);
         } catch (e: any) {
             setError(e?.message || 'Error cargando menú');
@@ -49,8 +38,10 @@ export function OperatorMenuScreen() {
     };
 
     useEffect(() => {
+        if (!puestoId) return;
+        setLoading(true);
         cargarDatos();
-    }, []);
+    }, [puestoId]);
 
     const onToggleAgotado = async (producto: Producto, agotado: boolean) => {
         setSavingId(producto.id);
