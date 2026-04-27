@@ -61,7 +61,7 @@ export function ProfileScreen() {
     { icon: Coins, label: 'Royalties', path: '/profile/royalties' },
     { icon: CreditCard, label: t('profile.paymentMethods'), path: '/profile/payments' },
     { icon: Clock, label: t('profile.orderHistory'), path: '/profile/orders' },
-    { icon: Star, label: 'Mis resenas', path: '/profile/reviews' },
+    { icon: Star, label: t('profile.reviews'), path: '/profile/reviews' },
     { icon: Bell, label: 'Notificaciones', path: '/profile/notifications' },
     { icon: Heart, label: t('profile.favorites'), path: '/profile/favorites' },
     { icon: Globe, label: t('profile.language'), path: '/profile/language' },

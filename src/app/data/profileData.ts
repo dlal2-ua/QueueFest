@@ -52,8 +52,8 @@ export const ROYALTY_EARN_RULES: RoyaltyRule[] = [
     description: 'Gana 100 royalties por cada euro gastado. 1000 royalties equivalen a 1 EUR.'
   },
   {
-    title: 'Resenas verificadas',
-    description: 'Una resena con estrellas puede darte una base de 50 puntos, mas extras por acciones complementarias.'
+    title: 'Reseñas verificadas',
+    description: 'Una reseña con estrellas puede darte una base de 50 puntos, mas extras por acciones complementarias.'
   },
   {
     title: 'Ofertas especiales',

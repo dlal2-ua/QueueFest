@@ -1,4 +1,5 @@
 import { Star } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface StarRatingProps {
   value: number;
@@ -9,6 +10,7 @@ interface StarRatingProps {
 }
 
 export function StarRating({ value, onChange, label, disabled = false, size = 'md' }: StarRatingProps) {
+  const { t } = useLanguage();
   const iconClass = size === 'sm' ? 'h-4 w-4' : 'h-6 w-6';
   const buttonClass = size === 'sm' ? 'p-0.5' : 'p-1';
 
@@ -27,7 +29,7 @@ export function StarRating({ value, onChange, label, disabled = false, size = 'm
               className={`${buttonClass} rounded-full transition-colors ${
                 disabled || !onChange ? 'cursor-default' : 'hover:bg-amber-50'
               }`}
-              aria-label={`${star} estrellas`}
+              aria-label={`${star} ${t('reviews.starAria')}`}
             >
               <Star
                 className={`${iconClass} ${active ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`}

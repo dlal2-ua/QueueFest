@@ -27,7 +27,7 @@ export function ProductDetailScreen() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
-  const { isRTL } = useLanguage();
+  const { isRTL, t } = useLanguage();
   const { addItem } = useCart();
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [vendor, setVendor] = useState<any | null>(null);
@@ -298,10 +298,10 @@ export function ProductDetailScreen() {
           >
             <Star className={`h-4 w-4 ${reviewEligibility?.can_review ? 'fill-amber-400 text-amber-400' : ''}`} />
             {reviewEligibility?.can_review
-              ? 'Resenar este producto'
+              ? t('reviews.reviewProduct')
               : reviewEligibility?.has_ordered
-                ? 'Ya no tienes pedidos pendientes de resenar'
-                : 'Pidelo una vez para poder resenarlo'}
+                ? t('reviews.reviewProductAlready')
+                : t('reviews.reviewProductLocked')}
           </button>
         </section>
 
@@ -351,8 +351,8 @@ export function ProductDetailScreen() {
           <ReviewsList
             scope="product"
             id={product.id}
-            title="Resenas del producto"
-            subtitle="Opiniones verificadas de personas que lo han pedido."
+            title={t('reviews.productTitle')}
+            subtitle={t('reviews.productSubtitle')}
             limit={3}
             compact
             showViewAll

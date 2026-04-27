@@ -6,9 +6,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { PickupQR } from '../components/PickupQR';
 import { getPaymentSession } from '../api';
 import { calculateRoyaltiesForPurchase } from '../data/profileData';
+import { useLanguage } from '../context/LanguageContext';
 
 export function OrderConfirmationScreen() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const { clearCart, items, getTotal } = useCart();
   const [orderTotal] = useState(() => getTotal());
   const [vendorName] = useState(() => items[0]?.vendorName || 'QueueFest');
@@ -170,7 +172,7 @@ export function OrderConfirmationScreen() {
               className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-amber-300 bg-amber-50 py-3 font-medium text-amber-800 transition-colors hover:bg-amber-100"
             >
               <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-              Resenar pedido y ganar royalties
+              {t('reviews.orderConfirmationCta')}
             </button>
             <button
               onClick={handleContinue}

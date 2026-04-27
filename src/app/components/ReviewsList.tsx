@@ -3,6 +3,7 @@ import { ChevronRight, Loader2, MessageSquare, Star } from 'lucide-react';
 import { useNavigate } from '../utils/navigation';
 import { getReviews, type ReviewRecord } from '../api';
 import { StarRatingDisplay } from './StarRating';
+import { useLanguage } from '../context/LanguageContext';
 
 type ReviewScope = 'mine' | 'puesto' | 'product' | 'pedido';
 
@@ -16,8 +17,9 @@ interface ReviewsListProps {
   showViewAll?: boolean;
 }
 
-export function ReviewsList({ scope, id, title = 'Resenas', subtitle, limit = 5, compact = false, showViewAll = false }: ReviewsListProps) {
+export function ReviewsList({ scope, id, title, subtitle, limit = 5, compact = false, showViewAll = false }: ReviewsListProps) {
   const navigate = useNavigate();
+  const { t, language } = useLanguage();
   const [reviews, setReviews] = useState<ReviewRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +41,7 @@ export function ReviewsList({ scope, id, title = 'Resenas', subtitle, limit = 5,
         const data = await getReviews(params);
         if (!cancelled) setReviews(data);
       } catch (error) {
-        console.error('Error cargando resenas:', error);
+        console.error('Error cargando reseñas:', error);
         if (!cancelled) setReviews([]);
       } finally {
         if (!cancelled) setLoading(false);
@@ -60,13 +62,13 @@ export function ReviewsList({ scope, id, title = 'Resenas', subtitle, limit = 5,
 
   const viewAllHref = scope === 'mine'
     ? '/profile/reviews'
-    : `/reviews?scope=${scope}&id=${id || ''}&title=${encodeURIComponent(title)}`;
+    : `/reviews?scope=${scope}&id=${id || ''}&title=${encodeURIComponent(title || t('reviews.defaultTitle'))}`;
 
   return (
     <section className={`${compact ? '' : 'rounded-3xl bg-white p-5 shadow-sm'}`}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+          <h2 className="text-lg font-bold text-gray-900">{title || t('reviews.defaultTitle')}</h2>
           {subtitle && <p className="mt-1 text-sm text-gray-500">{subtitle}</p>}
         </div>
         {reviews.length > 0 && (
@@ -75,7 +77,7 @@ export function ReviewsList({ scope, id, title = 'Resenas', subtitle, limit = 5,
               <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
               <span className="font-bold">{average}</span>
             </div>
-            <p className="text-[11px] text-amber-700">{reviews.length} resenas</p>
+            <p className="text-[11px] text-amber-700">{reviews.length} {t('reviews.countSuffix')}</p>
           </div>
         )}
       </div>
@@ -86,7 +88,7 @@ export function ReviewsList({ scope, id, title = 'Resenas', subtitle, limit = 5,
         </div>
       ) : reviews.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-sm text-gray-500">
-          Todavia no hay resenas para mostrar.
+          {t('reviews.noReviews')}
         </div>
       ) : (
         <div className="space-y-3">
@@ -96,7 +98,7 @@ export function ReviewsList({ scope, id, title = 'Resenas', subtitle, limit = 5,
                 <div>
                   <p className="font-semibold text-gray-900">{review.usuario_nombre}</p>
                   <p className="text-xs text-gray-500">
-                    {new Date(review.creado_en).toLocaleDateString('es-ES', {
+                    {new Date(review.creado_en).toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', {
                       day: '2-digit',
                       month: 'short',
                       year: 'numeric'
@@ -112,9 +114,9 @@ export function ReviewsList({ scope, id, title = 'Resenas', subtitle, limit = 5,
 
               {(review.estrellas_servicio || review.estrellas_personal || review.estrellas_rapidez) && (
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-gray-600">
-                  <span>Servicio {review.estrellas_servicio || '-'}/5</span>
-                  <span>Personal {review.estrellas_personal || '-'}/5</span>
-                  <span>Rapidez {review.estrellas_rapidez || '-'}/5</span>
+                  <span>{t('reviews.service')} {review.estrellas_servicio || '-'}/5</span>
+                  <span>{t('reviews.staff')} {review.estrellas_personal || '-'}/5</span>
+                  <span>{t('reviews.speed')} {review.estrellas_rapidez || '-'}/5</span>
                 </div>
               )}
 
@@ -148,7 +150,7 @@ export function ReviewsList({ scope, id, title = 'Resenas', subtitle, limit = 5,
           onClick={() => navigate(viewAllHref)}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50"
         >
-          Ver todas
+          {t('reviews.seeAll')}
           <ChevronRight className="h-4 w-4" />
         </button>
       )}

@@ -11,11 +11,73 @@ START TRANSACTION;
 -- Headliner = 250 EUR gastados = 25.000 puntos
 -- Backstage = 500 EUR gastados = 50.000 puntos
 
-ALTER TABLE parametros
-  ADD COLUMN IF NOT EXISTS stock_minimo INT NOT NULL DEFAULT 10,
-  ADD COLUMN IF NOT EXISTS loyalty_vip_threshold INT NOT NULL DEFAULT 10000,
-  ADD COLUMN IF NOT EXISTS loyalty_headliner_threshold INT NOT NULL DEFAULT 25000,
-  ADD COLUMN IF NOT EXISTS loyalty_backstage_threshold INT NOT NULL DEFAULT 50000;
+SET @sql = (
+  SELECT IF(
+    EXISTS(
+      SELECT 1
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'parametros'
+        AND COLUMN_NAME = 'stock_minimo'
+    ),
+    'SELECT 1',
+    'ALTER TABLE parametros ADD COLUMN stock_minimo INT NOT NULL DEFAULT 10'
+  )
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+  SELECT IF(
+    EXISTS(
+      SELECT 1
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'parametros'
+        AND COLUMN_NAME = 'loyalty_vip_threshold'
+    ),
+    'SELECT 1',
+    'ALTER TABLE parametros ADD COLUMN loyalty_vip_threshold INT NOT NULL DEFAULT 10000'
+  )
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+  SELECT IF(
+    EXISTS(
+      SELECT 1
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'parametros'
+        AND COLUMN_NAME = 'loyalty_headliner_threshold'
+    ),
+    'SELECT 1',
+    'ALTER TABLE parametros ADD COLUMN loyalty_headliner_threshold INT NOT NULL DEFAULT 25000'
+  )
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+  SELECT IF(
+    EXISTS(
+      SELECT 1
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'parametros'
+        AND COLUMN_NAME = 'loyalty_backstage_threshold'
+    ),
+    'SELECT 1',
+    'ALTER TABLE parametros ADD COLUMN loyalty_backstage_threshold INT NOT NULL DEFAULT 50000'
+  )
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 INSERT INTO parametros (
   id,
@@ -52,12 +114,18 @@ ON DUPLICATE KEY UPDATE
 -- 50 puntos base = 0,05 EUR
 -- 20 puntos extra = 0,02 EUR
 
+CREATE TABLE IF NOT EXISTS resena_puntos_config (
+  accion          VARCHAR(50)  NOT NULL PRIMARY KEY,
+  puntos          INT          NOT NULL DEFAULT 0,
+  descripcion     VARCHAR(255) NULL,
+  activo          TINYINT(1)   NOT NULL DEFAULT 1
+);
+
 INSERT INTO resena_puntos_config (accion, puntos, descripcion, activo) VALUES
-  ('resena_base_estrellas', 50, 'Puntos base por enviar una resena con estrellas generales', 1),
-  ('resena_estrellas_servicio', 20, 'Extra por valorar el servicio', 1),
-  ('resena_estrellas_personal', 20, 'Extra por valorar al personal', 1),
-  ('resena_estrellas_rapidez', 20, 'Extra por valorar la rapidez', 1),
-  ('resena_producto', 20, 'Extra por resenar un producto concreto', 1)
+  ('resena_base', 50, 'Por crear una reseña con al menos estrellas_general', 1),
+  ('comentario_texto', 20, 'Por añadir comentario de texto de al menos 10 caracteres', 1),
+  ('estrellas_servicio', 20, 'Por valorar servicio, personal y rapidez', 1),
+  ('valoracion_producto', 20, 'Por cada producto valorado manualmente, maximo 3', 1)
 ON DUPLICATE KEY UPDATE
   puntos = VALUES(puntos),
   descripcion = VALUES(descripcion),

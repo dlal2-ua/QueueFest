@@ -7,6 +7,7 @@ import { useCart } from '../context/CartContext';
 import { StatusBadge } from '../components/StatusBadge';
 import { BottomNav } from '../components/BottomNav';
 import { ReviewsList } from '../components/ReviewsList';
+import { useLanguage } from '../context/LanguageContext';
 import { getProductos, getPuesto, buildImageUrl, getPuestoPromociones } from '../api';
 import { buildPromotionOffer, getBestPromotionForProduct } from '../utils/promotions';
 
@@ -14,6 +15,7 @@ export function FoodTruckDetailScreen() {
   const { id } = useParams(); // id del puesto (foodtruck)
   const navigate = useNavigate();
   const { addItem } = useCart();
+  const { t } = useLanguage();
 
   const [truck, setTruck] = useState<any | null>(null);
   const [categorias, setCategorias] = useState<any[]>([]);
@@ -271,8 +273,8 @@ export function FoodTruckDetailScreen() {
           <ReviewsList
             scope="puesto"
             id={id}
-            title="Resenas del food truck"
-            subtitle="Opiniones verificadas de pedidos realizados aqui."
+            title={t('reviews.foodTruckTitle')}
+            subtitle={t('reviews.foodTruckSubtitle')}
             limit={3}
             showViewAll
           />

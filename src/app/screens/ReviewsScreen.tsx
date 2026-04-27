@@ -1,10 +1,12 @@
 import { ChevronLeft } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { ReviewsList } from '../components/ReviewsList';
+import { useLanguage } from '../context/LanguageContext';
 import { useLocation, useNavigate } from '../utils/navigation';
 
 export function ReviewsScreen() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const isProfileReviews = location.pathname === '/profile/reviews';
@@ -14,8 +16,8 @@ export function ReviewsScreen() {
     : 'puesto';
   const id = params.get('id') || undefined;
   const title = isProfileReviews
-    ? 'Mis resenas'
-    : params.get('title') || 'Resenas';
+    ? t('reviews.myTitle')
+    : params.get('title') || t('reviews.title');
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -27,7 +29,7 @@ export function ReviewsScreen() {
           <div>
             <h1 className="text-xl font-bold text-gray-900">{title}</h1>
             <p className="text-sm text-gray-500">
-              {isProfileReviews ? 'Todas las resenas que has publicado' : 'Opiniones verificadas de pedidos reales'}
+              {isProfileReviews ? t('reviews.mySubtitle') : t('reviews.verifiedOrders')}
             </p>
           </div>
         </div>
@@ -38,7 +40,7 @@ export function ReviewsScreen() {
           scope={scope}
           id={id}
           title={title}
-          subtitle={isProfileReviews ? 'Tambien veras los royalties que ganaste en cada una.' : undefined}
+          subtitle={isProfileReviews ? t('reviews.myListSubtitle') : undefined}
           limit={50}
         />
       </div>

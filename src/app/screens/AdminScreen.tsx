@@ -1128,64 +1128,6 @@ export function AdminScreen() {
         {/* ── 5. USUARIOS ─────────────────────────────────────────────── */}
         {tab === 'usuarios' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-            <form onSubmit={handleGuardarParametros} className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-amber-100">
-              <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
-                <Coins className="w-5 h-5 text-amber-600" /> Niveles globales de Royalties
-              </h2>
-              <p className="text-sm text-gray-600">
-                Estos objetivos son comunes a toda la app. El admin los edita en euros y QueueFest los guarda en puntos internamente.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-xl bg-amber-50 border border-amber-100 p-4 space-y-2">
-                  <label className="block text-xs font-bold uppercase tracking-wide text-amber-800">VIP</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={pointsToEuros(parametros.loyalty_vip_threshold)}
-                    onChange={(e) => setParametros({ ...parametros, loyalty_vip_threshold: eurosToPoints(e.target.value) })}
-                    className="w-full px-4 py-2 bg-white border border-amber-200 rounded-lg text-sm font-semibold"
-                  />
-                  <p className="text-xs text-amber-800">{Number(parametros.loyalty_vip_threshold || 0).toLocaleString('es-ES')} puntos</p>
-                </div>
-
-                <div className="rounded-xl bg-sky-50 border border-sky-100 p-4 space-y-2">
-                  <label className="block text-xs font-bold uppercase tracking-wide text-sky-800">Headliner</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={pointsToEuros(parametros.loyalty_headliner_threshold)}
-                    onChange={(e) => setParametros({ ...parametros, loyalty_headliner_threshold: eurosToPoints(e.target.value) })}
-                    className="w-full px-4 py-2 bg-white border border-sky-200 rounded-lg text-sm font-semibold"
-                  />
-                  <p className="text-xs text-sky-800">{Number(parametros.loyalty_headliner_threshold || 0).toLocaleString('es-ES')} puntos</p>
-                </div>
-
-                <div className="rounded-xl bg-fuchsia-50 border border-fuchsia-100 p-4 space-y-2">
-                  <label className="block text-xs font-bold uppercase tracking-wide text-fuchsia-800">Backstage</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={pointsToEuros(parametros.loyalty_backstage_threshold)}
-                    onChange={(e) => setParametros({ ...parametros, loyalty_backstage_threshold: eurosToPoints(e.target.value) })}
-                    className="w-full px-4 py-2 bg-white border border-fuchsia-200 rounded-lg text-sm font-semibold"
-                  />
-                  <p className="text-xs text-fuchsia-800">{Number(parametros.loyalty_backstage_threshold || 0).toLocaleString('es-ES')} puntos</p>
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 text-xs text-gray-600">
-                Regla actual del programa: 100 puntos por cada 1 EUR gastado y 1000 puntos canjeables por 1 EUR.
-              </div>
-
-              <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-lg font-semibold text-sm transition-colors">
-                Guardar niveles de loyalty
-              </button>
-            </form>
-
             <form onSubmit={handleCrearUsuario} className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-gray-100">
               <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
                 <Users className="w-5 h-5 text-red-600" /> Control de Acceso (RBAC)
@@ -1250,6 +1192,64 @@ export function AdminScreen() {
                 );
               })}
             </div>
+
+            <form onSubmit={handleGuardarParametros} className="bg-white rounded-xl p-5 shadow-sm space-y-4 border border-amber-100">
+              <h2 className="font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
+                <Coins className="w-5 h-5 text-amber-600" /> Niveles globales de Royalties
+              </h2>
+              <p className="text-sm text-gray-600">
+                Estos objetivos son comunes a toda la app. El admin los edita en euros y QueueFest los guarda en puntos internamente.
+              </p>
+
+              <div className="space-y-3">
+                <div className="rounded-xl bg-amber-50 border border-amber-100 p-4 space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wide text-amber-800">VIP</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={pointsToEuros(parametros.loyalty_vip_threshold)}
+                    onChange={(e) => setParametros({ ...parametros, loyalty_vip_threshold: eurosToPoints(e.target.value) })}
+                    className="w-full px-4 py-2 bg-white border border-amber-200 rounded-lg text-sm font-semibold"
+                  />
+                  <p className="text-xs text-amber-800">{Number(parametros.loyalty_vip_threshold || 0).toLocaleString('es-ES')} puntos</p>
+                </div>
+
+                <div className="rounded-xl bg-sky-50 border border-sky-100 p-4 space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wide text-sky-800">Headliner</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={pointsToEuros(parametros.loyalty_headliner_threshold)}
+                    onChange={(e) => setParametros({ ...parametros, loyalty_headliner_threshold: eurosToPoints(e.target.value) })}
+                    className="w-full px-4 py-2 bg-white border border-sky-200 rounded-lg text-sm font-semibold"
+                  />
+                  <p className="text-xs text-sky-800">{Number(parametros.loyalty_headliner_threshold || 0).toLocaleString('es-ES')} puntos</p>
+                </div>
+
+                <div className="rounded-xl bg-fuchsia-50 border border-fuchsia-100 p-4 space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wide text-fuchsia-800">Backstage</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={pointsToEuros(parametros.loyalty_backstage_threshold)}
+                    onChange={(e) => setParametros({ ...parametros, loyalty_backstage_threshold: eurosToPoints(e.target.value) })}
+                    className="w-full px-4 py-2 bg-white border border-fuchsia-200 rounded-lg text-sm font-semibold"
+                  />
+                  <p className="text-xs text-fuchsia-800">{Number(parametros.loyalty_backstage_threshold || 0).toLocaleString('es-ES')} puntos</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 text-xs text-gray-600">
+                Regla actual del programa: 100 puntos por cada 1 EUR gastado y 1000 puntos canjeables por 1 EUR.
+              </div>
+
+              <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-lg font-semibold text-sm transition-colors">
+                Guardar niveles de loyalty
+              </button>
+            </form>
           </div>
         )}
 

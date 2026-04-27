@@ -4,6 +4,7 @@ import { ChevronLeft, Coins, Loader2, MessageSquare, PackageCheck, Send } from '
 import { toast } from 'sonner';
 import { buildImageUrl, createReview, getReviewContext, type ReviewContext } from '../api';
 import { StarRating } from '../components/StarRating';
+import { useLanguage } from '../context/LanguageContext';
 import { useLocation, useNavigate } from '../utils/navigation';
 
 interface ProductReviewDraft {
@@ -13,6 +14,7 @@ interface ProductReviewDraft {
 
 export function ReviewFormScreen() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const location = useLocation();
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const pedidoId = Number(searchParams.get('pedidoId') || searchParams.get('pedido_id'));
@@ -48,7 +50,7 @@ export function ReviewFormScreen() {
           });
         }
       } catch (error: any) {
-        toast.error(error.message || 'No se pudo cargar el pedido');
+        toast.error(error.message || t('reviews.orderNotFoundBody'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -93,7 +95,7 @@ export function ReviewFormScreen() {
     if (!context || !pedidoId) return;
 
     if (generalStars === 0) {
-      toast.error('Las estrellas generales son obligatorias');
+      toast.error(t('reviews.requiredGeneral'));
       return;
     }
 
@@ -113,10 +115,10 @@ export function ReviewFormScreen() {
         }))
       });
 
-      toast.success(`Resena guardada. Has ganado +${result.puntos_sumados} royalties`);
+      toast.success(`${t('reviews.savedToast')} +${result.puntos_sumados} royalties`);
       navigate('/profile/reviews');
     } catch (error: any) {
-      toast.error(error.message || 'No se pudo guardar la resena');
+      toast.error(error.message || t('reviews.orderNotFoundBody'));
     } finally {
       setSaving(false);
     }
@@ -133,10 +135,10 @@ export function ReviewFormScreen() {
   if (!context || !pedidoId) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6 text-center">
-        <h1 className="text-2xl font-bold text-gray-900">Pedido no encontrado</h1>
-        <p className="mt-2 text-sm text-gray-500">No hemos podido preparar la resena de este pedido.</p>
+        <h1 className="text-2xl font-bold text-gray-900">{t('reviews.orderNotFoundTitle')}</h1>
+        <p className="mt-2 text-sm text-gray-500">{t('reviews.orderNotFoundBody')}</p>
         <button onClick={() => navigate('/profile/orders')} className="mt-6 rounded-full bg-black px-6 py-3 text-sm font-semibold text-white">
-          Volver a pedidos
+          {t('common.back')}
         </button>
       </div>
     );
@@ -145,10 +147,10 @@ export function ReviewFormScreen() {
   if (!context.can_review) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6 text-center">
-        <h1 className="text-2xl font-bold text-gray-900">Este pedido ya esta revisado</h1>
-        <p className="mt-2 text-sm text-gray-500">Cada pedido puede tener una unica resena.</p>
+        <h1 className="text-2xl font-bold text-gray-900">{t('reviews.alreadyReviewedTitle')}</h1>
+        <p className="mt-2 text-sm text-gray-500">{t('reviews.alreadyReviewedBody')}</p>
         <button onClick={() => navigate('/profile/reviews')} className="mt-6 rounded-full bg-black px-6 py-3 text-sm font-semibold text-white">
-          Ver mis resenas
+          {t('reviews.viewMyReviews')}
         </button>
       </div>
     );
@@ -162,8 +164,8 @@ export function ReviewFormScreen() {
             <ChevronLeft className="h-6 w-6" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Escribir resena</h1>
-            <p className="text-sm text-gray-500">Pedido #{context.pedido.id} en {context.pedido.puesto_nombre}</p>
+            <h1 className="text-xl font-bold text-gray-900">{t('reviews.writeTitle')}</h1>
+            <p className="text-sm text-gray-500">{t('orders.orderNumber')}{context.pedido.id} · {context.pedido.puesto_nombre}</p>
           </div>
         </div>
       </div>
@@ -175,31 +177,31 @@ export function ReviewFormScreen() {
               <MessageSquare className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Valoracion general</h2>
-              <p className="text-sm text-gray-500">Solo las estrellas generales son obligatorias.</p>
+              <h2 className="text-lg font-bold text-gray-900">{t('reviews.generalSectionTitle')}</h2>
+              <p className="text-sm text-gray-500">{t('reviews.generalSectionSubtitle')}</p>
             </div>
           </div>
 
-          <StarRating value={generalStars} onChange={setGeneralStars} label="Estrellas generales" />
+          <StarRating value={generalStars} onChange={setGeneralStars} label={t('reviews.generalStars')} />
 
-          <label className="mt-5 block text-sm font-semibold text-gray-800">Comentario</label>
+          <label className="mt-5 block text-sm font-semibold text-gray-800">{t('reviews.comment')}</label>
           <textarea
             value={comment}
             onChange={(event) => setComment(event.target.value)}
             rows={4}
-            placeholder="Cuenta que tal fue la experiencia..."
+            placeholder={t('reviews.commentPlaceholder')}
             className="mt-2 w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-amber-400 focus:bg-white"
           />
-          <p className="mt-2 text-xs text-gray-500">+20 puntos si escribes al menos 10 caracteres.</p>
+          <p className="mt-2 text-xs text-gray-500">{t('reviews.commentBonus')}</p>
         </section>
 
         <section className="rounded-3xl bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-gray-900">Conceptos opcionales</h2>
-          <p className="mt-1 text-sm text-gray-500">Completar las tres valoraciones suma +20 puntos.</p>
+          <h2 className="text-lg font-bold text-gray-900">{t('reviews.optionalConceptsTitle')}</h2>
+          <p className="mt-1 text-sm text-gray-500">{t('reviews.optionalConceptsSubtitle')}</p>
           <div className="mt-4 grid grid-cols-1 gap-4">
-            <StarRating value={serviceStars} onChange={setServiceStars} label="Servicio" />
-            <StarRating value={staffStars} onChange={setStaffStars} label="Personal" />
-            <StarRating value={speedStars} onChange={setSpeedStars} label="Rapidez" />
+            <StarRating value={serviceStars} onChange={setServiceStars} label={t('reviews.service')} />
+            <StarRating value={staffStars} onChange={setStaffStars} label={t('reviews.staff')} />
+            <StarRating value={speedStars} onChange={setSpeedStars} label={t('reviews.speed')} />
           </div>
         </section>
 
@@ -209,8 +211,8 @@ export function ReviewFormScreen() {
               <PackageCheck className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Productos del pedido</h2>
-              <p className="text-sm text-gray-500">Puedes valorar productos concretos. Suman +20 puntos cada uno, maximo 3.</p>
+              <h2 className="text-lg font-bold text-gray-900">{t('reviews.orderProductsTitle')}</h2>
+              <p className="text-sm text-gray-500">{t('reviews.orderProductsSubtitle')}</p>
             </div>
           </div>
 
@@ -225,15 +227,15 @@ export function ReviewFormScreen() {
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-gray-900">{product.nombre}</p>
-                      <p className="text-xs text-gray-500">Cantidad: {product.cantidad}</p>
+                      <p className="text-xs text-gray-500">{t('reviews.quantity')}: {product.cantidad}</p>
                     </div>
                     {draft ? (
                       <button type="button" onClick={() => clearProductReview(product.producto_id)} className="text-xs font-semibold text-red-600">
-                        Quitar
+                        {t('common.remove')}
                       </button>
                     ) : (
                       <button type="button" onClick={() => updateProductReview(product.producto_id, {})} className="text-xs font-semibold text-sky-700">
-                        Valorar
+                        {t('reviews.rate')}
                       </button>
                     )}
                   </div>
@@ -243,13 +245,13 @@ export function ReviewFormScreen() {
                       <StarRating
                         value={draft.estrellas}
                         onChange={(value) => updateProductReview(product.producto_id, { estrellas: value })}
-                        label="Estrellas del producto"
+                        label={t('reviews.productStars')}
                       />
                       <textarea
                         value={draft.comentario}
                         onChange={(event) => updateProductReview(product.producto_id, { comentario: event.target.value })}
                         rows={2}
-                        placeholder="Comentario opcional sobre este producto"
+                        placeholder={t('reviews.productCommentPlaceholder')}
                         className="w-full resize-none rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-sky-400"
                       />
                     </div>
@@ -264,7 +266,7 @@ export function ReviewFormScreen() {
           <div className="flex items-center gap-3">
             <Coins className="h-7 w-7" />
             <div>
-              <p className="text-sm text-white/80">Royalties estimados</p>
+              <p className="text-sm text-white/80">{t('reviews.estimatedRoyalties')}</p>
               <p className="text-3xl font-black">+{estimatedPoints}</p>
             </div>
           </div>
@@ -276,7 +278,7 @@ export function ReviewFormScreen() {
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-black px-5 py-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-60"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          Publicar resena
+          {t('reviews.publish')}
         </button>
       </div>
     </form>

@@ -7,6 +7,7 @@ import { useCart } from '../context/CartContext';
 import { StatusBadge } from '../components/StatusBadge';
 import { BottomNav } from '../components/BottomNav';
 import { ReviewsList } from '../components/ReviewsList';
+import { useLanguage } from '../context/LanguageContext';
 import { getProductos, getPuesto, buildImageUrl, getPuestoPromociones } from '../api';
 import { buildPromotionOffer, getBestPromotionForProduct } from '../utils/promotions';
 
@@ -14,6 +15,7 @@ export function BarDetailScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addItem } = useCart();
+  const { t } = useLanguage();
 
   const [bar, setBar] = useState<any | null>(null);
   const [categorias, setCategorias] = useState<any[]>([]);
@@ -280,8 +282,8 @@ export function BarDetailScreen() {
           <ReviewsList
             scope="puesto"
             id={id}
-            title="Resenas de la barra"
-            subtitle="Opiniones verificadas de pedidos realizados aqui."
+            title={t('reviews.barTitle')}
+            subtitle={t('reviews.barSubtitle')}
             limit={3}
             showViewAll
           />

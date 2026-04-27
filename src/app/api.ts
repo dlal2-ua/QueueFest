@@ -434,13 +434,13 @@ export interface CreateReviewPayload {
 
 export const getReviewContext = async (pedidoId: number): Promise<ReviewContext> => {
     const res = await fetch(`${API_URL}/resenas/context?pedido_id=${pedidoId}`, { headers: headers() });
-    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar el pedido para resenar'));
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar el pedido para reseñar'));
     return res.json();
 };
 
 export const getProductReviewEligibility = async (productId: number): Promise<ProductReviewEligibility> => {
     const res = await fetch(`${API_URL}/resenas/eligibilidad/producto/${productId}`, { headers: headers() });
-    if (!res.ok) throw new Error(await parseApiError(res, 'Error al comprobar si puedes resenar'));
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al comprobar si puedes reseñar'));
     return res.json();
 };
 
@@ -460,7 +460,7 @@ export const getReviews = async (params: {
 
     const suffix = query.toString() ? `?${query.toString()}` : '';
     const res = await fetch(`${API_URL}/resenas${suffix}`, { headers: headers() });
-    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar resenas'));
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar reseñas'));
     const data = await res.json().catch(() => []);
     return Array.isArray(data) ? data : [];
 };
@@ -471,7 +471,7 @@ export const createReview = async (payload: CreateReviewPayload) => {
         headers: headers(),
         body: JSON.stringify(payload)
     });
-    if (!res.ok) throw new Error(await parseApiError(res, 'Error al guardar la resena'));
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al guardar la reseña'));
     return res.json();
 };
 
