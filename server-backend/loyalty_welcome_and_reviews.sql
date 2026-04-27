@@ -125,7 +125,7 @@ INSERT INTO resena_puntos_config (accion, puntos, descripcion, activo) VALUES
   ('resena_base', 50, 'Por crear una reseña con al menos estrellas_general', 1),
   ('comentario_texto', 20, 'Por añadir comentario de texto de al menos 10 caracteres', 1),
   ('estrellas_servicio', 20, 'Por valorar servicio, personal y rapidez', 1),
-  ('valoracion_producto', 20, 'Por cada producto valorado manualmente, maximo 5', 1)
+  ('valoracion_producto', 20, 'Por cada producto valorado manualmente dentro del maximo global de 5 acciones extra', 1)
 ON DUPLICATE KEY UPDATE
   puntos = VALUES(puntos),
   descripcion = VALUES(descripcion),

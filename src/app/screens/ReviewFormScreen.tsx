@@ -66,10 +66,14 @@ export function ReviewFormScreen() {
     .map(([productId, draft]) => ({ productId: Number(productId), ...draft }))
     .filter((draft) => draft.estrellas > 0);
 
+  const extraReviewActions = [
+    comment.trim().length >= 10,
+    serviceStars > 0 && staffStars > 0 && speedStars > 0
+  ].filter(Boolean).length;
+  const paidProductReviewActions = Math.min(selectedProductReviews.length, Math.max(0, 5 - extraReviewActions));
   const estimatedPoints = 50
-    + (comment.trim().length >= 10 ? 20 : 0)
-    + (serviceStars > 0 && staffStars > 0 && speedStars > 0 ? 20 : 0)
-    + Math.min(selectedProductReviews.length, 5) * 20;
+    + extraReviewActions * 20
+    + paidProductReviewActions * 20;
 
   const updateProductReview = (productId: number, patch: Partial<ProductReviewDraft>) => {
     setProductReviews((current) => ({

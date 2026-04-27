@@ -764,7 +764,7 @@ async function ensureReviewsTableSchema() {
       ('resena_base', ?, 'Por crear una resena con al menos estrellas_general', 1),
       ('comentario_texto', ?, 'Por anadir comentario de texto de al menos 10 caracteres', 1),
       ('estrellas_servicio', ?, 'Por valorar servicio, personal y rapidez', 1),
-      ('valoracion_producto', ?, 'Por cada producto valorado manualmente, maximo 5', 1)
+      ('valoracion_producto', ?, 'Por cada producto valorado manualmente dentro del maximo global de 5 acciones extra', 1)
      ON DUPLICATE KEY UPDATE
       puntos = VALUES(puntos),
       descripcion = VALUES(descripcion),
@@ -1997,10 +1997,15 @@ app.post('/api/resenas', auth, async (req, res) => {
     }
 
     const pointsConfig = await getReviewPointsConfig(conn);
-    let puntosSumados = pointsConfig.resena_base;
-    if (comentario && comentario.length >= 10) puntosSumados += pointsConfig.comentario_texto;
-    if (estrellasServicio && estrellasPersonal && estrellasRapidez) puntosSumados += pointsConfig.estrellas_servicio;
-    puntosSumados += Math.min(normalizedProductReviews.length, 5) * pointsConfig.valoracion_producto;
+    const extraReviewActions = [
+      comentario && comentario.length >= 10,
+      estrellasServicio && estrellasPersonal && estrellasRapidez
+    ].filter(Boolean).length;
+    const paidProductReviewActions = Math.min(normalizedProductReviews.length, Math.max(0, 5 - extraReviewActions));
+    const puntosSumados = pointsConfig.resena_base
+      + (comentario && comentario.length >= 10 ? pointsConfig.comentario_texto : 0)
+      + (estrellasServicio && estrellasPersonal && estrellasRapidez ? pointsConfig.estrellas_servicio : 0)
+      + paidProductReviewActions * pointsConfig.valoracion_producto;
 
     const [reviewResult] = await conn.query(
       `INSERT INTO resenas
