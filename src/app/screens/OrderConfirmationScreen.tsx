@@ -1,5 +1,5 @@
 import { useNavigate } from '../utils/navigation';
-import { CheckCircle, Clock, Loader2, Coins } from 'lucide-react';
+import { CheckCircle, Clock, Loader2, Coins, Star } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
@@ -74,6 +74,12 @@ export function OrderConfirmationScreen() {
   const handleTrackOrder = () => {
     if (orderNumber) {
       navigate(`/track-order/${orderNumber}`);
+    }
+  };
+
+  const handleReviewOrder = () => {
+    if (orderNumber) {
+      navigate(`/reviews/new?pedidoId=${orderNumber}`);
     }
   };
 
@@ -158,6 +164,13 @@ export function OrderConfirmationScreen() {
               className="w-full bg-black text-white rounded-full py-3 font-medium hover:bg-gray-800 transition-colors"
             >
               Track Order
+            </button>
+            <button
+              onClick={handleReviewOrder}
+              className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-amber-300 bg-amber-50 py-3 font-medium text-amber-800 transition-colors hover:bg-amber-100"
+            >
+              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+              Resenar pedido y ganar royalties
             </button>
             <button
               onClick={handleContinue}

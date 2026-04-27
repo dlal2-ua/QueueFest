@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, Heart, MapPin, Clock3, Plus, Store } from 'lucide-react';
+import { ChevronLeft, Heart, MapPin, Clock3, Plus, Store, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams, useLocation } from '../utils/navigation';
 import { useCart } from '../context/CartContext';
 import { useLanguage } from '../context/LanguageContext';
 import { BottomNav } from '../components/BottomNav';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
-import { getProductos, getPuesto, buildImageUrl, getPuestoPromociones } from '../api';
+import { getProductos, getPuesto, buildImageUrl, getPuestoPromociones, getProductReviewEligibility, type ProductReviewEligibility } from '../api';
+import { ReviewsList } from '../components/ReviewsList';
 import { formatPrice } from '../utils/formatPrice';
 import { getProductImage, isProductFavorite, toggleFavoriteProduct } from '../utils/productHelpers';
 import { getBestPromotionForProduct } from '../utils/promotions';
@@ -31,6 +32,7 @@ export function ProductDetailScreen() {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [vendor, setVendor] = useState<any | null>(null);
   const [activePromotion, setActivePromotion] = useState<any | null>(null);
+  const [reviewEligibility, setReviewEligibility] = useState<ProductReviewEligibility | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(() => isProductFavorite(String(id || '')));
 
@@ -74,19 +76,25 @@ export function ProductDetailScreen() {
               activo: foundProduct.activo ?? 1
             });
             setActivePromotion(getBestPromotionForProduct(promotionsData, foundProduct.id));
+            getProductReviewEligibility(Number(foundProduct.id))
+              .then(setReviewEligibility)
+              .catch(() => setReviewEligibility({ has_ordered: false, can_review: false, pedido: null }));
           } else {
             setProduct(null);
             setActivePromotion(null);
+            setReviewEligibility(null);
           }
         } else {
           setProduct(null);
           setActivePromotion(null);
+          setReviewEligibility(null);
         }
       } catch (error) {
         console.error('Error cargando detalle de producto:', error);
         setProduct(null);
         setVendor(null);
         setActivePromotion(null);
+        setReviewEligibility(null);
       } finally {
         setLoading(false);
       }
@@ -158,6 +166,11 @@ export function ProductDetailScreen() {
     }
 
     toast.success(`${activePromotion?.title || product.nombre} - anadido al carrito`);
+  };
+
+  const handleReviewProduct = () => {
+    if (!product || !reviewEligibility?.can_review || !reviewEligibility.pedido?.pedido_id) return;
+    navigate(`/reviews/new?pedidoId=${reviewEligibility.pedido.pedido_id}&productId=${product.id}`);
   };
 
   if (loading) {
@@ -273,6 +286,23 @@ export function ProductDetailScreen() {
               </>
             )}
           </button>
+
+          <button
+            onClick={handleReviewProduct}
+            disabled={!reviewEligibility?.can_review}
+            className={`mt-3 flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-4 text-sm font-semibold transition-colors ${
+              reviewEligibility?.can_review
+                ? 'border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                : 'border border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            <Star className={`h-4 w-4 ${reviewEligibility?.can_review ? 'fill-amber-400 text-amber-400' : ''}`} />
+            {reviewEligibility?.can_review
+              ? 'Resenar este producto'
+              : reviewEligibility?.has_ordered
+                ? 'Ya no tienes pedidos pendientes de resenar'
+                : 'Pidelo una vez para poder resenarlo'}
+          </button>
         </section>
 
         <section className="mt-4 rounded-3xl bg-white p-5 shadow-sm">
@@ -315,6 +345,18 @@ export function ProductDetailScreen() {
               Abrir puesto
             </button>
           </div>
+        </section>
+
+        <section className="mt-4 rounded-3xl bg-white p-5 shadow-sm">
+          <ReviewsList
+            scope="product"
+            id={product.id}
+            title="Resenas del producto"
+            subtitle="Opiniones verificadas de personas que lo han pedido."
+            limit={3}
+            compact
+            showViewAll
+          />
         </section>
       </div>
 

@@ -352,6 +352,129 @@ export const getLoyalty = async (): Promise<LoyaltyResponse> => {
     return res.json();
 };
 
+// ==================== RESENAS ====================
+export interface ReviewProductRecord {
+    id: number;
+    resena_id: number;
+    producto_id: number;
+    estrellas: number;
+    comentario?: string | null;
+    origen: 'manual' | 'ia';
+    producto_nombre: string;
+    foto_url?: string | null;
+}
+
+export interface ReviewRecord {
+    id: number;
+    pedido_id: number;
+    usuario_id: number;
+    puesto_id: number;
+    estrellas_general: number;
+    comentario?: string | null;
+    estrellas_servicio?: number | null;
+    estrellas_personal?: number | null;
+    estrellas_rapidez?: number | null;
+    puntos_sumados: number;
+    creado_en: string;
+    usuario_nombre: string;
+    puesto_nombre: string;
+    puesto_tipo: string;
+    productos: ReviewProductRecord[];
+}
+
+export interface ReviewContextProduct {
+    producto_id: number;
+    cantidad: number;
+    nombre: string;
+    descripcion?: string | null;
+    foto_url?: string | null;
+}
+
+export interface ReviewContext {
+    pedido: {
+        id: number;
+        usuario_id: number;
+        puesto_id: number;
+        total: number | string;
+        estado: string;
+        creado_en: string;
+        puesto_nombre: string;
+        puesto_tipo: string;
+    };
+    productos: ReviewContextProduct[];
+    existing_review?: { id: number; puntos_sumados: number } | null;
+    can_review: boolean;
+}
+
+export interface ProductReviewEligibility {
+    has_ordered: boolean;
+    can_review: boolean;
+    pedido?: {
+        pedido_id: number;
+        puesto_id: number;
+        puesto_nombre: string;
+        puesto_tipo: string;
+        creado_en: string;
+    } | null;
+}
+
+export interface CreateReviewPayload {
+    pedido_id: number;
+    estrellas_general: number;
+    comentario?: string | null;
+    estrellas_servicio?: number | null;
+    estrellas_personal?: number | null;
+    estrellas_rapidez?: number | null;
+    productos?: Array<{
+        producto_id: number;
+        estrellas: number;
+        comentario?: string | null;
+    }>;
+}
+
+export const getReviewContext = async (pedidoId: number): Promise<ReviewContext> => {
+    const res = await fetch(`${API_URL}/resenas/context?pedido_id=${pedidoId}`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar el pedido para resenar'));
+    return res.json();
+};
+
+export const getProductReviewEligibility = async (productId: number): Promise<ProductReviewEligibility> => {
+    const res = await fetch(`${API_URL}/resenas/eligibilidad/producto/${productId}`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al comprobar si puedes resenar'));
+    return res.json();
+};
+
+export const getReviews = async (params: {
+    mine?: boolean;
+    puesto_id?: number | string;
+    producto_id?: number | string;
+    pedido_id?: number | string;
+    limit?: number;
+} = {}): Promise<ReviewRecord[]> => {
+    const query = new URLSearchParams();
+    if (params.mine) query.set('mine', '1');
+    if (params.puesto_id) query.set('puesto_id', String(params.puesto_id));
+    if (params.producto_id) query.set('producto_id', String(params.producto_id));
+    if (params.pedido_id) query.set('pedido_id', String(params.pedido_id));
+    if (params.limit) query.set('limit', String(params.limit));
+
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_URL}/resenas${suffix}`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar resenas'));
+    const data = await res.json().catch(() => []);
+    return Array.isArray(data) ? data : [];
+};
+
+export const createReview = async (payload: CreateReviewPayload) => {
+    const res = await fetch(`${API_URL}/resenas`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al guardar la resena'));
+    return res.json();
+};
+
 // ==================== GESTOR ====================
 // Estadísticas del día: pedidos, ingresos, espera media, puestos abiertos
 export const getEstadisticas = async (festivalId?: number) => {

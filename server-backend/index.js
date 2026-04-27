@@ -634,6 +634,13 @@ const DEFAULT_LOYALTY_TIER_THRESHOLDS = {
   backstage: 50000
 };
 
+const DEFAULT_REVIEW_POINTS = {
+  resena_base: 50,
+  comentario_texto: 20,
+  estrellas_servicio: 20,
+  valoracion_producto: 20
+};
+
 function normalizeLoyaltyTierThresholds(input = {}) {
   const vip = Math.max(1000, Number(input.vip ?? DEFAULT_LOYALTY_TIER_THRESHOLDS.vip) || DEFAULT_LOYALTY_TIER_THRESHOLDS.vip);
   const headliner = Math.max(
@@ -702,6 +709,98 @@ async function ensureParametrosSchema() {
       DEFAULT_LOYALTY_TIER_THRESHOLDS.backstage
     ]
   );
+}
+
+async function ensureReviewsTableSchema() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS resenas (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      pedido_id INT NOT NULL UNIQUE,
+      usuario_id INT NOT NULL,
+      puesto_id INT NOT NULL,
+      estrellas_general TINYINT NOT NULL,
+      comentario TEXT NULL,
+      estrellas_servicio TINYINT NULL,
+      estrellas_personal TINYINT NULL,
+      estrellas_rapidez TINYINT NULL,
+      puntos_sumados INT NOT NULL DEFAULT 0,
+      ia_procesado TINYINT(1) NOT NULL DEFAULT 0,
+      creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+      FOREIGN KEY (puesto_id) REFERENCES puestos(id) ON DELETE CASCADE,
+      INDEX idx_resenas_puesto (puesto_id),
+      INDEX idx_resenas_usuario (usuario_id)
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS resenas_productos (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      resena_id INT NOT NULL,
+      producto_id INT NOT NULL,
+      estrellas TINYINT NOT NULL,
+      comentario TEXT NULL,
+      origen ENUM('manual','ia') NOT NULL DEFAULT 'manual',
+      creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_resena_producto (resena_id, producto_id),
+      FOREIGN KEY (resena_id) REFERENCES resenas(id) ON DELETE CASCADE,
+      FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+      INDEX idx_rp_producto (producto_id)
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS resena_puntos_config (
+      accion VARCHAR(50) NOT NULL PRIMARY KEY,
+      puntos INT NOT NULL DEFAULT 0,
+      descripcion VARCHAR(255) NULL,
+      activo TINYINT(1) NOT NULL DEFAULT 1
+    )
+  `);
+
+  await db.query(
+    `INSERT INTO resena_puntos_config (accion, puntos, descripcion, activo) VALUES
+      ('resena_base', ?, 'Por crear una resena con al menos estrellas_general', 1),
+      ('comentario_texto', ?, 'Por anadir comentario de texto de al menos 10 caracteres', 1),
+      ('estrellas_servicio', ?, 'Por valorar servicio, personal y rapidez', 1),
+      ('valoracion_producto', ?, 'Por cada producto valorado manualmente, maximo 3', 1)
+     ON DUPLICATE KEY UPDATE
+      puntos = VALUES(puntos),
+      descripcion = VALUES(descripcion),
+      activo = VALUES(activo)`,
+    [
+      DEFAULT_REVIEW_POINTS.resena_base,
+      DEFAULT_REVIEW_POINTS.comentario_texto,
+      DEFAULT_REVIEW_POINTS.estrellas_servicio,
+      DEFAULT_REVIEW_POINTS.valoracion_producto
+    ]
+  );
+}
+
+function isValidStars(value) {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric >= 1 && numeric <= 5;
+}
+
+function normalizeOptionalComment(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+async function getReviewPointsConfig(conn = db) {
+  const [rows] = await conn.query(
+    `SELECT accion, puntos
+     FROM resena_puntos_config
+     WHERE activo = 1
+       AND accion IN ('resena_base', 'comentario_texto', 'estrellas_servicio', 'valoracion_producto')`
+  );
+
+  return rows.reduce((acc, row) => {
+    acc[row.accion] = Number(row.puntos) || 0;
+    return acc;
+  }, { ...DEFAULT_REVIEW_POINTS });
 }
 
 async function ensureNotificationsTableSchema() {
@@ -1022,6 +1121,9 @@ async function initDB() {
 
     await ensureParametrosSchema();
     console.log('SQL Migration parametros checked.');
+
+    await ensureReviewsTableSchema();
+    console.log('SQL Migration resenas checked.');
 
     await paymentsModule.initDb(db);
   } catch (err) {
@@ -1637,6 +1739,323 @@ app.post('/api/pedidos', auth, async (req, res) => {
     await conn.commit();
     await evaluateWaitZeroTriggerForPuesto(Number(puesto_id), 'pedido_creado');
     res.json({ pedido_id: pedidoId, puntos_ganados: puntos });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ error: err.message });
+  } finally {
+    conn.release();
+  }
+});
+
+// ==================== RESENAS ====================
+
+app.get('/api/resenas/context', auth, async (req, res) => {
+  try {
+    const pedidoId = Number(req.query.pedido_id);
+    if (!Number.isInteger(pedidoId) || pedidoId <= 0) {
+      return res.status(400).json({ error: 'pedido_id invalido' });
+    }
+
+    const [pedidos] = await db.query(
+      `SELECT p.id, p.usuario_id, p.puesto_id, p.total, p.estado, p.creado_en,
+              pu.nombre AS puesto_nombre, pu.tipo AS puesto_tipo
+       FROM pedidos p
+       JOIN puestos pu ON pu.id = p.puesto_id
+       WHERE p.id = ?
+       LIMIT 1`,
+      [pedidoId]
+    );
+
+    if (pedidos.length === 0) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const pedido = pedidos[0];
+    if (req.user.rol === 'usuario' && Number(pedido.usuario_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'No tienes permiso para resenar este pedido' });
+    }
+
+    const [items] = await db.query(
+      `SELECT pi.producto_id, SUM(pi.cantidad) AS cantidad, pr.nombre, pr.descripcion, pr.foto_url
+       FROM pedido_items pi
+       JOIN productos pr ON pr.id = pi.producto_id
+       WHERE pi.pedido_id = ?
+       GROUP BY pi.producto_id, pr.nombre, pr.descripcion, pr.foto_url
+       ORDER BY pr.nombre ASC`,
+      [pedidoId]
+    );
+
+    const [reviews] = await db.query('SELECT id, puntos_sumados FROM resenas WHERE pedido_id = ? LIMIT 1', [pedidoId]);
+
+    res.json({
+      pedido,
+      productos: items,
+      existing_review: reviews[0] || null,
+      can_review: pedido.estado !== 'cancelado' && reviews.length === 0
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/resenas/eligibilidad/producto/:id', auth, async (req, res) => {
+  try {
+    const productId = Number(req.params.id);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return res.status(400).json({ error: 'producto_id invalido' });
+    }
+
+    const [orderedRows] = await db.query(
+      `SELECT COUNT(*) AS total
+       FROM pedidos p
+       JOIN pedido_items pi ON pi.pedido_id = p.id
+       WHERE p.usuario_id = ?
+         AND pi.producto_id = ?
+         AND p.estado <> 'cancelado'`,
+      [req.user.id, productId]
+    );
+
+    const [eligibleRows] = await db.query(
+      `SELECT p.id AS pedido_id, p.puesto_id, pu.nombre AS puesto_nombre, pu.tipo AS puesto_tipo, p.creado_en
+       FROM pedidos p
+       JOIN pedido_items pi ON pi.pedido_id = p.id
+       JOIN puestos pu ON pu.id = p.puesto_id
+       LEFT JOIN resenas r ON r.pedido_id = p.id
+       WHERE p.usuario_id = ?
+         AND pi.producto_id = ?
+         AND p.estado <> 'cancelado'
+         AND r.id IS NULL
+       ORDER BY p.creado_en DESC
+       LIMIT 1`,
+      [req.user.id, productId]
+    );
+
+    const orderedCount = Number(orderedRows[0]?.total || 0);
+    res.json({
+      has_ordered: orderedCount > 0,
+      can_review: eligibleRows.length > 0,
+      pedido: eligibleRows[0] || null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/resenas', auth, async (req, res) => {
+  try {
+    const conditions = [];
+    const params = [];
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+
+    if (req.query.mine === '1' || req.query.mine === 'true') {
+      conditions.push('r.usuario_id = ?');
+      params.push(req.user.id);
+    }
+
+    if (req.query.puesto_id) {
+      conditions.push('r.puesto_id = ?');
+      params.push(Number(req.query.puesto_id));
+    }
+
+    if (req.query.pedido_id) {
+      conditions.push('r.pedido_id = ?');
+      params.push(Number(req.query.pedido_id));
+    }
+
+    if (req.query.producto_id) {
+      conditions.push(`EXISTS (
+        SELECT 1
+        FROM resenas_productos rp_filter
+        WHERE rp_filter.resena_id = r.id
+          AND rp_filter.producto_id = ?
+      )`);
+      params.push(Number(req.query.producto_id));
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [reviews] = await db.query(
+      `SELECT r.id, r.pedido_id, r.usuario_id, r.puesto_id, r.estrellas_general, r.comentario,
+              r.estrellas_servicio, r.estrellas_personal, r.estrellas_rapidez,
+              r.puntos_sumados, r.creado_en,
+              COALESCE(u.alias, u.nombre) AS usuario_nombre,
+              pu.nombre AS puesto_nombre,
+              pu.tipo AS puesto_tipo
+       FROM resenas r
+       JOIN usuarios u ON u.id = r.usuario_id
+       JOIN puestos pu ON pu.id = r.puesto_id
+       ${where}
+       ORDER BY r.creado_en DESC
+       LIMIT ${limit}`,
+      params
+    );
+
+    if (reviews.length === 0) return res.json([]);
+
+    const reviewIds = reviews.map((review) => review.id);
+    const [productReviews] = await db.query(
+      `SELECT rp.id, rp.resena_id, rp.producto_id, rp.estrellas, rp.comentario, rp.origen,
+              pr.nombre AS producto_nombre, pr.foto_url
+       FROM resenas_productos rp
+       JOIN productos pr ON pr.id = rp.producto_id
+       WHERE rp.resena_id IN (?)
+       ORDER BY rp.creado_en ASC`,
+      [reviewIds]
+    );
+
+    const productsByReview = productReviews.reduce((acc, row) => {
+      if (!acc[row.resena_id]) acc[row.resena_id] = [];
+      acc[row.resena_id].push(row);
+      return acc;
+    }, {});
+
+    res.json(reviews.map((review) => ({
+      ...review,
+      productos: productsByReview[review.id] || []
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/resenas', auth, async (req, res) => {
+  const conn = await db.getConnection();
+  try {
+    const pedidoId = Number(req.body.pedido_id);
+    const estrellasGeneral = Number(req.body.estrellas_general);
+    const comentario = normalizeOptionalComment(req.body.comentario);
+    const estrellasServicio = req.body.estrellas_servicio == null || req.body.estrellas_servicio === ''
+      ? null
+      : Number(req.body.estrellas_servicio);
+    const estrellasPersonal = req.body.estrellas_personal == null || req.body.estrellas_personal === ''
+      ? null
+      : Number(req.body.estrellas_personal);
+    const estrellasRapidez = req.body.estrellas_rapidez == null || req.body.estrellas_rapidez === ''
+      ? null
+      : Number(req.body.estrellas_rapidez);
+    const productoReviews = Array.isArray(req.body.productos) ? req.body.productos : [];
+
+    if (!Number.isInteger(pedidoId) || pedidoId <= 0) return res.status(400).json({ error: 'pedido_id invalido' });
+    if (!isValidStars(estrellasGeneral)) return res.status(400).json({ error: 'estrellas_general debe estar entre 1 y 5' });
+    for (const value of [estrellasServicio, estrellasPersonal, estrellasRapidez]) {
+      if (value != null && !isValidStars(value)) return res.status(400).json({ error: 'Las estrellas opcionales deben estar entre 1 y 5' });
+    }
+
+    await conn.beginTransaction();
+
+    const [pedidos] = await conn.query(
+      `SELECT id, usuario_id, puesto_id, estado
+       FROM pedidos
+       WHERE id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [pedidoId]
+    );
+
+    if (pedidos.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    const pedido = pedidos[0];
+    if (Number(pedido.usuario_id) !== Number(req.user.id)) {
+      await conn.rollback();
+      return res.status(403).json({ error: 'No puedes resenar un pedido que no es tuyo' });
+    }
+
+    if (pedido.estado === 'cancelado') {
+      await conn.rollback();
+      return res.status(400).json({ error: 'No se puede resenar un pedido cancelado' });
+    }
+
+    const [existing] = await conn.query('SELECT id FROM resenas WHERE pedido_id = ? LIMIT 1', [pedidoId]);
+    if (existing.length > 0) {
+      await conn.rollback();
+      return res.status(409).json({ error: 'Este pedido ya tiene una resena' });
+    }
+
+    const [pedidoProducts] = await conn.query(
+      `SELECT DISTINCT producto_id
+       FROM pedido_items
+       WHERE pedido_id = ?`,
+      [pedidoId]
+    );
+    const allowedProductIds = new Set(pedidoProducts.map((item) => Number(item.producto_id)));
+    const normalizedProductReviews = [];
+    const seenProductIds = new Set();
+
+    for (const item of productoReviews) {
+      const productId = Number(item.producto_id);
+      const stars = Number(item.estrellas);
+      const productComment = normalizeOptionalComment(item.comentario);
+
+      if (!Number.isInteger(productId) || !allowedProductIds.has(productId) || seenProductIds.has(productId)) continue;
+      if (!isValidStars(stars)) continue;
+
+      seenProductIds.add(productId);
+      normalizedProductReviews.push({
+        producto_id: productId,
+        estrellas: stars,
+        comentario: productComment
+      });
+    }
+
+    const pointsConfig = await getReviewPointsConfig(conn);
+    let puntosSumados = pointsConfig.resena_base;
+    if (comentario && comentario.length >= 10) puntosSumados += pointsConfig.comentario_texto;
+    if (estrellasServicio && estrellasPersonal && estrellasRapidez) puntosSumados += pointsConfig.estrellas_servicio;
+    puntosSumados += Math.min(normalizedProductReviews.length, 3) * pointsConfig.valoracion_producto;
+
+    const [reviewResult] = await conn.query(
+      `INSERT INTO resenas
+        (pedido_id, usuario_id, puesto_id, estrellas_general, comentario, estrellas_servicio, estrellas_personal, estrellas_rapidez, puntos_sumados)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        pedidoId,
+        req.user.id,
+        pedido.puesto_id,
+        estrellasGeneral,
+        comentario,
+        estrellasServicio,
+        estrellasPersonal,
+        estrellasRapidez,
+        puntosSumados
+      ]
+    );
+
+    for (const item of normalizedProductReviews) {
+      await conn.query(
+        `INSERT INTO resenas_productos (resena_id, producto_id, estrellas, comentario, origen)
+         VALUES (?, ?, ?, ?, 'manual')`,
+        [reviewResult.insertId, item.producto_id, item.estrellas, item.comentario]
+      );
+    }
+
+    await conn.query(
+      `INSERT INTO loyalty
+        (usuario_id, puntos_total, puntos_pendientes, puntos_ganados_total, puntos_canjeados_total, nivel, activo, ultimo_movimiento_en)
+       VALUES (?, ?, 0, ?, 0, 'fan', 1, CURRENT_TIMESTAMP)
+       ON DUPLICATE KEY UPDATE
+         puntos_total = puntos_total + VALUES(puntos_total),
+         puntos_ganados_total = puntos_ganados_total + VALUES(puntos_ganados_total),
+         ultimo_movimiento_en = CURRENT_TIMESTAMP`,
+      [req.user.id, puntosSumados, puntosSumados]
+    );
+
+    const [loyaltyRows] = await conn.query(
+      'SELECT id, puntos_total FROM loyalty WHERE usuario_id = ?',
+      [req.user.id]
+    );
+    const loyalty = loyaltyRows[0];
+    await conn.query(
+      `INSERT INTO loyalty_movimientos
+        (loyalty_id, pedido_id, tipo, origen, puntos, saldo_resultante, estado, descripcion, confirmado_en)
+       VALUES (?, ?, 'resena', 'resena', ?, ?, 'confirmado', ?, CURRENT_TIMESTAMP)`,
+      [loyalty.id, pedidoId, puntosSumados, loyalty.puntos_total, `Resena pedido #${pedidoId}`]
+    );
+
+    await conn.commit();
+    res.json({
+      id: reviewResult.insertId,
+      puntos_sumados: puntosSumados,
+      productos_valorados: normalizedProductReviews.length
+    });
   } catch (err) {
     await conn.rollback();
     res.status(500).json({ error: err.message });

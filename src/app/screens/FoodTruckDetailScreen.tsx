@@ -6,6 +6,7 @@ import { OfferCard } from '../components/OfferCard';
 import { useCart } from '../context/CartContext';
 import { StatusBadge } from '../components/StatusBadge';
 import { BottomNav } from '../components/BottomNav';
+import { ReviewsList } from '../components/ReviewsList';
 import { getProductos, getPuesto, buildImageUrl, getPuestoPromociones } from '../api';
 import { buildPromotionOffer, getBestPromotionForProduct } from '../utils/promotions';
 
@@ -265,6 +266,17 @@ export function FoodTruckDetailScreen() {
             )}
           </>
         )}
+
+        <div className="mt-8">
+          <ReviewsList
+            scope="puesto"
+            id={id}
+            title="Resenas del food truck"
+            subtitle="Opiniones verificadas de pedidos realizados aqui."
+            limit={3}
+            showViewAll
+          />
+        </div>
       </div>
 
       <BottomNav />
