@@ -764,7 +764,7 @@ async function ensureReviewsTableSchema() {
       ('resena_base', ?, 'Por crear una resena con al menos estrellas_general', 1),
       ('comentario_texto', ?, 'Por anadir comentario de texto de al menos 10 caracteres', 1),
       ('estrellas_servicio', ?, 'Por valorar servicio, personal y rapidez', 1),
-      ('valoracion_producto', ?, 'Por cada producto valorado manualmente, maximo 3', 1)
+      ('valoracion_producto', ?, 'Por cada producto valorado manualmente, maximo 5', 1)
      ON DUPLICATE KEY UPDATE
       puntos = VALUES(puntos),
       descripcion = VALUES(descripcion),
@@ -2000,7 +2000,7 @@ app.post('/api/resenas', auth, async (req, res) => {
     let puntosSumados = pointsConfig.resena_base;
     if (comentario && comentario.length >= 10) puntosSumados += pointsConfig.comentario_texto;
     if (estrellasServicio && estrellasPersonal && estrellasRapidez) puntosSumados += pointsConfig.estrellas_servicio;
-    puntosSumados += Math.min(normalizedProductReviews.length, 3) * pointsConfig.valoracion_producto;
+    puntosSumados += Math.min(normalizedProductReviews.length, 5) * pointsConfig.valoracion_producto;
 
     const [reviewResult] = await conn.query(
       `INSERT INTO resenas
@@ -2047,7 +2047,7 @@ app.post('/api/resenas', auth, async (req, res) => {
       `INSERT INTO loyalty_movimientos
         (loyalty_id, pedido_id, tipo, origen, puntos, saldo_resultante, estado, descripcion, confirmado_en)
        VALUES (?, ?, 'resena', 'resena', ?, ?, 'confirmado', ?, CURRENT_TIMESTAMP)`,
-      [loyalty.id, pedidoId, puntosSumados, loyalty.puntos_total, `Resena pedido #${pedidoId}`]
+      [loyalty.id, pedidoId, puntosSumados, loyalty.puntos_total, `Reseña pedido #${pedidoId}`]
     );
 
     await conn.commit();

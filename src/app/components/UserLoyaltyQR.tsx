@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Copy, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLanguage } from '../context/LanguageContext';
 
 interface UserLoyaltyQRProps {
   userId: number;
@@ -10,6 +11,7 @@ interface UserLoyaltyQRProps {
 }
 
 export function UserLoyaltyQR({ userId, userName, userEmail }: UserLoyaltyQRProps) {
+  const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
 
   const loyaltyCode = `QFU-${String(userId || 0).padStart(6, '0')}`;
@@ -25,10 +27,10 @@ export function UserLoyaltyQR({ userId, userName, userEmail }: UserLoyaltyQRProp
     try {
       await navigator.clipboard.writeText(`${loyaltyCode} - ${userEmail}`);
       setCopied(true);
-      toast.success('Codigo de loyalty copiado');
+      toast.success(t('loyalty.qrCopied'));
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error('No se pudo copiar el codigo');
+      toast.error(t('loyalty.qrCopyError'));
     }
   };
 
@@ -52,7 +54,7 @@ export function UserLoyaltyQR({ userId, userName, userEmail }: UserLoyaltyQRProp
           <button
             onClick={handleCopy}
             className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-            title="Copiar codigo de loyalty"
+            title={t('loyalty.qrCopyTitle')}
           >
             {copied ? (
               <CheckCircle2 className="w-5 h-5 text-green-600" />
@@ -64,7 +66,7 @@ export function UserLoyaltyQR({ userId, userName, userEmail }: UserLoyaltyQRProp
       </div>
 
       <p className="text-xs text-gray-400 text-center max-w-xs">
-        Muestra este QR antes de pagar para asociar una compra presencial a tu cuenta y sumar royalties automaticamente.
+        {t('loyalty.qrHelp')}
       </p>
     </div>
   );

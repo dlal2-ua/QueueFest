@@ -58,7 +58,7 @@ export function ProfileScreen() {
 
   const menuItems = [
     { icon: User, label: t('profile.personalInfo'), path: '/profile/info' },
-    { icon: Coins, label: 'Royalties', path: '/profile/royalties' },
+    { icon: Coins, label: t('loyalty.title'), path: '/profile/royalties' },
     { icon: CreditCard, label: t('profile.paymentMethods'), path: '/profile/payments' },
     { icon: Clock, label: t('profile.orderHistory'), path: '/profile/orders' },
     { icon: Star, label: t('profile.reviews'), path: '/profile/reviews' },
@@ -91,7 +91,7 @@ export function ProfileScreen() {
           <p className="text-white/90">{userProfile.email}</p>
           <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">
             <Sparkles className="h-4 w-4" />
-            <span>Nivel {royaltyTier.currentTier}</span>
+            <span>{t('loyalty.level')} {royaltyTier.currentTier}</span>
           </div>
         </div>
       </div>
@@ -103,9 +103,9 @@ export function ProfileScreen() {
         >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-white/80">Saldo disponible</p>
+              <p className="text-sm font-medium text-white/80">{t('loyalty.availableBalance')}</p>
               <p className="mt-2 text-4xl font-black tracking-tight">{balance}</p>
-              <p className="mt-2 text-sm text-white/85">+{pending} pendientes por confirmar</p>
+              <p className="mt-2 text-sm text-white/85">{t('loyalty.pendingToConfirm').replace('{points}', String(pending))}</p>
             </div>
             <div className="rounded-2xl bg-white/20 p-3 backdrop-blur-sm">
               <Coins className="h-7 w-7" />
@@ -121,7 +121,7 @@ export function ProfileScreen() {
               <div className="h-2 rounded-full bg-white transition-all" style={{ width: `${royaltyProgress}%` }} />
             </div>
             <p className="mt-2 text-sm text-white/85">
-              Te faltan {Math.max(0, royaltyTier.nextTierTarget - balance)} royalties para subir de nivel.
+              {t('loyalty.profileRemaining').replace('{points}', String(Math.max(0, royaltyTier.nextTierTarget - balance)))}
             </p>
           </div>
         </button>

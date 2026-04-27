@@ -6,7 +6,7 @@ import { RoyaltiesPanel } from '../components/RoyaltiesPanel';
 
 export function RoyaltiesScreen() {
   const navigate = useNavigate();
-  const { isRTL } = useLanguage();
+  const { isRTL, t } = useLanguage();
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -19,8 +19,8 @@ export function RoyaltiesScreen() {
             <ChevronLeft className={`w-6 h-6 ${isRTL ? 'rotate-180' : ''}`} />
           </button>
           <div>
-            <h1 className="text-xl font-semibold">Royalties</h1>
-            <p className="text-sm text-gray-500">Tu saldo virtual, progreso y QR de identificacion.</p>
+            <h1 className="text-xl font-semibold">{t('loyalty.title')}</h1>
+            <p className="text-sm text-gray-500">{t('loyalty.screenSubtitle')}</p>
           </div>
         </div>
       </div>

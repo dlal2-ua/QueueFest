@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 export function RegisterScreen() {
   const navigate = useNavigate();
-  const { isRTL } = useLanguage();
+  const { isRTL, t } = useLanguage();
   const { login } = useAuth();
   const [formData, setFormData] = useState({
     fullName: '',
@@ -79,7 +79,7 @@ export function RegisterScreen() {
               <User className="w-10 h-10 text-white" />
             </div>
             <h1 className="text-3xl font-bold mb-2">Crear cuenta</h1>
-            <p className="text-gray-600">Registrate para empezar a pedir y acumular royalties</p>
+            <p className="text-gray-600">{t('loyalty.registerSubtitle')}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

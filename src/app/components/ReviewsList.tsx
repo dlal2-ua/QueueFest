@@ -137,7 +137,7 @@ export function ReviewsList({ scope, id, title, subtitle, limit = 5, compact = f
               {scope === 'mine' && (
                 <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                   <MessageSquare className="h-3.5 w-3.5" />
-                  +{review.puntos_sumados} royalties
+                  {t('loyalty.pointsEarned').replace('{points}', String(review.puntos_sumados))}
                 </div>
               )}
             </article>

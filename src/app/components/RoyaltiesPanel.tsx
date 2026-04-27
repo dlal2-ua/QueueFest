@@ -3,11 +3,11 @@ import { Coins, Sparkles, Gift, ArrowDownLeft, ArrowUpRight, Clock3, QrCode, Loa
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { getLoyalty, type LoyaltyResponse } from '../api';
-import { DEFAULT_ROYALTY_THRESHOLDS, ROYALTY_BENEFITS, ROYALTY_EARN_RULES, ROYALTY_REDEEM_RATE, ROYALTY_REDEEM_VALUE, getRoyaltyProgress, getRoyaltyTierStatus, getRoyaltiesToNextTier, getUserProfile } from '../data/profileData';
+import { DEFAULT_ROYALTY_THRESHOLDS, ROYALTY_REDEEM_RATE, ROYALTY_REDEEM_VALUE, getRoyaltyProgress, getRoyaltyTierStatus, getRoyaltiesToNextTier, getUserProfile } from '../data/profileData';
 import { UserLoyaltyQR } from './UserLoyaltyQR';
 
 export function RoyaltiesPanel() {
-  const { isRTL, language } = useLanguage();
+  const { isRTL, language, t } = useLanguage();
   const { user } = useAuth();
   const [loyalty, setLoyalty] = useState<LoyaltyResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,6 +59,16 @@ export function RoyaltiesPanel() {
   const remaining = getRoyaltiesToNextTier(balance, thresholds);
 
   const formatter = new Intl.NumberFormat(language === 'es' ? 'es-ES' : 'en-US');
+  const royaltyEarnRules = [
+    { title: t('loyalty.earnPurchaseTitle'), description: t('loyalty.earnPurchaseDesc') },
+    { title: t('loyalty.earnReviewsTitle'), description: t('loyalty.earnReviewsDesc') },
+    { title: t('loyalty.earnOffersTitle'), description: t('loyalty.earnOffersDesc') }
+  ];
+  const royaltyBenefits = [
+    t('loyalty.benefitDiscounts'),
+    t('loyalty.benefitPriority'),
+    t('loyalty.benefitLevels')
+  ];
 
   const getMovementIcon = (status: string) => {
     if (status === 'canjeado') return ArrowUpRight;
@@ -73,10 +83,10 @@ export function RoyaltiesPanel() {
   };
 
   const getMovementLabel = (status: string) => {
-    if (status === 'canjeado') return 'Canjeado';
-    if (status === 'pendiente') return 'Pendiente';
-    if (status === 'cancelado') return 'Cancelado';
-    return 'Abonado';
+    if (status === 'canjeado') return t('loyalty.redeemed');
+    if (status === 'pendiente') return t('loyalty.pendingStatus');
+    if (status === 'cancelado') return t('loyalty.cancelled');
+    return t('loyalty.credited');
   };
 
   const formatDate = (value: string) =>
@@ -99,10 +109,12 @@ export function RoyaltiesPanel() {
       <section className="rounded-3xl bg-gradient-to-br from-amber-300 via-orange-500 to-rose-500 p-5 text-white shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-medium text-white/80">Saldo disponible</p>
+            <p className="text-sm font-medium text-white/80">{t('loyalty.availableBalance')}</p>
             <p className="mt-2 text-5xl font-black tracking-tight">{formatter.format(balance)}</p>
             <p className="mt-3 text-sm text-white/85">
-              {ROYALTY_REDEEM_RATE} royalties equivalen a {ROYALTY_REDEEM_VALUE} EUR de saldo promocional.
+              {t('loyalty.redeemInfo')
+                .replace('{rate}', String(ROYALTY_REDEEM_RATE))
+                .replace('{value}', String(ROYALTY_REDEEM_VALUE))}
             </p>
           </div>
           <div className="rounded-2xl bg-white/20 p-3 backdrop-blur-sm">
@@ -112,11 +124,11 @@ export function RoyaltiesPanel() {
 
         <div className="mt-6 grid grid-cols-2 gap-3">
           <div className="rounded-2xl bg-black/15 p-4 backdrop-blur-sm">
-            <p className="text-xs uppercase tracking-wide text-white/70">Pendientes</p>
+            <p className="text-xs uppercase tracking-wide text-white/70">{t('loyalty.pending')}</p>
             <p className="mt-2 text-2xl font-bold">+{formatter.format(pending)}</p>
           </div>
           <div className="rounded-2xl bg-black/15 p-4 backdrop-blur-sm">
-            <p className="text-xs uppercase tracking-wide text-white/70">Acumulados</p>
+            <p className="text-xs uppercase tracking-wide text-white/70">{t('loyalty.lifetime')}</p>
             <p className="mt-2 text-2xl font-bold">{formatter.format(lifetimeEarned)}</p>
           </div>
         </div>
@@ -125,17 +137,17 @@ export function RoyaltiesPanel() {
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="inline-flex items-center gap-2 font-semibold">
               <Sparkles className="h-4 w-4" />
-              Nivel {tierStatus.currentTier}
+              {t('loyalty.level')} {tierStatus.currentTier}
             </span>
-            <span>Objetivo: {tierStatus.nextTier}</span>
+            <span>{t('loyalty.objective')}: {tierStatus.nextTier}</span>
           </div>
           <div className="mt-3 h-2 rounded-full bg-white/20">
             <div className="h-2 rounded-full bg-white transition-all" style={{ width: `${progress}%` }} />
           </div>
           <p className="mt-3 text-sm text-white/85">
             {remaining > 0
-              ? `Te faltan ${formatter.format(remaining)} royalties para llegar a ${tierStatus.nextTier}.`
-              : 'Ya estas en el nivel mas alto del programa.'}
+              ? t('loyalty.remaining').replace('{points}', formatter.format(remaining)).replace('{tier}', tierStatus.nextTier)
+              : t('loyalty.highestTier')}
           </p>
         </div>
       </section>
@@ -146,8 +158,8 @@ export function RoyaltiesPanel() {
             <QrCode className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-gray-900">QR para compras presenciales</h2>
-            <p className="text-sm text-gray-500">El personal del puesto lo escanea antes del cobro para asociar la compra a tu cuenta.</p>
+            <h2 className="text-lg font-bold text-gray-900">{t('loyalty.qrTitle')}</h2>
+            <p className="text-sm text-gray-500">{t('loyalty.qrSubtitle')}</p>
           </div>
         </div>
 
@@ -164,13 +176,13 @@ export function RoyaltiesPanel() {
             <Coins className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Como se consiguen</h2>
-            <p className="text-sm text-gray-500">Base funcional del sistema de recompensa dentro de QueueFest.</p>
+            <h2 className="text-lg font-bold text-gray-900">{t('loyalty.howEarnTitle')}</h2>
+            <p className="text-sm text-gray-500">{t('loyalty.howEarnSubtitle')}</p>
           </div>
         </div>
 
         <div className="space-y-3">
-          {ROYALTY_EARN_RULES.map((rule) => (
+          {royaltyEarnRules.map((rule) => (
             <div key={rule.title} className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
               <p className="font-semibold text-gray-900">{rule.title}</p>
               <p className="mt-1 text-sm text-gray-600">{rule.description}</p>
@@ -185,13 +197,13 @@ export function RoyaltiesPanel() {
             <Gift className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-gray-900">En que podran ayudarte</h2>
-            <p className="text-sm text-gray-500">Vision inicial del programa antes de conectar el canje real.</p>
+            <h2 className="text-lg font-bold text-gray-900">{t('loyalty.benefitsTitle')}</h2>
+            <p className="text-sm text-gray-500">{t('loyalty.benefitsSubtitle')}</p>
           </div>
         </div>
 
         <div className="space-y-3">
-          {ROYALTY_BENEFITS.map((benefit) => (
+          {royaltyBenefits.map((benefit) => (
             <div key={benefit} className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-700">
               {benefit}
             </div>
@@ -201,13 +213,13 @@ export function RoyaltiesPanel() {
 
       <section className="bg-white rounded-2xl p-5 shadow-sm">
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-gray-900">Actividad reciente</h2>
-          <p className="text-sm text-gray-500">Movimientos reales del saldo loyalty del usuario.</p>
+          <h2 className="text-lg font-bold text-gray-900">{t('loyalty.activityTitle')}</h2>
+          <p className="text-sm text-gray-500">{t('loyalty.activitySubtitle')}</p>
         </div>
 
         {movements.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-sm text-gray-500">
-            Todavia no hay movimientos registrados en tu cuenta.
+            {t('loyalty.emptyMovements')}
           </div>
         ) : (
         <div className="space-y-3">
@@ -227,7 +239,7 @@ export function RoyaltiesPanel() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="font-semibold text-gray-900">{movement.tipo}</p>
-                      <p className="text-sm text-gray-500">{movement.descripcion || movement.origen || 'Movimiento loyalty'}</p>
+                      <p className="text-sm text-gray-500">{movement.descripcion || movement.origen || t('loyalty.movementFallback')}</p>
                     </div>
                     <div className="text-right">
                       <p className={`font-bold ${amountClass}`}>

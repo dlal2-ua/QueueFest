@@ -14,11 +14,6 @@ export interface UserProfile {
   memberSince: string;
 }
 
-export interface RoyaltyRule {
-  title: string;
-  description: string;
-}
-
 export interface RoyaltyThresholds {
   vip: number;
   headliner: number;
@@ -41,25 +36,6 @@ export const DEFAULT_ROYALTY_THRESHOLDS: RoyaltyThresholds = {
   headliner: 25000,
   backstage: 50000
 };
-export const ROYALTY_BENEFITS = [
-  'Descuentos directos en futuras compras dentro del festival.',
-  'Acceso prioritario a promociones flash y menus especiales.',
-  'Nivel superior con ventajas exclusivas al seguir comprando.'
-];
-export const ROYALTY_EARN_RULES: RoyaltyRule[] = [
-  {
-    title: 'Compra completada',
-    description: 'Gana 100 royalties por cada euro gastado. 1000 royalties equivalen a 1 EUR.'
-  },
-  {
-    title: 'Reseñas verificadas',
-    description: 'Una reseña con estrellas puede darte una base de 50 puntos, mas extras por acciones complementarias.'
-  },
-  {
-    title: 'Ofertas especiales',
-    description: 'Algunas activaciones del festival multiplicaran temporalmente los royalties obtenidos.'
-  }
-];
 
 export const defaultUserProfile: UserProfile = {
   fullName: 'Juan Perez',

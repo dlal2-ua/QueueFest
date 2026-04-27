@@ -69,7 +69,7 @@ export function ReviewFormScreen() {
   const estimatedPoints = 50
     + (comment.trim().length >= 10 ? 20 : 0)
     + (serviceStars > 0 && staffStars > 0 && speedStars > 0 ? 20 : 0)
-    + Math.min(selectedProductReviews.length, 3) * 20;
+    + Math.min(selectedProductReviews.length, 5) * 20;
 
   const updateProductReview = (productId: number, patch: Partial<ProductReviewDraft>) => {
     setProductReviews((current) => ({
@@ -115,7 +115,7 @@ export function ReviewFormScreen() {
         }))
       });
 
-      toast.success(`${t('reviews.savedToast')} +${result.puntos_sumados} royalties`);
+      toast.success(`${t('reviews.savedToast')} ${t('loyalty.pointsEarned').replace('{points}', String(result.puntos_sumados))}`);
       navigate('/profile/reviews');
     } catch (error: any) {
       toast.error(error.message || t('reviews.orderNotFoundBody'));

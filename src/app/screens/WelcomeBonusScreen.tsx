@@ -3,10 +3,12 @@ import { Coins, Gift, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate } from '../utils/navigation';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { ROYALTY_WELCOME_BONUS } from '../data/profileData';
 
 export function WelcomeBonusScreen() {
   const navigate = useNavigate();
+  const { t, language } = useLanguage();
   const { user } = useAuth();
 
   const welcomeData = useMemo(() => {
@@ -62,29 +64,29 @@ export function WelcomeBonusScreen() {
 
           <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-800">
             <Sparkles className="h-4 w-4" />
-            Bienvenido a QueueFest
+            {t('loyalty.welcomeBadge')}
           </div>
 
           <h1 className="mt-5 text-3xl font-black tracking-tight text-gray-900">
-            {userName}, ya tienes tus primeros puntos
+            {t('loyalty.welcomeTitle').replace('{name}', userName)}
           </h1>
           <p className="mt-3 text-base text-gray-600">
-            Acabas de estrenar tu cuenta y te hemos regalado un bonus de bienvenida para empezar a pedir con ventaja.
+            {t('loyalty.welcomeBody')}
           </p>
 
           <div className="mt-6 rounded-3xl bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 p-6 text-white shadow-xl">
             <div className="flex items-center justify-center gap-3">
               <Coins className="h-7 w-7" />
-              <span className="text-4xl font-black tracking-tight">{points.toLocaleString('es-ES')}</span>
+              <span className="text-4xl font-black tracking-tight">{points.toLocaleString(language === 'es' ? 'es-ES' : 'en-US')}</span>
             </div>
-            <p className="mt-2 text-sm text-white/90">Royalties de bienvenida ya abonados en tu perfil</p>
+            <p className="mt-2 text-sm text-white/90">{t('loyalty.welcomeBalance')}</p>
           </div>
 
           <button
             onClick={handleViewProfile}
             className="mt-8 w-full rounded-2xl bg-gray-950 px-5 py-4 text-base font-semibold text-white transition-colors hover:bg-black"
           >
-            Verlo
+            {t('loyalty.welcomeView')}
           </button>
         </motion.div>
       </div>

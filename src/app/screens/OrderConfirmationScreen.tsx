@@ -149,8 +149,8 @@ export function OrderConfirmationScreen() {
             <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-xl mb-6 text-left">
               <Coins className="w-6 h-6 text-amber-600" />
               <div>
-                <p className="font-medium text-amber-900">Has ganado +{royaltiesEarned} royalties</p>
-                <p className="text-sm text-amber-800">Los hemos sumado a tu perfil para que sigas progresando dentro del programa.</p>
+                <p className="font-medium text-amber-900">{t('loyalty.confirmEarned').replace('{points}', String(royaltiesEarned))}</p>
+                <p className="text-sm text-amber-800">{t('loyalty.confirmEarnedDesc')}</p>
               </div>
             </div>
           )}
