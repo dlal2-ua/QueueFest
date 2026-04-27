@@ -2675,6 +2675,20 @@ async function generarDecisiones(festival_id) {
       }
     }
 
+    // Regla 4: activar_promocion — promociones inactivas en el puesto
+    const [promosInactivas] = await db.query(
+      `SELECT id, titulo, producto_id FROM promociones
+       WHERE puesto_id = ? AND (activa = 0 OR activa IS NULL)`,
+      [puesto.id]
+    );
+    for (const promo of promosInactivas) {
+      await insertarSiNoPendiente(
+        festival_id, 'activar_promocion',
+        `Promoción inactiva en "${puesto.nombre}": "${promo.titulo}". Activar para que los clientes puedan verla.`,
+        puesto.id, promo.producto_id ?? null
+      );
+    }
+
     // Regla 5: reposicion_stock — materia prima bajo mínimo en el puesto
     const [stockBajo] = await db.query(
       `SELECT sp.materia_prima_id, mp.nombre AS mp_nombre, mp.unidad_medida,

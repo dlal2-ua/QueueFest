@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { getDecisiones, aprobarDecision, rechazarDecision } from '../../api';
 import { DecisionCard, type Decision } from '../../components/DecisionCard';
-import { BarChart2, RefreshCw, Zap, Hand, Trophy } from 'lucide-react';
+import { BarChart2, RefreshCw, Zap, Hand, Trophy, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Props {
@@ -97,6 +97,16 @@ export function DecisionsView({ festivalId, festivalNombre, modoAuto, onToggleMo
     const tieneGanadora = esAB && grupo.items.some(d => d.ganadora === 1);
 
     if (esAB) {
+      const todosPendientes = grupo.items.every(d => d.estado === 'pendiente');
+      const loadingPar = grupo.items.some(d => procesandoId === d.id);
+
+      const handleAprobarPar = async () => {
+        for (const d of grupo.items) await handleAprobar(d.id);
+      };
+      const handleRechazarPar = async () => {
+        for (const d of grupo.items) await handleRechazar(d.id);
+      };
+
       return (
         <div key={grupo.grupo_ab} className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-2">
           <div className="flex items-center gap-2">
@@ -108,6 +118,7 @@ export function DecisionsView({ festivalId, festivalNombre, modoAuto, onToggleMo
               {tieneGanadora ? 'Par A/B — Resultado disponible' : 'Par A/B — Comparando estrategias'}
             </span>
           </div>
+
           {grupo.items.map(d => (
             <DecisionCard
               key={d.id}
@@ -116,8 +127,32 @@ export function DecisionsView({ festivalId, festivalNombre, modoAuto, onToggleMo
               onAprobar={handleAprobar}
               onRechazar={handleRechazar}
               loading={procesandoId === d.id}
+              ocultarAcciones={true}
             />
           ))}
+
+          {todosPendientes && !modoAuto && (
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleAprobarPar}
+                disabled={loadingPar}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700
+                           text-white text-sm font-semibold py-2 rounded-xl transition-colors disabled:opacity-50 shadow-sm"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Lanzar test A/B
+              </button>
+              <button
+                onClick={handleRechazarPar}
+                disabled={loadingPar}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-red-200
+                           hover:bg-red-50 text-red-600 text-sm font-semibold py-2 rounded-xl transition-colors disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4" />
+                Rechazar test A/B
+              </button>
+            </div>
+          )}
         </div>
       );
     }
