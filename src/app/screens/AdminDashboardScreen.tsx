@@ -5,37 +5,41 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { ArrowLeft, RefreshCw, AlertTriangle } from 'lucide-react';
+import {
+  ArrowLeft, RefreshCw, AlertTriangle,
+  LayoutDashboard, TrendingUp, Utensils, Package, Archive,
+  Bell, Users, Award, Tag, BarChart2, Activity, Map,
+} from 'lucide-react';
 
-const API_BASE = 'http://localhost:3001/api'; // Servidor Dashboard → queuefest_dw (puerto 3001)
+const API_BASE = 'http://localhost:3001/api';
 
 type Section =
   | 'resumen' | 'ingresos' | 'puestos' | 'productos'
   | 'stock' | 'alertas' | 'usuarios' | 'loyalty'
   | 'promos' | 'clv' | 'prediccion' | 'heatmap';
 
-const SECTIONS: { id: Section; label: string }[] = [
-  { id: 'resumen', label: 'Resumen' },
-  { id: 'ingresos', label: 'Ingresos' },
-  { id: 'puestos', label: 'Puestos' },
-  { id: 'productos', label: 'Productos' },
-  { id: 'stock', label: 'Stock' },
-  { id: 'alertas', label: 'Alertas' },
-  { id: 'usuarios', label: 'Usuarios' },
-  { id: 'loyalty', label: 'Loyalty' },
-  { id: 'promos', label: 'Promos' },
-  { id: 'clv', label: 'CLV' },
-  { id: 'prediccion', label: 'Predicción' },
-  { id: 'heatmap', label: 'Heatmap' },
+const SECTIONS: { id: Section; label: string; Icon: React.ElementType }[] = [
+  { id: 'resumen',    label: 'Resumen',    Icon: LayoutDashboard },
+  { id: 'ingresos',  label: 'Ingresos',   Icon: TrendingUp },
+  { id: 'puestos',   label: 'Puestos',    Icon: Utensils },
+  { id: 'productos', label: 'Productos',  Icon: Package },
+  { id: 'stock',     label: 'Stock',      Icon: Archive },
+  { id: 'alertas',   label: 'Alertas',    Icon: Bell },
+  { id: 'usuarios',  label: 'Usuarios',   Icon: Users },
+  { id: 'loyalty',   label: 'Loyalty',    Icon: Award },
+  { id: 'promos',    label: 'Promos',     Icon: Tag },
+  { id: 'clv',       label: 'CLV',        Icon: BarChart2 },
+  { id: 'prediccion',label: 'Predicción', Icon: Activity },
+  { id: 'heatmap',   label: 'Heatmap',    Icon: Map },
 ];
 
-const BLUE = '#2563eb';
-const TEAL = '#0d9488';
-const AMBER = '#b45309';
-const RED = '#dc2626';
-const GREEN = '#16a34a';
+const BLUE   = '#2563eb';
+const TEAL   = '#0d9488';
+const AMBER  = '#b45309';
+const RED    = '#dc2626';
+const GREEN  = '#16a34a';
 const PURPLE = '#7c3aed';
-const GRAY = '#888780';
+const GRAY   = '#888780';
 const COLORS = [BLUE, TEAL, AMBER, RED, GREEN, PURPLE, GRAY];
 
 const SEG_COLORS: Record<string, string> = {
@@ -90,9 +94,11 @@ function EmptyState({ message = 'Sin datos disponibles' }: { message?: string })
   );
 }
 
-function SectionCard({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
+function SectionCard({ title, children, action }: {
+  title: string; children: React.ReactNode; action?: React.ReactNode;
+}) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="text-sm font-semibold text-gray-800">{title}</div>
         {action}
@@ -116,13 +122,27 @@ function EstadoBadge({ estado }: { estado: string }) {
 
 function SegmentoBadge({ segmento }: { segmento: string }) {
   const cls =
-    segmento === 'VIP' ? 'bg-purple-100 text-purple-700'
-      : segmento === 'frecuente' ? 'bg-blue-100 text-blue-700'
-        : segmento === 'inactivo' ? 'bg-red-100 text-red-700'
-          : 'bg-gray-100 text-gray-600';
+    segmento === 'VIP'       ? 'bg-purple-100 text-purple-700'
+    : segmento === 'frecuente' ? 'bg-blue-100 text-blue-700'
+    : segmento === 'inactivo'  ? 'bg-red-100 text-red-700'
+    : 'bg-gray-100 text-gray-600';
   return <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${cls}`}>{segmento}</span>;
 }
 
+function ChartLegend({ items }: { items: { color: string; label: string }[] }) {
+  return (
+    <div className="flex flex-wrap gap-3 mt-2 text-xs">
+      {items.map((item, i) => (
+        <span key={i} className="flex items-center gap-1 text-gray-600">
+          <span className="w-3 h-3 rounded-sm inline-block flex-shrink-0" style={{ background: item.color }} />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* ─── MAIN SCREEN ─────────────────────────────────────────────────────────── */
 export function AdminDashboardScreen() {
   const { user } = useAuth();
   const [section, setSection] = useState<Section>('resumen');
@@ -153,11 +173,9 @@ export function AdminDashboardScreen() {
   }, [festivalId, tipo, periodo]);
 
   useEffect(() => {
-    // Cargamos festivales desde el servidor DW (queuefest_dw.dim_festival)
-    // para que los festival_key coincidan con los usados en las queries del dashboard
     getDwFestivales().then((d: any[]) => {
       if (Array.isArray(d)) setFestivales(d);
-    }).catch(() => { });
+    }).catch(() => {});
   }, []);
 
   const loadSection = useCallback(async (sec: Section) => {
@@ -175,10 +193,7 @@ export function AdminDashboardScreen() {
           result = { resumen, porPuesto, porTipo };
           break;
         }
-        case 'ingresos': {
-          result = await apiFetch('/dashboard/ingresos-actividad');
-          break;
-        }
+        case 'ingresos':    { result = await apiFetch('/dashboard/ingresos-actividad'); break; }
         case 'puestos': {
           const [kpis, tabla, espera] = await Promise.all([
             apiFetch('/dashboard/puestos/kpis'),
@@ -188,42 +203,15 @@ export function AdminDashboardScreen() {
           result = { kpis, tabla, espera };
           break;
         }
-        case 'productos': {
-          result = await apiFetch('/dashboard/productos');
-          break;
-        }
-        case 'stock': {
-          result = await apiFetch('/dashboard/stock');
-          break;
-        }
-        case 'alertas': {
-          result = await apiFetch('/dashboard/alertas', { resuelta: 'false' });
-          break;
-        }
-        case 'usuarios': {
-          result = await apiFetch('/dashboard/usuarios');
-          break;
-        }
-        case 'loyalty': {
-          result = await apiFetch('/dashboard/loyalty');
-          break;
-        }
-        case 'promos': {
-          result = await apiFetch('/dashboard/promociones');
-          break;
-        }
-        case 'clv': {
-          result = await apiFetch('/dashboard/clv');
-          break;
-        }
-        case 'prediccion': {
-          result = await apiFetch('/dashboard/prediccion');
-          break;
-        }
-        case 'heatmap': {
-          result = await apiFetch('/dashboard/heatmap');
-          break;
-        }
+        case 'productos':   { result = await apiFetch('/dashboard/productos'); break; }
+        case 'stock':       { result = await apiFetch('/dashboard/stock'); break; }
+        case 'alertas':     { result = await apiFetch('/dashboard/alertas', { resuelta: 'false' }); break; }
+        case 'usuarios':    { result = await apiFetch('/dashboard/usuarios'); break; }
+        case 'loyalty':     { result = await apiFetch('/dashboard/loyalty'); break; }
+        case 'promos':      { result = await apiFetch('/dashboard/promociones'); break; }
+        case 'clv':         { result = await apiFetch('/dashboard/clv'); break; }
+        case 'prediccion':  { result = await apiFetch('/dashboard/prediccion'); break; }
+        case 'heatmap':     { result = await apiFetch('/dashboard/heatmap'); break; }
       }
       setData(result);
     } catch {
@@ -238,126 +226,139 @@ export function AdminDashboardScreen() {
   }, [section, festivalId, tipo, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resolverAlerta = async (id: number) => {
-    try {
-      await apiFetch(`/alertas/${id}/resolver`);
-      loadSection('alertas');
-    } catch { /* silencioso */ }
+    try { await apiFetch(`/alertas/${id}/resolver`); loadSection('alertas'); } catch {}
+  };
+  const marcarTodasResueltas = async () => {
+    try { await apiFetch('/alertas/resolver-todas'); loadSection('alertas'); } catch {}
   };
 
-  const marcarTodasResueltas = async () => {
-    try {
-      await apiFetch('/alertas/resolver-todas');
-      loadSection('alertas');
-    } catch { /* silencioso */ }
-  };
+  const filterSelects = (
+    <>
+      <select value={festivalId} onChange={e => setFestivalId(e.target.value)}
+        className="bg-gray-800 text-white text-xs border border-gray-700 rounded-lg px-2 py-1.5 outline-none min-w-[140px]">
+        <option value="">Todos los festivales</option>
+        {festivales.map(f => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+      </select>
+      <select value={tipo} onChange={e => setTipo(e.target.value)}
+        className="bg-gray-800 text-white text-xs border border-gray-700 rounded-lg px-2 py-1.5 outline-none">
+        <option value="">Todos los tipos</option>
+        <option value="barra">Barras</option>
+        <option value="foodtruck">Foodtrucks</option>
+      </select>
+      <select value={periodo} onChange={e => setPeriodo(e.target.value)}
+        className="bg-gray-800 text-white text-xs border border-gray-700 rounded-lg px-2 py-1.5 outline-none">
+        <option value="todo">Todo</option>
+        <option value="mes">Este mes</option>
+        <option value="sem">Esta semana</option>
+        <option value="hoy">Hoy</option>
+      </select>
+    </>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-6">
+    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
 
-      {/* Header */}
-      <div className="bg-gray-900 border-b-4 border-red-600 text-white p-4 shadow-md">
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div className="bg-gray-900 border-b-4 border-red-600 text-white px-4 py-3 shadow-md flex-shrink-0">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => (window as any).navigateTo('/admin')}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
+          <button onClick={() => (window as any).navigateTo('/admin')}
+            className="text-gray-400 hover:text-white transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="flex-1">
-            <h1 className="text-lg font-bold">Dashboard</h1>
-            <p className="text-gray-400 text-xs">Sesión: {user?.nombre || 'Administrador'}</p>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-bold leading-none">Dashboard</h1>
+            <p className="text-gray-400 text-xs mt-0.5">Sesión: {user?.nombre || 'Administrador'}</p>
           </div>
-          <button
-            onClick={() => loadSection(section)}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
+          {/* Filters inline on large screens */}
+          <div className="hidden lg:flex items-center gap-2">
+            {filterSelects}
+          </div>
+          <button onClick={() => loadSection(section)}
+            className="text-gray-400 hover:text-white transition-colors ml-1">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Filtros */}
-        <div className="mt-3 flex gap-2 flex-wrap">
-          <select
-            value={festivalId}
-            onChange={e => setFestivalId(e.target.value)}
-            className="flex-1 min-w-0 bg-gray-800 text-white text-xs border border-gray-700 rounded-lg px-2 py-1.5 outline-none"
-          >
-            <option value="">Todos los festivales</option>
-            {festivales.map(f => (
-              <option key={f.id} value={f.id}>{f.nombre}</option>
-            ))}
-          </select>
-          <select
-            value={tipo}
-            onChange={e => setTipo(e.target.value)}
-            className="bg-gray-800 text-white text-xs border border-gray-700 rounded-lg px-2 py-1.5 outline-none"
-          >
-            <option value="">Todos los tipos</option>
-            <option value="barra">Barras</option>
-            <option value="foodtruck">Foodtrucks</option>
-          </select>
-          <select
-            value={periodo}
-            onChange={e => setPeriodo(e.target.value)}
-            className="bg-gray-800 text-white text-xs border border-gray-700 rounded-lg px-2 py-1.5 outline-none"
-          >
-            <option value="todo">Todo</option>
-            <option value="mes">Este mes</option>
-            <option value="sem">Esta semana</option>
-            <option value="hoy">Hoy</option>
-
-          </select>
+        {/* Filters stacked on mobile */}
+        <div className="mt-3 flex gap-2 flex-wrap lg:hidden">
+          {filterSelects}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="grid grid-cols-6 bg-white border-b border-gray-200 sticky top-0 z-10">
-        {SECTIONS.map(s => (
-          <button
-            key={s.id}
-            onClick={() => setSection(s.id)}
-            className={`px-1 py-2 text-[11px] font-medium text-center transition-colors ${section === s.id
-              ? 'border-b-2 border-red-600 text-red-600'
-              : 'text-gray-500 hover:text-gray-800'
-              }`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
+      {/* ── Body: sidebar + content ──────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
 
-      {/* Content */}
-      <div className="p-4">
-        {loading && (
-          <div className="space-y-3">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-16 bg-gray-200 rounded-xl animate-pulse" />
+        {/* Sidebar — large screens only */}
+        <aside className="hidden lg:flex flex-col w-52 bg-gray-900 border-r border-gray-800 overflow-y-auto flex-shrink-0 py-3">
+          {SECTIONS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setSection(id)}
+              className={`flex items-center gap-3 mx-2 mb-0.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left ${
+                section === id
+                  ? 'bg-red-600 text-white'
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <Icon className="w-4 h-4 flex-shrink-0" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </aside>
+
+        {/* Main content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+
+          {/* Mobile tabs */}
+          <div className="lg:hidden grid grid-cols-6 bg-white border-b border-gray-200 flex-shrink-0">
+            {SECTIONS.map(s => (
+              <button
+                key={s.id}
+                onClick={() => setSection(s.id)}
+                className={`px-1 py-2 text-[11px] font-medium text-center transition-colors ${
+                  section === s.id
+                    ? 'border-b-2 border-red-600 text-red-600'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                {s.label}
+              </button>
             ))}
           </div>
-        )}
 
-        {!loading && (
-          <>
-            {section === 'resumen' && <SeccionResumen data={data} />}
-            {section === 'ingresos' && <SeccionIngresos data={data} />}
-            {section === 'puestos' && <SeccionPuestos data={data} />}
-            {section === 'productos' && <SeccionProductos data={data} />}
-            {section === 'stock' && <SeccionStock data={data} />}
-            {section === 'alertas' && <SeccionAlertas data={data} onResolver={resolverAlerta} onMarcarTodas={marcarTodasResueltas} />}
-            {section === 'usuarios' && <SeccionUsuarios data={data} />}
-            {section === 'loyalty' && <SeccionLoyalty data={data} />}
-            {section === 'promos' && <SeccionPromos data={data} />}
-            {section === 'clv' && <SeccionCLV data={data} />}
-            {section === 'prediccion' && <SeccionPrediccion data={data} />}
-            {section === 'heatmap' && <SeccionHeatmap data={data} festivalId={festivalId} />}
-          </>
-        )}
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto p-4 lg:p-6">
+            {loading && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="h-20 bg-gray-200 rounded-xl animate-pulse" />
+                ))}
+              </div>
+            )}
+
+            {!loading && (
+              <>
+                {section === 'resumen'    && <SeccionResumen data={data} />}
+                {section === 'ingresos'   && <SeccionIngresos data={data} />}
+                {section === 'puestos'    && <SeccionPuestos data={data} />}
+                {section === 'productos'  && <SeccionProductos data={data} />}
+                {section === 'stock'      && <SeccionStock data={data} />}
+                {section === 'alertas'    && <SeccionAlertas data={data} onResolver={resolverAlerta} onMarcarTodas={marcarTodasResueltas} />}
+                {section === 'usuarios'   && <SeccionUsuarios data={data} />}
+                {section === 'loyalty'    && <SeccionLoyalty data={data} />}
+                {section === 'promos'     && <SeccionPromos data={data} />}
+                {section === 'clv'        && <SeccionCLV data={data} />}
+                {section === 'prediccion' && <SeccionPrediccion data={data} />}
+                {section === 'heatmap'    && <SeccionHeatmap data={data} festivalId={festivalId} />}
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ─── SECCIÓN 1: RESUMEN GLOBAL ─────────────────────────────────────── */
+/* ─── SECCIÓN 1: RESUMEN GLOBAL ─────────────────────────────────────────── */
 function SeccionResumen({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de resumen. Verifica que el backend tenga los endpoints de dashboard." />;
   const r = data.resumen || {};
@@ -366,7 +367,7 @@ function SeccionResumen({ data }: { data: any }) {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Ingresos totales" value={fmtE(r.ingresos_total)}
           sub={r.crecimiento_pct != null ? (r.crecimiento_pct >= 0 ? '+' : '') + Math.round(r.crecimiento_pct) + '% vs anterior' : undefined}
           subClass={r.crecimiento_pct >= 0 ? 'text-green-600' : 'text-red-500'} />
@@ -380,54 +381,47 @@ function SeccionResumen({ data }: { data: any }) {
         <KpiCard label="Espera media" value={fmtMin(r.espera_media_min)} sub="minutos" />
       </div>
 
-      {porPuesto.length > 0 && (
-        <SectionCard title="Ingresos por puesto">
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={porPuesto} layout="vertical" margin={{ left: 60, right: 10 }}>
-              <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => fmtE(v)} />
-              <YAxis type="category" dataKey="puesto_nombre" tick={{ fontSize: 10 }} width={60} />
-              <Tooltip formatter={(v: any) => fmtE(v)} />
-              <Bar dataKey="ingresos" radius={4}>
-                {porPuesto.map((p, i) => (
-                  <Cell key={i} fill={p.tipo === 'barra' ? BLUE + '99' : AMBER + '99'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-2 text-xs">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: BLUE }} />Barras</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: AMBER }} />Foodtrucks</span>
-          </div>
-        </SectionCard>
-      )}
-
-      {porTipo.length > 0 && (
-        <SectionCard title="Pedidos por tipo">
-          <ResponsiveContainer width="100%" height={180}>
-            <PieChart>
-              <Pie data={porTipo} dataKey="total_pedidos" nameKey="tipo" cx="50%" cy="50%" outerRadius={70}>
-                {porTipo.map((t, i) => (
-                  <Cell key={i} fill={t.tipo === 'barra' ? BLUE : AMBER} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v: any) => fmtN(v)} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-1 text-xs">
-            {porTipo.map((t, i) => (
-              <span key={i} className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded-sm inline-block" style={{ background: t.tipo === 'barra' ? BLUE : AMBER }} />
-                {t.tipo} {fmtPct(t.pct)}
-              </span>
-            ))}
-          </div>
-        </SectionCard>
+      {(porPuesto.length > 0 || porTipo.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {porPuesto.length > 0 && (
+            <SectionCard title="Ingresos por puesto">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={porPuesto} layout="vertical" margin={{ top: 5, right: 35, bottom: 5, left: 5 }}>
+                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => fmtE(v)} />
+                  <YAxis type="category" dataKey="puesto_nombre" tick={{ fontSize: 10 }} width={90} />
+                  <Tooltip formatter={(v: any) => fmtE(v)} />
+                  <Bar dataKey="ingresos" radius={4}>
+                    {porPuesto.map((p, i) => (
+                      <Cell key={i} fill={p.tipo === 'barra' ? BLUE + '99' : AMBER + '99'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <ChartLegend items={[{ color: BLUE, label: 'Barras' }, { color: AMBER, label: 'Foodtrucks' }]} />
+            </SectionCard>
+          )}
+          {porTipo.length > 0 && (
+            <SectionCard title="Pedidos por tipo">
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={porTipo} dataKey="total_pedidos" nameKey="tipo" cx="50%" cy="50%" outerRadius={85}>
+                    {porTipo.map((t, i) => (
+                      <Cell key={i} fill={t.tipo === 'barra' ? BLUE : AMBER} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: any) => fmtN(v)} />
+                </PieChart>
+              </ResponsiveContainer>
+              <ChartLegend items={porTipo.map(t => ({ color: t.tipo === 'barra' ? BLUE : AMBER, label: `${t.tipo} ${fmtPct(t.pct)}` }))} />
+            </SectionCard>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-/* ─── SECCIÓN 2: INGRESOS Y ACTIVIDAD ───────────────────────────────── */
+/* ─── SECCIÓN 2: INGRESOS Y ACTIVIDAD ──────────────────────────────────── */
 function SeccionIngresos({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de ingresos disponibles." />;
   const k = data.kpis || {};
@@ -436,7 +430,7 @@ function SeccionIngresos({ data }: { data: any }) {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Ingresos" value={fmtE(k.ingresos_total)} />
         <KpiCard label="Pedidos" value={fmtN(k.pedidos_total)} />
         <KpiCard label="Ticket medio" value={fmtE(k.ticket_medio)} />
@@ -445,62 +439,54 @@ function SeccionIngresos({ data }: { data: any }) {
 
       {porHora.length > 0 && (
         <SectionCard title="Ingresos y pedidos por hora">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={porHora}>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={porHora} margin={{ top: 10, right: 55, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="hora" tick={{ fontSize: 9 }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: TEAL }} />
+              <YAxis yAxisId="left" tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} width={55} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: TEAL }} width={40} />
               <Tooltip />
               <Bar yAxisId="left" dataKey="ingresos" fill={BLUE + '99'} radius={3} name="Ingresos" />
               <Line yAxisId="right" type="monotone" dataKey="pedidos" stroke={TEAL} dot={false} name="Pedidos" strokeWidth={2} />
             </BarChart>
           </ResponsiveContainer>
-          <div className="flex gap-4 mt-2 text-xs">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: BLUE }} />Ingresos</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: TEAL }} />Pedidos</span>
-          </div>
+          <ChartLegend items={[{ color: BLUE, label: 'Ingresos' }, { color: TEAL, label: 'Pedidos' }]} />
         </SectionCard>
       )}
 
       {porHora.length > 0 && (
-        <SectionCard title="Ticket medio por hora">
-          <ResponsiveContainer width="100%" height={150}>
-            <LineChart data={porHora}>
-              <XAxis dataKey="hora" tick={{ fontSize: 9 }} />
-              <YAxis tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} />
-              <Tooltip formatter={(v: any) => fmtE(v)} />
-              <Line type="monotone" dataKey="ticket_medio" stroke={PURPLE} dot={false} strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </SectionCard>
-      )}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <SectionCard title="Ticket medio por hora">
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={porHora} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+                <XAxis dataKey="hora" tick={{ fontSize: 9 }} />
+                <YAxis tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} width={55} />
+                <Tooltip formatter={(v: any) => fmtE(v)} />
+                <Line type="monotone" dataKey="ticket_medio" stroke={PURPLE} dot={false} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </SectionCard>
 
-      {pagos.length > 0 && (
-        <SectionCard title="Métodos de pago">
-          <ResponsiveContainer width="100%" height={160}>
-            <PieChart>
-              <Pie data={pagos} dataKey="total" nameKey="nombre" cx="50%" cy="50%" outerRadius={65}>
-                {pagos.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
-              <Tooltip formatter={(v: any) => fmtE(v)} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex flex-wrap gap-2 mt-1">
-            {pagos.map((p: any, i: number) => (
-              <span key={i} className="flex items-center gap-1 text-xs text-gray-600">
-                <span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
-                {p.nombre} {fmtPct(p.pct)}
-              </span>
-            ))}
-          </div>
-        </SectionCard>
+          {pagos.length > 0 && (
+            <SectionCard title="Métodos de pago">
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie data={pagos} dataKey="total" nameKey="nombre" cx="50%" cy="50%" outerRadius={75}>
+                    {pagos.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: any) => fmtE(v)} />
+                </PieChart>
+              </ResponsiveContainer>
+              <ChartLegend items={pagos.map((p: any, i: number) => ({ color: COLORS[i % COLORS.length], label: `${p.nombre} ${fmtPct(p.pct)}` }))} />
+            </SectionCard>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-/* ─── SECCIÓN 3: PUESTOS ─────────────────────────────────────────────── */
+/* ─── SECCIÓN 3: PUESTOS ────────────────────────────────────────────────── */
 function SeccionPuestos({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de puestos disponibles." />;
   const k = data.kpis || {};
@@ -510,7 +496,7 @@ function SeccionPuestos({ data }: { data: any }) {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Puestos activos" value={fmtN(k.puestos_activos)} />
         <KpiCard label="Espera media" value={fmtMin(k.espera_media_min)} sub="minutos" />
         <KpiCard label="Ingreso medio/puesto" value={fmtE(k.ingreso_medio_puesto)} />
@@ -535,7 +521,7 @@ function SeccionPuestos({ data }: { data: any }) {
               <tbody>
                 {tabla.map((p: any, i: number) => (
                   <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-1.5 px-1 font-medium text-gray-800 max-w-[90px] truncate">{p.nombre}</td>
+                    <td className="py-1.5 px-1 font-medium text-gray-800 max-w-[120px] truncate">{p.nombre}</td>
                     <td className="py-1.5 px-1"><TipoBadge tipo={p.tipo} /></td>
                     <td className="py-1.5 px-1 text-right text-gray-700">{fmtE(p.ingresos)}</td>
                     <td className="py-1.5 px-1 text-right text-gray-700">{fmtN(p.pedidos)}</td>
@@ -552,13 +538,13 @@ function SeccionPuestos({ data }: { data: any }) {
         </SectionCard>
       )}
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {espera.length > 0 && (
           <SectionCard title="Tiempo de espera por puesto">
-            <ResponsiveContainer width="100%" height={Math.max(150, espera.length * 32)}>
-              <BarChart data={espera} layout="vertical">
-                <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => v + 'min'} />
-                <YAxis type="category" dataKey="nombre" tick={{ fontSize: 10 }} width={80} />
+            <ResponsiveContainer width="100%" height={Math.max(200, espera.length * 36)}>
+              <BarChart data={espera} layout="vertical" margin={{ top: 5, right: 50, bottom: 5, left: 5 }}>
+                <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => v + 'min'} domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.25)]} />
+                <YAxis type="category" dataKey="nombre" tick={{ fontSize: 10 }} width={100} />
                 <Tooltip formatter={(v: any) => v + 'min'} />
                 <Bar dataKey="espera_min" radius={4} name="Espera">
                   {espera.map((p: any, i: number) => (
@@ -596,7 +582,7 @@ function SeccionPuestos({ data }: { data: any }) {
   );
 }
 
-/* ─── SECCIÓN 4: PRODUCTOS ───────────────────────────────────────────── */
+/* ─── SECCIÓN 4: PRODUCTOS ──────────────────────────────────────────────── */
 function SeccionProductos({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de productos disponibles." />;
   const k = data.kpis || {};
@@ -605,61 +591,60 @@ function SeccionProductos({ data }: { data: any }) {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Ingresos totales" value={fmtE(k.ingresos_total)} />
         <KpiCard label="Coste total" value={fmtE(k.coste_total)} />
         <KpiCard label="Margen total" value={fmtE(k.margen_total)} sub={fmtPct(k.margen_pct)} subClass="text-green-600" />
         <KpiCard label="Mejor producto" value={k.mejor_producto || '—'} />
       </div>
 
-      {lista.length > 0 && (
-        <SectionCard title="Ingresos vs margen por producto">
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={lista}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="nombre" tick={{ fontSize: 9 }} angle={-30} textAnchor="end" height={45} />
-              <YAxis tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} />
-              <Tooltip formatter={(v: any) => fmtE(v)} />
-              <Bar dataKey="ingresos" fill={BLUE + '99'} name="Ingresos" radius={3} />
-              <Bar dataKey="margen" fill={TEAL + '99'} name="Margen" radius={3} />
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-1 text-xs">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: BLUE }} />Ingresos</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: TEAL }} />Margen</span>
-          </div>
-        </SectionCard>
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {lista.length > 0 && (
+          <SectionCard title="Ingresos vs margen por producto">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={lista} margin={{ top: 10, right: 25, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="nombre" tick={{ fontSize: 9 }} angle={-35} textAnchor="end" height={60} interval={0} />
+                <YAxis tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} width={55} domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.15)]} />
+                <Tooltip formatter={(v: any) => fmtE(v)} />
+                <Bar dataKey="ingresos" fill={BLUE + '99'} name="Ingresos" radius={3} />
+                <Bar dataKey="margen" fill={TEAL + '99'} name="Margen" radius={3} />
+              </BarChart>
+            </ResponsiveContainer>
+            <ChartLegend items={[{ color: BLUE, label: 'Ingresos' }, { color: TEAL, label: 'Margen' }]} />
+          </SectionCard>
+        )}
 
-      {sorted.length > 0 && (
-        <SectionCard title="Ranking de productos por margen">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left py-1 px-1 text-gray-400">#</th>
-                <th className="text-left py-1 px-1 text-gray-400">Producto</th>
-                <th className="text-right py-1 px-1 text-gray-400">Margen</th>
-                <th className="text-right py-1 px-1 text-gray-400">%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((p: any, i: number) => (
-                <tr key={i} className="border-b border-gray-50">
-                  <td className="py-1 px-1 text-gray-400">{i + 1}</td>
-                  <td className="py-1 px-1 font-medium">{p.nombre}</td>
-                  <td className="py-1 px-1 text-right">{fmtE(p.margen)}</td>
-                  <td className="py-1 px-1 text-right font-semibold text-green-600">{fmtPct(p.margen_pct)}</td>
+        {sorted.length > 0 && (
+          <SectionCard title="Ranking de productos por margen">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-1 px-1 text-gray-400">#</th>
+                  <th className="text-left py-1 px-1 text-gray-400">Producto</th>
+                  <th className="text-right py-1 px-1 text-gray-400">Margen</th>
+                  <th className="text-right py-1 px-1 text-gray-400">%</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </SectionCard>
-      )}
+              </thead>
+              <tbody>
+                {sorted.map((p: any, i: number) => (
+                  <tr key={i} className="border-b border-gray-50">
+                    <td className="py-1 px-1 text-gray-400">{i + 1}</td>
+                    <td className="py-1 px-1 font-medium">{p.nombre}</td>
+                    <td className="py-1 px-1 text-right">{fmtE(p.margen)}</td>
+                    <td className="py-1 px-1 text-right font-semibold text-green-600">{fmtPct(p.margen_pct)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SectionCard>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ─── SECCIÓN 5: STOCK ───────────────────────────────────────────────── */
+/* ─── SECCIÓN 5: STOCK ──────────────────────────────────────────────────── */
 function SeccionStock({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de stock disponibles." />;
   const k = data.kpis || {};
@@ -668,77 +653,79 @@ function SeccionStock({ data }: { data: any }) {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Alertas críticas" value={fmtN(k.alertas_criticas)} subClass="text-red-500" />
         <KpiCard label="Alertas bajas" value={fmtN(k.alertas_bajas)} subClass="text-amber-600" />
         <KpiCard label="Sin alerta" value={fmtN(k.sin_alerta)} subClass="text-green-600" />
         <KpiCard label="Bloqueados" value={fmtN(k.productos_bloqueados)} />
       </div>
 
-      {materias.length > 0 && (
-        <SectionCard title="Estado de stock por materia prima">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-1 px-1 text-gray-400">Materia</th>
-                  <th className="text-left py-1 px-1 text-gray-400">Ud.</th>
-                  <th className="text-right py-1 px-1 text-gray-400">Stock</th>
-                  <th className="text-right py-1 px-1 text-gray-400">Mín</th>
-                  <th className="text-right py-1 px-1 text-gray-400">Cons/h</th>
-                  <th className="text-right py-1 px-1 text-gray-400">h rotura</th>
-                  <th className="text-right py-1 px-1 text-gray-400">Est.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {materias.map((m: any, i: number) => {
-                  const pct = m.stock_actual / m.stock_minimo;
-                  const badgeClass = pct < 0.3 ? 'bg-red-100 text-red-700' : pct < 1 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700';
-                  const label = pct < 0.3 ? 'Crítico' : pct < 1 ? 'Bajo' : 'OK';
-                  return (
-                    <tr key={i} className="border-b border-gray-50">
-                      <td className="py-1.5 px-1 font-medium truncate max-w-[80px]">{m.nombre}</td>
-                      <td className="py-1.5 px-1 text-gray-400">{m.unidad_medida}</td>
-                      <td className="py-1.5 px-1 text-right">{m.stock_actual}</td>
-                      <td className="py-1.5 px-1 text-right text-gray-400">{m.stock_minimo}</td>
-                      <td className="py-1.5 px-1 text-right text-gray-600">{m.consumo_hora != null ? m.consumo_hora + '/h' : '—'}</td>
-                      <td className="py-1.5 px-1 text-right font-semibold" style={{ color: m.horas_hasta_rotura < 3 ? RED : 'inherit' }}>
-                        {m.horas_hasta_rotura != null ? m.horas_hasta_rotura + 'h' : '—'}
-                      </td>
-                      <td className="py-1.5 px-1 text-right">
-                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${badgeClass}`}>{label}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </SectionCard>
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {materias.length > 0 && (
+          <SectionCard title="Estado de stock por materia prima">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left py-1 px-1 text-gray-400">Materia</th>
+                    <th className="text-left py-1 px-1 text-gray-400">Ud.</th>
+                    <th className="text-right py-1 px-1 text-gray-400">Stock</th>
+                    <th className="text-right py-1 px-1 text-gray-400">Mín</th>
+                    <th className="text-right py-1 px-1 text-gray-400">Cons/h</th>
+                    <th className="text-right py-1 px-1 text-gray-400">h rotura</th>
+                    <th className="text-right py-1 px-1 text-gray-400">Est.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {materias.map((m: any, i: number) => {
+                    const pct = m.stock_actual / m.stock_minimo;
+                    const badgeClass = pct < 0.3 ? 'bg-red-100 text-red-700' : pct < 1 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700';
+                    const label = pct < 0.3 ? 'Crítico' : pct < 1 ? 'Bajo' : 'OK';
+                    return (
+                      <tr key={i} className="border-b border-gray-50">
+                        <td className="py-1.5 px-1 font-medium truncate max-w-[80px]">{m.nombre}</td>
+                        <td className="py-1.5 px-1 text-gray-400">{m.unidad_medida}</td>
+                        <td className="py-1.5 px-1 text-right">{m.stock_actual}</td>
+                        <td className="py-1.5 px-1 text-right text-gray-400">{m.stock_minimo}</td>
+                        <td className="py-1.5 px-1 text-right text-gray-600">{m.consumo_hora != null ? m.consumo_hora + '/h' : '—'}</td>
+                        <td className="py-1.5 px-1 text-right font-semibold" style={{ color: m.horas_hasta_rotura < 3 ? RED : 'inherit' }}>
+                          {m.horas_hasta_rotura != null ? m.horas_hasta_rotura + 'h' : '—'}
+                        </td>
+                        <td className="py-1.5 px-1 text-right">
+                          <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${badgeClass}`}>{label}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+        )}
 
-      {top6.length > 0 && (
-        <SectionCard title="Consumo por hora (top materias)">
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={top6}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="nombre" tick={{ fontSize: 9 }} angle={-25} textAnchor="end" height={40} />
-              <YAxis tick={{ fontSize: 9 }} />
-              <Tooltip />
-              <Bar dataKey="consumo_hora" radius={4} name="Consumo/h">
-                {top6.map((m: any, i: number) => (
-                  <Cell key={i} fill={m.esta_agotado ? RED : m.tiene_alerta ? AMBER : GREEN} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </SectionCard>
-      )}
+        {top6.length > 0 && (
+          <SectionCard title="Consumo por hora (top materias)">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={top6} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="nombre" tick={{ fontSize: 9 }} angle={-25} textAnchor="end" height={48} />
+                <YAxis tick={{ fontSize: 9 }} width={40} />
+                <Tooltip />
+                <Bar dataKey="consumo_hora" radius={4} name="Consumo/h">
+                  {top6.map((m: any, i: number) => (
+                    <Cell key={i} fill={m.esta_agotado ? RED : m.tiene_alerta ? AMBER : GREEN} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </SectionCard>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ─── SECCIÓN 6: ALERTAS ─────────────────────────────────────────────── */
+/* ─── SECCIÓN 6: ALERTAS ────────────────────────────────────────────────── */
 function SeccionAlertas({ data, onResolver, onMarcarTodas }: {
   data: any;
   onResolver: (id: number) => void;
@@ -752,7 +739,7 @@ function SeccionAlertas({ data, onResolver, onMarcarTodas }: {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Críticas" value={fmtN(k.criticas)} subClass="text-red-500" />
         <KpiCard label="Advertencias" value={fmtN(k.advertencias)} subClass="text-amber-600" />
         <KpiCard label="Saturados" value={fmtN(k.saturados)} subClass="text-red-500" />
@@ -786,8 +773,7 @@ function SeccionAlertas({ data, onResolver, onMarcarTodas }: {
           <div className="space-y-0">
             {filtradas.map((a: any, i: number) => (
               <div key={i} className="flex items-start gap-3 py-2.5 border-b border-gray-100 last:border-0">
-                <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${a.severidad === 'critica' ? 'bg-red-500' : 'bg-amber-500'
-                  }`} />
+                <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${a.severidad === 'critica' ? 'bg-red-500' : 'bg-amber-500'}`} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-gray-800">{a.mensaje}</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">
@@ -796,8 +782,7 @@ function SeccionAlertas({ data, onResolver, onMarcarTodas }: {
                     {formatRelTime(a.creado_en)}
                   </p>
                 </div>
-                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0 ${a.severidad === 'critica' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                  }`}>
+                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0 ${a.severidad === 'critica' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
                   {a.severidad}
                 </span>
                 {a.id && (
@@ -819,7 +804,7 @@ function SeccionAlertas({ data, onResolver, onMarcarTodas }: {
   );
 }
 
-/* ─── SECCIÓN 7: USUARIOS ────────────────────────────────────────────── */
+/* ─── SECCIÓN 7: USUARIOS ───────────────────────────────────────────────── */
 function SeccionUsuarios({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de usuarios disponibles." />;
   const k = data.kpis || {};
@@ -831,7 +816,7 @@ function SeccionUsuarios({ data }: { data: any }) {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <KpiCard label="Usuarios activos" value={fmtN(k.activos ?? k.activos_hoy ?? k.total_usuarios)} />
         <KpiCard
           label="Nuevos usuarios"
@@ -845,66 +830,64 @@ function SeccionUsuarios({ data }: { data: any }) {
         <KpiCard label="Recurrentes" value={fmtN(k.recurrentes)} />
       </div>
 
-      {evolucion.length > 0 && (
-        <SectionCard title="Evolución usuarios activos">
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={evolucion}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="semana" tick={{ fontSize: 9 }} />
-              <YAxis tick={{ fontSize: 9 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey="activos" stroke={BLUE} dot={false} strokeWidth={2} name="Activos" />
-              <Line type="monotone" dataKey="nuevos" stroke={TEAL} dot={false} strokeWidth={2} strokeDasharray="4 3" name="Nuevos" />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-2 text-xs">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: BLUE }} />Activos</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: TEAL }} />Nuevos</span>
-          </div>
-        </SectionCard>
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {evolucion.length > 0 && (
+          <SectionCard title="Evolución usuarios activos">
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={evolucion} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="semana" tick={{ fontSize: 9 }} />
+                <YAxis tick={{ fontSize: 9 }} width={40} />
+                <Tooltip />
+                <Line type="monotone" dataKey="activos" stroke={BLUE} dot={false} strokeWidth={2} name="Activos" />
+                <Line type="monotone" dataKey="nuevos" stroke={TEAL} dot={false} strokeWidth={2} strokeDasharray="4 3" name="Nuevos" />
+              </LineChart>
+            </ResponsiveContainer>
+            <ChartLegend items={[{ color: BLUE, label: 'Activos' }, { color: TEAL, label: 'Nuevos' }]} />
+          </SectionCard>
+        )}
 
-      {top.length > 0 && (
-        <SectionCard title="Top usuarios por gasto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left py-1 px-1 text-gray-400">#</th>
-                <th className="text-left py-1 px-1 text-gray-400">Usuario</th>
-                <th className="text-right py-1 px-1 text-gray-400">Pedidos</th>
-                <th className="text-right py-1 px-1 text-gray-400">Gasto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {top.map((u: any, i: number) => (
-                <tr key={i} className="border-b border-gray-50">
-                  <td className="py-1 px-1 text-gray-400">{i + 1}</td>
-                  <td className="py-1 px-1 font-medium">{u.nombre || u.alias || '—'}</td>
-                  <td className="py-1 px-1 text-right">{fmtN(u.pedidos)}</td>
-                  <td className="py-1 px-1 text-right font-semibold">{fmtE(u.gasto_total)}</td>
+        {top.length > 0 && (
+          <SectionCard title="Top usuarios por gasto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-1 px-1 text-gray-400">#</th>
+                  <th className="text-left py-1 px-1 text-gray-400">Usuario</th>
+                  <th className="text-right py-1 px-1 text-gray-400">Pedidos</th>
+                  <th className="text-right py-1 px-1 text-gray-400">Gasto</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </SectionCard>
-      )}
+              </thead>
+              <tbody>
+                {top.map((u: any, i: number) => (
+                  <tr key={i} className="border-b border-gray-50">
+                    <td className="py-1 px-1 text-gray-400">{i + 1}</td>
+                    <td className="py-1 px-1 font-medium">{u.nombre || u.alias || '—'}</td>
+                    <td className="py-1 px-1 text-right">{fmtN(u.pedidos)}</td>
+                    <td className="py-1 px-1 text-right font-semibold">{fmtE(u.gasto_total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SectionCard>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ─── SECCIÓN 8: LOYALTY ─────────────────────────────────────────────── */
+/* ─── SECCIÓN 8: LOYALTY ────────────────────────────────────────────────── */
 function SeccionLoyalty({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de loyalty disponibles." />;
   const k = data.kpis || {};
   const porFestival: any[] = data.por_festival || [];
   const niveles: any[] = data.niveles || [];
   const topUsuarios: any[] = data.top_usuarios || [];
-
   const nivCols = niveles.map((n: any) => NIV_COLORS[n.nivel] || GRAY);
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Puntos generados" value={fmtN(k.puntos_generados ?? k.puntos_emitidos)} />
         <KpiCard label="Puntos canjeados" value={fmtN(k.puntos_canjeados)} />
         <KpiCard label="Ratio uso" value={fmtPct(k.ratio_uso_pct ?? k.ratio_canje_pct)} sub="% puntos canjeados" />
@@ -913,77 +896,69 @@ function SeccionLoyalty({ data }: { data: any }) {
 
       {porFestival.length > 0 && (
         <SectionCard title="Puntos por festival">
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={porFestival}>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={porFestival} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="festival_nombre" tick={{ fontSize: 9 }} angle={-20} textAnchor="end" height={40} />
-              <YAxis tick={{ fontSize: 9 }} />
+              <XAxis dataKey="festival_nombre" tick={{ fontSize: 9 }} angle={-20} textAnchor="end" height={48} />
+              <YAxis tick={{ fontSize: 9 }} width={40} />
               <Tooltip />
               <Bar dataKey="generados" fill={PURPLE + '99'} name="Generados" radius={3} />
               <Bar dataKey="canjeados" fill={TEAL + '99'} name="Canjeados" radius={3} />
             </BarChart>
           </ResponsiveContainer>
-          <div className="flex gap-4 mt-2 text-xs">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: PURPLE }} />Generados</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: TEAL }} />Canjeados</span>
-          </div>
+          <ChartLegend items={[{ color: PURPLE, label: 'Generados' }, { color: TEAL, label: 'Canjeados' }]} />
         </SectionCard>
       )}
 
-      {niveles.length > 0 && (
-        <SectionCard title="Distribución por nivel">
-          <ResponsiveContainer width="100%" height={160}>
-            <PieChart>
-              <Pie data={niveles} dataKey="count" nameKey="nivel" cx="50%" cy="50%" outerRadius={65}>
-                {niveles.map((_: any, i: number) => <Cell key={i} fill={nivCols[i]} />)}
-              </Pie>
-              <Tooltip formatter={(v: any) => fmtN(v)} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex flex-wrap gap-2 mt-1">
-            {niveles.map((n: any, i: number) => (
-              <span key={i} className="flex items-center gap-1 text-xs text-gray-600">
-                <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: nivCols[i] }} />
-                {n.nivel} {fmtPct(n.pct)}
-              </span>
-            ))}
-          </div>
-        </SectionCard>
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {niveles.length > 0 && (
+          <SectionCard title="Distribución por nivel">
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={niveles} dataKey="count" nameKey="nivel" cx="50%" cy="50%" outerRadius={80}>
+                  {niveles.map((_: any, i: number) => <Cell key={i} fill={nivCols[i]} />)}
+                </Pie>
+                <Tooltip formatter={(v: any) => fmtN(v)} />
+              </PieChart>
+            </ResponsiveContainer>
+            <ChartLegend items={niveles.map((n: any, i: number) => ({ color: nivCols[i], label: `${n.nivel} ${fmtPct(n.pct)}` }))} />
+          </SectionCard>
+        )}
 
-      {topUsuarios.length > 0 && (
-        <SectionCard title="Top usuarios por puntos">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left py-1 px-1 text-gray-400">#</th>
-                <th className="text-left py-1 px-1 text-gray-400">Usuario</th>
-                <th className="text-right py-1 px-1 text-gray-400">Puntos</th>
-                <th className="text-right py-1 px-1 text-gray-400">Nivel</th>
-                <th className="text-right py-1 px-1 text-gray-400">Canjeados</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topUsuarios.map((u: any, i: number) => (
-                <tr key={i} className="border-b border-gray-50">
-                  <td className="py-1 px-1 text-gray-400">{i + 1}</td>
-                  <td className="py-1 px-1 font-medium">{u.nombre || u.alias || '—'}</td>
-                  <td className="py-1 px-1 text-right font-semibold">{fmtN(u.puntos_total)}</td>
-                  <td className="py-1 px-1 text-right">
-                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 text-purple-700">{u.nivel}</span>
-                  </td>
-                  <td className="py-1 px-1 text-right">{fmtN(u.canjeados)}</td>
+        {topUsuarios.length > 0 && (
+          <SectionCard title="Top usuarios por puntos">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-1 px-1 text-gray-400">#</th>
+                  <th className="text-left py-1 px-1 text-gray-400">Usuario</th>
+                  <th className="text-right py-1 px-1 text-gray-400">Puntos</th>
+                  <th className="text-right py-1 px-1 text-gray-400">Nivel</th>
+                  <th className="text-right py-1 px-1 text-gray-400">Canjeados</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </SectionCard>
-      )}
+              </thead>
+              <tbody>
+                {topUsuarios.map((u: any, i: number) => (
+                  <tr key={i} className="border-b border-gray-50">
+                    <td className="py-1 px-1 text-gray-400">{i + 1}</td>
+                    <td className="py-1 px-1 font-medium">{u.nombre || u.alias || '—'}</td>
+                    <td className="py-1 px-1 text-right font-semibold">{fmtN(u.puntos_total)}</td>
+                    <td className="py-1 px-1 text-right">
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 text-purple-700">{u.nivel}</span>
+                    </td>
+                    <td className="py-1 px-1 text-right">{fmtN(u.canjeados)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SectionCard>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ─── SECCIÓN 9: PROMOCIONES ─────────────────────────────────────────── */
+/* ─── SECCIÓN 9: PROMOCIONES ────────────────────────────────────────────── */
 function SeccionPromos({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de promociones disponibles." />;
   const k = data.kpis || {};
@@ -997,63 +972,58 @@ function SeccionPromos({ data }: { data: any }) {
         <KpiCard label="Ingresos con promo" value={fmtE(k.descuento_total ?? k.ingresos_total)} />
       </div>
 
-      {lista.length > 0 && (
-        <SectionCard title="Usos e ingresos por promoción">
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={lista}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="titulo" tick={{ fontSize: 9 }} angle={-20} textAnchor="end" height={40} />
-              <YAxis yAxisId="left" tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: AMBER }} />
-              <Tooltip />
-              <Bar yAxisId="left" dataKey="ingresos_generados" fill={BLUE + '99'} name="Ingresos" radius={3} />
-              <Line yAxisId="right" type="monotone" dataKey="usos" stroke={AMBER} dot={false} strokeWidth={2} name="Usos" />
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-1 text-xs">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: BLUE }} />Ingresos (€)</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: AMBER }} />Usos (eje der.)</span>
-          </div>
-        </SectionCard>
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {lista.length > 0 && (
+          <SectionCard title="Usos e ingresos por promoción">
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={lista} margin={{ top: 10, right: 55, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="titulo" tick={{ fontSize: 9 }} angle={-25} textAnchor="end" height={55} interval={0} />
+                <YAxis yAxisId="left" tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} width={55} domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.15)]} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: AMBER }} width={40} domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.15)]} />
+                <Tooltip />
+                <Bar yAxisId="left" dataKey="ingresos_generados" fill={BLUE + '99'} name="Ingresos" radius={3} />
+                <Line yAxisId="right" type="monotone" dataKey="usos" stroke={AMBER} dot={false} strokeWidth={2} name="Usos" />
+              </BarChart>
+            </ResponsiveContainer>
+            <ChartLegend items={[{ color: BLUE, label: 'Ingresos (€)' }, { color: AMBER, label: 'Usos (eje der.)' }]} />
+          </SectionCard>
+        )}
 
-      {lista.length > 0 && (
-        <SectionCard title="Detalle por promoción">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left py-1 px-1 text-gray-400">Promoción</th>
-                <th className="text-right py-1 px-1 text-gray-400">Usos</th>
-                <th className="text-right py-1 px-1 text-gray-400">Inc. ventas</th>
-                <th className="text-right py-1 px-1 text-gray-400">Margen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lista.map((p: any, i: number) => (
-                <tr key={i} className="border-b border-gray-50">
-                  <td className="py-1.5 px-1 font-medium max-w-[100px] truncate">{p.titulo}</td>
-                  <td className="py-1.5 px-1 text-right">{fmtN(p.usos)}</td>
-                  <td className="py-1.5 px-1 text-right font-semibold" style={{
-                    color: p.incremento_ventas_pct >= 0 ? GREEN : RED
-                  }}>
-                    {p.incremento_ventas_pct != null ? (p.incremento_ventas_pct >= 0 ? '+' : '') + Math.round(p.incremento_ventas_pct) + '%' : '—'}
-                  </td>
-                  <td className="py-1.5 px-1 text-right font-semibold" style={{
-                    color: p.impacto_margen_pct >= 0 ? GREEN : RED
-                  }}>
-                    {p.impacto_margen_pct != null ? (p.impacto_margen_pct >= 0 ? '+' : '') + Math.round(p.impacto_margen_pct) + '%' : fmtE(p.precio_promo)}
-                  </td>
+        {lista.length > 0 && (
+          <SectionCard title="Detalle por promoción">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-1 px-1 text-gray-400">Promoción</th>
+                  <th className="text-right py-1 px-1 text-gray-400">Usos</th>
+                  <th className="text-right py-1 px-1 text-gray-400">Inc. ventas</th>
+                  <th className="text-right py-1 px-1 text-gray-400">Margen</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </SectionCard>
-      )}
+              </thead>
+              <tbody>
+                {lista.map((p: any, i: number) => (
+                  <tr key={i} className="border-b border-gray-50">
+                    <td className="py-1.5 px-1 font-medium max-w-[100px] truncate">{p.titulo}</td>
+                    <td className="py-1.5 px-1 text-right">{fmtN(p.usos)}</td>
+                    <td className="py-1.5 px-1 text-right font-semibold" style={{ color: p.incremento_ventas_pct >= 0 ? GREEN : RED }}>
+                      {p.incremento_ventas_pct != null ? (p.incremento_ventas_pct >= 0 ? '+' : '') + Math.round(p.incremento_ventas_pct) + '%' : '—'}
+                    </td>
+                    <td className="py-1.5 px-1 text-right font-semibold" style={{ color: p.impacto_margen_pct >= 0 ? GREEN : RED }}>
+                      {p.impacto_margen_pct != null ? (p.impacto_margen_pct >= 0 ? '+' : '') + Math.round(p.impacto_margen_pct) + '%' : fmtE(p.precio_promo)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SectionCard>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ─── SECCIÓN 10: CLV ────────────────────────────────────────────────── */
+/* ─── SECCIÓN 10: CLV ───────────────────────────────────────────────────── */
 function SeccionCLV({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de CLV disponibles." />;
   const k = data.kpis || {};
@@ -1063,7 +1033,7 @@ function SeccionCLV({ data }: { data: any }) {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="CLV medio global" value={fmtE(k.clv_medio_global)} />
         <KpiCard label="Usuarios VIP" value={fmtN(k.usuarios_vip)} subClass="text-purple-600" />
         <KpiCard label="CLV medio VIP" value={fmtE(k.clv_medio_vip)} />
@@ -1071,12 +1041,12 @@ function SeccionCLV({ data }: { data: any }) {
       </div>
 
       {segmentos.length > 0 && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <SectionCard title="CLV medio por segmento">
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={segmentos}>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={segmentos} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
                 <XAxis dataKey="segmento" tick={{ fontSize: 9 }} />
-                <YAxis tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} />
+                <YAxis tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} width={55} />
                 <Tooltip formatter={(v: any) => fmtE(v)} />
                 <Bar dataKey="clv_medio" radius={4}>
                   {segmentos.map((_: any, i: number) => <Cell key={i} fill={segCols[i] + '99'} />)}
@@ -1086,22 +1056,15 @@ function SeccionCLV({ data }: { data: any }) {
           </SectionCard>
 
           <SectionCard title="Distribución usuarios">
-            <ResponsiveContainer width="100%" height={160}>
+            <ResponsiveContainer width="100%" height={200}>
               <PieChart>
-                <Pie data={segmentos} dataKey="count" nameKey="segmento" cx="50%" cy="50%" outerRadius={65}>
+                <Pie data={segmentos} dataKey="count" nameKey="segmento" cx="50%" cy="50%" outerRadius={80}>
                   {segmentos.map((_: any, i: number) => <Cell key={i} fill={segCols[i]} />)}
                 </Pie>
                 <Tooltip formatter={(v: any) => fmtN(v)} />
               </PieChart>
             </ResponsiveContainer>
-            <div className="flex flex-wrap gap-2 mt-1">
-              {segmentos.map((s: any, i: number) => (
-                <span key={i} className="flex items-center gap-1 text-xs text-gray-600">
-                  <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: segCols[i] }} />
-                  {s.segmento} {fmtPct(s.pct_del_total)}
-                </span>
-              ))}
-            </div>
+            <ChartLegend items={segmentos.map((s: any, i: number) => ({ color: segCols[i], label: `${s.segmento} ${fmtPct(s.pct_del_total)}` }))} />
           </SectionCard>
         </div>
       )}
@@ -1144,7 +1107,7 @@ function SeccionCLV({ data }: { data: any }) {
   );
 }
 
-/* ─── SECCIÓN 11: PREDICCIÓN ─────────────────────────────────────────── */
+/* ─── SECCIÓN 11: PREDICCIÓN ────────────────────────────────────────────── */
 function SeccionPrediccion({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de predicción disponibles." />;
   const k = data.kpis || {};
@@ -1153,54 +1116,56 @@ function SeccionPrediccion({ data }: { data: any }) {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Hora pico prevista" value={k.hora_pico != null ? k.hora_pico + ':00h' : '—'} />
         <KpiCard label="Pedidos en pico" value={fmtN(k.pedidos_hora_pico)} />
         <KpiCard label="Ingresos en pico" value={fmtE(k.ingresos_hora_pico)} />
         <KpiCard label="Confianza modelo" value={fmtPct(k.confianza_global_pct)} />
       </div>
 
-      {porHora.length > 0 && (
-        <SectionCard title="Predicción de ingresos por hora">
-          <ResponsiveContainer width="100%" height={210}>
-            <LineChart data={porHora}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="hora" tick={{ fontSize: 9 }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: TEAL }} />
-              <Tooltip />
-              <Line yAxisId="left" type="monotone" dataKey="ingresos_real" stroke={BLUE} dot={false} strokeWidth={2} name="Ingresos real" />
-              <Line yAxisId="left" type="monotone" dataKey="ingresos_predichos" stroke={BLUE} dot={false} strokeWidth={2} strokeDasharray="5 5" name="Predicción" opacity={0.5} />
-              <Line yAxisId="right" type="monotone" dataKey="pedidos_real" stroke={TEAL} dot={false} strokeWidth={1.5} name="Pedidos real" />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-1 text-xs">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: BLUE }} />Real</span>
-            <span className="flex items-center gap-1 opacity-50"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: BLUE }} />Predicción</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: TEAL }} />Pedidos (der.)</span>
-          </div>
-        </SectionCard>
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {porHora.length > 0 && (
+          <SectionCard title="Predicción de ingresos por hora">
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={porHora} margin={{ top: 10, right: 55, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="hora" tick={{ fontSize: 9 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 9 }} tickFormatter={v => '€' + v} width={55} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: TEAL }} width={40} />
+                <Tooltip />
+                <Line yAxisId="left" type="monotone" dataKey="ingresos_real" stroke={BLUE} dot={false} strokeWidth={2} name="Ingresos real" />
+                <Line yAxisId="left" type="monotone" dataKey="ingresos_predichos" stroke={BLUE} dot={false} strokeWidth={2} strokeDasharray="5 5" name="Predicción" opacity={0.5} />
+                <Line yAxisId="right" type="monotone" dataKey="pedidos_real" stroke={TEAL} dot={false} strokeWidth={1.5} name="Pedidos real" />
+              </LineChart>
+            </ResponsiveContainer>
+            <ChartLegend items={[
+              { color: BLUE, label: 'Real' },
+              { color: BLUE + '80', label: 'Predicción' },
+              { color: TEAL, label: 'Pedidos (der.)' },
+            ]} />
+          </SectionCard>
+        )}
 
-      {topProds.length > 0 && (
-        <SectionCard title="Productos más demandados (predicción)">
-          <ResponsiveContainer width="100%" height={150}>
-            <BarChart data={topProds} layout="vertical">
-              <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => v + ' uds'} />
-              <YAxis type="category" dataKey="nombre" tick={{ fontSize: 10 }} width={90} />
-              <Tooltip />
-              <Bar dataKey="unidades_predichas" radius={4} name="Unidades predichas">
-                {topProds.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length] + '99'} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </SectionCard>
-      )}
+        {topProds.length > 0 && (
+          <SectionCard title="Productos más demandados (predicción)">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={topProds} layout="vertical" margin={{ top: 5, right: 45, bottom: 5, left: 5 }}>
+                <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => v + ' uds'} />
+                <YAxis type="category" dataKey="nombre" tick={{ fontSize: 10 }} width={95} />
+                <Tooltip />
+                <Bar dataKey="unidades_predichas" radius={4} name="Unidades predichas">
+                  {topProds.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length] + '99'} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </SectionCard>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ─── SECCIÓN 12: HEATMAP ────────────────────────────────────────────── */
+/* ─── SECCIÓN 12: HEATMAP ───────────────────────────────────────────────── */
 function SeccionHeatmap({ data, festivalId }: { data: any; festivalId: string }) {
   if (!festivalId) {
     return <EmptyState message="Selecciona un festival específico para ver el heatmap." />;
@@ -1209,7 +1174,6 @@ function SeccionHeatmap({ data, festivalId }: { data: any; festivalId: string })
   const k = data.kpis || {};
   const puestos: any[] = data.puestos || [];
 
-  // Cuadrícula 12×8 como en el HTML
   const COLS = 12, ROWS = 8;
   const grid: number[][] = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
   puestos.forEach((p: any) => {
@@ -1237,23 +1201,13 @@ function SeccionHeatmap({ data, festivalId }: { data: any; festivalId: string })
 
       {puestos.length > 0 ? (
         <SectionCard title="Mapa de intensidad (pos_x / pos_y)">
-          {/* Leyenda */}
-          <div className="flex gap-3 mb-3 text-[10px]">
-            {[['#dcfce7', 'Baja'], ['#fef08a', 'Media'], ['#fb923c', 'Alta'], ['#dc2626', 'Muy alta']].map(([color, label]) => (
-              <span key={label} className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded-sm inline-block" style={{ background: color }} />
-                {label}
-              </span>
-            ))}
-          </div>
-          {/* Cuadrícula */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: `repeat(${COLS}, 1fr)`,
-              gap: 3,
-            }}
-          >
+          <ChartLegend items={[
+            { color: '#dcfce7', label: 'Baja' },
+            { color: '#fef08a', label: 'Media' },
+            { color: '#fb923c', label: 'Alta' },
+            { color: '#dc2626', label: 'Muy alta' },
+          ]} />
+          <div className="mt-3" style={{ display: 'grid', gridTemplateColumns: `repeat(${COLS}, 1fr)`, gap: 3 }}>
             {grid.flat().map((v, idx) => {
               const row = Math.floor(idx / COLS), col = idx % COLS;
               const puesto = puestos.find((p: any) => {
@@ -1267,7 +1221,7 @@ function SeccionHeatmap({ data, festivalId }: { data: any; festivalId: string })
                   title={puesto ? `${puesto.nombre}\n${fmtE(puesto.ingresos)} · ${fmtMin(puesto.espera_min)}` : ''}
                   style={{
                     background: heatColor(v),
-                    height: 36,
+                    height: 40,
                     borderRadius: 4,
                     display: 'flex',
                     alignItems: 'center',
@@ -1283,17 +1237,12 @@ function SeccionHeatmap({ data, festivalId }: { data: any; festivalId: string })
               );
             })}
           </div>
-          {/* Puestos como puntos flotantes (vista alternativa) */}
-          <div className="relative bg-gray-100 rounded-lg mt-4" style={{ height: 200 }}>
+          <div className="relative bg-gray-100 rounded-lg mt-4" style={{ height: 240 }}>
             {puestos.map((p: any, i: number) => (
               <div
                 key={i}
                 className="absolute flex flex-col items-center"
-                style={{
-                  left: `${p.pos_x || 50}%`,
-                  top: `${p.pos_y || 50}%`,
-                  transform: 'translate(-50%, -50%)',
-                }}
+                style={{ left: `${p.pos_x || 50}%`, top: `${p.pos_y || 50}%`, transform: 'translate(-50%, -50%)' }}
                 title={`${p.nombre}: ${fmtN(p.pedidos)} pedidos · ${fmtE(p.ingresos)}`}
               >
                 <div
