@@ -556,6 +556,28 @@ export const getDecisiones = async (festivalId: number) => {
 };
 
 // El gestor aprueba (y ejecuta) una decisión pendiente
+export type BotComprasPeriodo = 'hoy' | '7d' | 'festival';
+
+export const getBotComprasDashboard = async (festivalId: number, periodo: BotComprasPeriodo = 'festival') => {
+    const query = new URLSearchParams({
+        festival_id: String(festivalId),
+        periodo
+    });
+    const res = await fetch(`${API_URL}/gestor/bot-compras/dashboard?${query.toString()}`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar el dashboard del bot'));
+    return res.json();
+};
+
+export const evaluarBotCompras = async (festivalId: number) => {
+    const res = await fetch(`${API_URL}/gestor/bot-compras/evaluar`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ festival_id: festivalId })
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al evaluar el bot de compra'));
+    return res.json();
+};
+
 export const aprobarDecision = async (id: number) => {
     const res = await fetch(`${API_URL}/gestor/decisiones/${id}/aprobar`, {
         method: 'POST',

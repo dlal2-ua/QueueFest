@@ -3673,6 +3673,270 @@ async function evaluarGanadoresAB(festival_id) {
   }
 }
 
+function getBotPeriodClause(period, pedidoAlias = 'pe') {
+  switch (String(period || 'festival').toLowerCase()) {
+    case 'hoy':
+      return ` AND DATE(${pedidoAlias}.creado_en) = CURDATE()`;
+    case '7d':
+    case '7dias':
+    case '7_dias':
+      return ` AND ${pedidoAlias}.creado_en >= NOW() - INTERVAL 7 DAY`;
+    case 'festival':
+    default:
+      return '';
+  }
+}
+
+function getBotTimeBucket(period, pedidoAlias = 'pe') {
+  if (String(period || '').toLowerCase() === 'hoy') {
+    return {
+      labelExpr: `DATE_FORMAT(${pedidoAlias}.creado_en, '%H:00')`,
+      sortExpr: `DATE_FORMAT(${pedidoAlias}.creado_en, '%Y-%m-%d %H:00:00')`
+    };
+  }
+
+  return {
+    labelExpr: `DATE_FORMAT(${pedidoAlias}.creado_en, '%d/%m')`,
+    sortExpr: `DATE(${pedidoAlias}.creado_en)`
+  };
+}
+
+function normalizeBotPeriodo(period) {
+  const normalized = String(period || 'festival').toLowerCase();
+  if (normalized === 'hoy' || normalized === '7d' || normalized === '7dias' || normalized === '7_dias') {
+    return normalized === 'hoy' ? 'hoy' : '7d';
+  }
+  return 'festival';
+}
+
+async function getGestorModoAuto(festivalId) {
+  const [rows] = await db.query(
+    'SELECT modo_auto FROM gestor_config WHERE festival_id = ?',
+    [festivalId]
+  );
+  return rows.length > 0 ? Boolean(rows[0].modo_auto) : true;
+}
+
+async function getBotCompraDashboard(festivalId, periodo = 'festival') {
+  const normalizedFestivalId = Number(festivalId);
+  const normalizedPeriodo = normalizeBotPeriodo(periodo);
+  const periodClause = getBotPeriodClause(normalizedPeriodo, 'pe');
+  const timeBucket = getBotTimeBucket(normalizedPeriodo, 'pe');
+  const modoAuto = await getGestorModoAuto(normalizedFestivalId);
+
+  const [decisiones] = await db.query(
+    `SELECT d.*,
+            p.nombre AS puesto_nombre,
+            pr.nombre AS producto_nombre,
+            TIMESTAMPDIFF(MINUTE, d.creado_en, NOW()) AS minutos_desde_creacion
+     FROM decisiones_automaticas d
+     LEFT JOIN puestos p ON p.id = d.puesto_id
+     LEFT JOIN productos pr ON pr.id = d.producto_id
+     WHERE d.festival_id = ?
+       AND d.tipo IN ('descuento_producto', 'activar_promocion')
+     ORDER BY d.creado_en DESC
+     LIMIT 40`,
+    [normalizedFestivalId]
+  );
+
+  const [promociones] = await db.query(
+    `SELECT
+       promo.id,
+       promo.puesto_id,
+       promo.producto_id,
+       promo.titulo,
+       promo.descripcion,
+       promo.precio_promo,
+       promo.tipo,
+       promo.valor_descuento,
+       promo.activa,
+       promo.creado_en,
+       promo.actualizado_en,
+       pu.nombre AS puesto_nombre,
+       pu.tipo AS puesto_tipo,
+       prod.nombre AS producto_nombre,
+       COALESCE(perf.usos, 0) AS usos,
+       COALESCE(perf.unidades_vendidas, 0) AS unidades_vendidas,
+       COALESCE(perf.ingresos_generados, 0) AS ingresos_generados,
+       perf.ultimo_uso,
+       ab.ventas_antes,
+       ab.ventas_despues,
+       ab.ganadora
+     FROM promociones promo
+     INNER JOIN puestos pu ON pu.id = promo.puesto_id
+     LEFT JOIN productos prod ON prod.id = promo.producto_id
+     LEFT JOIN (
+       SELECT
+         pi.promocion_id,
+         COUNT(*) AS usos,
+         COALESCE(SUM(pi.cantidad), 0) AS unidades_vendidas,
+         COALESCE(SUM(pi.importe_total), 0) AS ingresos_generados,
+         MAX(pe.creado_en) AS ultimo_uso
+       FROM pedido_items pi
+       INNER JOIN pedidos pe ON pe.id = pi.pedido_id
+       INNER JOIN puestos ppe ON ppe.id = pe.puesto_id
+       WHERE pi.promocion_id IS NOT NULL
+         AND ppe.festival_id = ?
+         AND pe.estado NOT IN ('cancelado')
+         ${periodClause}
+       GROUP BY pi.promocion_id
+     ) perf ON perf.promocion_id = promo.id
+     LEFT JOIN (
+       SELECT
+         producto_id,
+         MAX(ventas_antes) AS ventas_antes,
+         MAX(ventas_despues) AS ventas_despues,
+         MAX(ganadora) AS ganadora
+       FROM decisiones_automaticas
+       WHERE festival_id = ?
+         AND tipo = 'descuento_producto'
+         AND producto_id IS NOT NULL
+       GROUP BY producto_id
+     ) ab ON ab.producto_id = promo.producto_id
+     WHERE pu.festival_id = ?
+       AND (
+         promo.descripcion LIKE '%autom%'
+         OR EXISTS (
+           SELECT 1
+           FROM decisiones_automaticas d
+           WHERE d.festival_id = pu.festival_id
+             AND d.tipo IN ('descuento_producto', 'activar_promocion')
+             AND (
+               (d.producto_id IS NOT NULL AND d.producto_id = promo.producto_id)
+               OR (d.producto_id IS NULL AND d.puesto_id = promo.puesto_id)
+             )
+         )
+       )
+     ORDER BY promo.activa DESC, ingresos_generados DESC, usos DESC, promo.actualizado_en DESC, promo.id DESC
+     LIMIT 50`,
+    [normalizedFestivalId, normalizedFestivalId, normalizedFestivalId]
+  );
+
+  const [serieTemporal] = await db.query(
+    `SELECT
+       ${timeBucket.labelExpr} AS etiqueta,
+       ${timeBucket.sortExpr} AS orden,
+       COUNT(*) AS usos,
+       COALESCE(SUM(pi.cantidad), 0) AS unidades,
+       COALESCE(SUM(pi.importe_total), 0) AS ingresos
+     FROM pedido_items pi
+     INNER JOIN pedidos pe ON pe.id = pi.pedido_id
+     INNER JOIN promociones promo ON promo.id = pi.promocion_id
+     INNER JOIN puestos pu ON pu.id = pe.puesto_id
+     WHERE pi.promocion_id IS NOT NULL
+       AND pu.festival_id = ?
+       AND pe.estado NOT IN ('cancelado')
+       ${periodClause}
+       AND (
+         promo.descripcion LIKE '%autom%'
+         OR EXISTS (
+           SELECT 1
+           FROM decisiones_automaticas d
+           WHERE d.festival_id = pu.festival_id
+             AND d.tipo IN ('descuento_producto', 'activar_promocion')
+             AND (
+               (d.producto_id IS NOT NULL AND d.producto_id = promo.producto_id)
+               OR (d.producto_id IS NULL AND d.puesto_id = promo.puesto_id)
+             )
+         )
+       )
+     GROUP BY etiqueta, orden
+     ORDER BY orden ASC`,
+    [normalizedFestivalId]
+  );
+
+  const kpis = promociones.reduce((acc, promo) => {
+    acc.promos_automaticas += 1;
+    acc.promos_automaticas_activas += promo.activa ? 1 : 0;
+    acc.usos_promociones += Number(promo.usos || 0);
+    acc.unidades_vendidas += Number(promo.unidades_vendidas || 0);
+    acc.ingresos_con_promocion += Number(promo.ingresos_generados || 0);
+    return acc;
+  }, {
+    promos_automaticas: 0,
+    promos_automaticas_activas: 0,
+    decisiones_pendientes: decisiones.filter((decision) => decision.estado === 'pendiente').length,
+    usos_promociones: 0,
+    unidades_vendidas: 0,
+    ingresos_con_promocion: 0
+  });
+
+  const promocionesConUso = [...promociones]
+    .filter((promo) => Number(promo.usos || 0) > 0)
+    .sort((left, right) => Number(right.ingresos_generados || 0) - Number(left.ingresos_generados || 0));
+
+  return {
+    periodo: normalizedPeriodo,
+    modo_auto: modoAuto,
+    actualizado_en: new Date().toISOString(),
+    kpis,
+    mejor_promocion: promocionesConUso[0] || null,
+    peor_promocion: promocionesConUso.length > 0 ? promocionesConUso[promocionesConUso.length - 1] : null,
+    decisiones,
+    promociones,
+    serie_temporal: serieTemporal.map((row) => ({
+      etiqueta: row.etiqueta,
+      usos: Number(row.usos || 0),
+      unidades: Number(row.unidades || 0),
+      ingresos: Number(row.ingresos || 0)
+    }))
+  };
+}
+
+// GET /api/gestor/bot-compras/dashboard?festival_id=X&periodo=hoy|7d|festival
+app.get('/api/gestor/bot-compras/dashboard', auth, async (req, res) => {
+  const { festival_id, periodo } = req.query;
+  if (!festival_id) return res.status(400).json({ error: 'festival_id requerido' });
+
+  try {
+    const dashboard = await getBotCompraDashboard(festival_id, periodo);
+    res.json(dashboard);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/gestor/bot-compras/evaluar
+app.post('/api/gestor/bot-compras/evaluar', auth, async (req, res) => {
+  const { festival_id } = req.body;
+  if (!festival_id) return res.status(400).json({ error: 'festival_id requerido' });
+
+  try {
+    const normalizedFestivalId = Number(festival_id);
+    await generarDecisiones(normalizedFestivalId);
+
+    const modoAuto = await getGestorModoAuto(normalizedFestivalId);
+    let ejecutadas = 0;
+
+    if (modoAuto) {
+      const [pendientes] = await db.query(
+        `SELECT *
+         FROM decisiones_automaticas
+         WHERE festival_id = ?
+           AND estado = 'pendiente'
+           AND tipo != 'reposicion_stock'`,
+        [normalizedFestivalId]
+      );
+
+      for (const decision of pendientes) {
+        await ejecutarDecision(decision);
+        await db.query('UPDATE decisiones_automaticas SET estado = ? WHERE id = ?', ['ejecutada', decision.id]);
+        ejecutadas += 1;
+      }
+    }
+
+    await evaluarGanadoresAB(normalizedFestivalId);
+
+    res.json({
+      message: 'Bot de compra evaluado',
+      modo_auto: modoAuto,
+      ejecutadas
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/gestor/modo-auto?festival_id=X
 app.get('/api/gestor/modo-auto', auth, async (req, res) => {
   const { festival_id } = req.query;
