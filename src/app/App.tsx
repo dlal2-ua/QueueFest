@@ -104,8 +104,8 @@ function AppRoutes() {
 
   // Admin — envuelto en phone frame
   if (user.rol === 'administrador') {
-    if (path === '/admin/dashboard') return <PhoneFrameShell><AdminDashboardScreen /></PhoneFrameShell>;
-    return <PhoneFrameShell><AdminScreen /></PhoneFrameShell>;
+    if (path === '/admin/dashboard') return <AdminDashboardScreen />;
+    return <AdminScreen />;
   }
 
   // Operador — OperatorLayout maneja su propio frame
