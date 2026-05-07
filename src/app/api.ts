@@ -156,7 +156,14 @@ export const getStockPuesto = async (puestoId: number) => {
     return res.json();
 };
 
-// Operador: reabastecer una materia prima de su puesto
+// Operador: consultar stock disponible en almacén central para una materia prima
+export const getStockAlmacen = async (puestoId: number, materiaPrimaId: number) => {
+    const res = await fetch(`${API_URL}/operador/stock/${puestoId}/almacen/${materiaPrimaId}`, { headers: headers() });
+    if (!res.ok) throw new Error('Error consultando stock del almacén');
+    return res.json() as Promise<{ id: number; nombre: string; unidad_medida: string; stock_disponible: number }>;
+};
+
+// Operador: reabastecer una materia prima de su puesto (transaccional: descuenta del almacén central)
 export const reabastecerMateriaPrima = async (puestoId: number, materiaPrimaId: number, cantidad: number) => {
     const res = await fetch(`${API_URL}/operador/stock/${puestoId}/reabastecer`, {
         method: 'POST',

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { getStockPuesto, reabastecerMateriaPrima, getPrediccion5h, getReposicionesAprobadas, confirmarReposicion } from '../api';
+import { getStockPuesto, getStockAlmacen, reabastecerMateriaPrima, getPrediccion5h, getReposicionesAprobadas, confirmarReposicion } from '../api';
 import { useOperatorPuesto } from '../context/OperatorPuestoContext';
 import {
     RefreshCw, AlertTriangle, CheckCircle, AlertCircle,
@@ -116,17 +116,49 @@ function RestockModal({ item, puestoId, onSuccess, onClose }: {
     onSuccess: () => void;
     onClose: () => void;
 }) {
-    const defaultQty = Math.max(item.stock_maximo - item.stock_actual, 0);
-    const [cantidad, setCantidad] = useState<string>(defaultQty.toFixed(defaultQty % 1 === 0 ? 0 : 2));
+    const [cantidad, setCantidad] = useState<string>('');
     const [loading, setLoading] = useState(false);
+    const [loadingAlmacen, setLoadingAlmacen] = useState(true);
+    const [stockAlmacen, setStockAlmacen] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [done, setDone] = useState(false);
 
+    // Cargar stock del almacén central al abrir el modal
+    useEffect(() => {
+        let cancelled = false;
+        const fetchAlmacen = async () => {
+            setLoadingAlmacen(true);
+            try {
+                const data = await getStockAlmacen(puestoId, item.materia_prima_id);
+                if (!cancelled) {
+                    setStockAlmacen(data.stock_disponible);
+                    // Sugerir cantidad: lo que quepa en el puesto, limitado por lo que hay en almacén
+                    const espacioPuesto = Math.max(item.stock_maximo - item.stock_actual, 0);
+                    const sugerida = Math.min(espacioPuesto, data.stock_disponible);
+                    setCantidad(sugerida % 1 === 0 ? String(sugerida) : sugerida.toFixed(2));
+                }
+            } catch {
+                if (!cancelled) {
+                    setStockAlmacen(null);
+                    setError('No se pudo consultar el stock del almacén');
+                }
+            } finally {
+                if (!cancelled) setLoadingAlmacen(false);
+            }
+        };
+        fetchAlmacen();
+        return () => { cancelled = true; };
+    }, [puestoId, item.materia_prima_id, item.stock_maximo, item.stock_actual]);
+
     const cantidadNum = parseFloat(cantidad) || 0;
+    const espacioPuesto = Math.max(item.stock_maximo - item.stock_actual, 0);
+    const maxPermitido = stockAlmacen !== null ? Math.min(espacioPuesto, stockAlmacen) : espacioPuesto;
     const nuevoStock = Math.min(item.stock_actual + cantidadNum, item.stock_maximo);
+    const excede = cantidadNum > maxPermitido;
 
     const handleConfirm = async () => {
         if (cantidadNum <= 0) { setError('La cantidad debe ser mayor que 0'); return; }
+        if (excede) { setError(`No puedes pedir más de ${maxPermitido} ${item.unidad_medida}`); return; }
         setLoading(true);
         setError(null);
         try {
@@ -141,7 +173,7 @@ function RestockModal({ item, puestoId, onSuccess, onClose }: {
     };
 
     const adj = (delta: number) => {
-        const v = Math.max(0, Math.min(cantidadNum + delta, item.stock_maximo - item.stock_actual));
+        const v = Math.max(0, Math.min(cantidadNum + delta, maxPermitido));
         setCantidad(v % 1 === 0 ? String(v) : v.toFixed(2));
     };
 
@@ -172,7 +204,28 @@ function RestockModal({ item, puestoId, onSuccess, onClose }: {
                     </button>
                 </div>
 
-                {/* Resumen actual */}
+                {/* Stock del almacén central */}
+                <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color: '#3B82F6' }}>
+                        📦 Stock disponible en almacén central
+                    </p>
+                    {loadingAlmacen ? (
+                        <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+                                style={{ borderColor: '#3B82F6', borderTopColor: 'transparent' }} />
+                            <p className="text-xs" style={{ color: '#3B82F6' }}>Consultando almacén…</p>
+                        </div>
+                    ) : stockAlmacen !== null ? (
+                        <p className="text-lg font-extrabold" style={{ color: stockAlmacen > 0 ? '#1D4ED8' : '#EF4444' }}>
+                            {stockAlmacen % 1 === 0 ? stockAlmacen : stockAlmacen.toFixed(2)} {item.unidad_medida}
+                            {stockAlmacen <= 0 && <span className="text-xs ml-2 font-normal" style={{ color: '#EF4444' }}>⚠ Agotado</span>}
+                        </p>
+                    ) : (
+                        <p className="text-xs" style={{ color: '#EF4444' }}>No se pudo consultar</p>
+                    )}
+                </div>
+
+                {/* Resumen actual del puesto */}
                 <div className="flex gap-2 mb-4">
                     {[
                         { label: 'Actual', value: item.stock_actual, color: '#64748B' },
@@ -192,42 +245,61 @@ function RestockModal({ item, puestoId, onSuccess, onClose }: {
 
                 {/* Cantidad a añadir */}
                 <p className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: '#94A3B8' }}>
-                    Cantidad a añadir ({item.unidad_medida})
+                    Cantidad a mover del almacén ({item.unidad_medida})
+                    {stockAlmacen !== null && (
+                        <span className="ml-1 normal-case" style={{ color: '#3B82F6' }}>
+                            · máx: {maxPermitido % 1 === 0 ? maxPermitido : maxPermitido.toFixed(2)}
+                        </span>
+                    )}
                 </p>
                 <div className="flex items-center gap-2 mb-2">
                     <button
                         onClick={() => adj(-1)}
                         className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
                         style={{ backgroundColor: '#F1E8DE' }}
+                        disabled={loadingAlmacen || (stockAlmacen !== null && stockAlmacen <= 0)}
                     >
                         <Minus className="w-4 h-4" style={{ color: '#C8956C' }} />
                     </button>
                     <input
                         type="number"
                         min={0}
-                        max={item.stock_maximo - item.stock_actual}
+                        max={maxPermitido}
                         step={item.unidad_medida === 'unidad' ? 1 : 0.1}
                         value={cantidad}
                         onChange={e => setCantidad(e.target.value)}
+                        disabled={loadingAlmacen || (stockAlmacen !== null && stockAlmacen <= 0)}
                         className="flex-1 text-center text-lg font-extrabold rounded-xl px-3 py-2.5 outline-none border-2"
-                        style={{ backgroundColor: '#fff', borderColor: '#C8956C', color: '#2C1810' }}
+                        style={{
+                            backgroundColor: '#fff',
+                            borderColor: excede ? '#EF4444' : '#C8956C',
+                            color: excede ? '#EF4444' : '#2C1810'
+                        }}
                     />
                     <button
                         onClick={() => adj(1)}
                         className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
                         style={{ backgroundColor: '#C8956C' }}
+                        disabled={loadingAlmacen || (stockAlmacen !== null && stockAlmacen <= 0)}
                     >
                         <Plus className="w-4 h-4 text-white" />
                     </button>
                 </div>
 
+                {/* Aviso si excede */}
+                {excede && (
+                    <p className="text-xs mb-2 text-center font-semibold" style={{ color: '#EF4444' }}>
+                        ⚠ No puedes pedir más de lo disponible en almacén ({maxPermitido} {item.unidad_medida})
+                    </p>
+                )}
+
                 {/* Preview nuevo stock */}
-                {cantidadNum > 0 && (
+                {cantidadNum > 0 && !excede && (
                     <div className="rounded-xl p-2.5 mb-3 flex items-center gap-2"
                         style={{ backgroundColor: '#ECFDF5', border: '1px solid #BBF7D0' }}>
                         <TrendingUp className="w-4 h-4 flex-shrink-0" style={{ color: '#10B981' }} />
                         <p className="text-xs" style={{ color: '#065F46' }}>
-                            Stock resultante: <span className="font-extrabold">{nuevoStock % 1 === 0 ? nuevoStock : nuevoStock.toFixed(2)} {item.unidad_medida}</span>
+                            Stock resultante del puesto: <span className="font-extrabold">{nuevoStock % 1 === 0 ? nuevoStock : nuevoStock.toFixed(2)} {item.unidad_medida}</span>
                             {nuevoStock >= item.stock_maximo && <span className="ml-1 text-[10px]">(máximo)</span>}
                         </p>
                     </div>
@@ -240,16 +312,28 @@ function RestockModal({ item, puestoId, onSuccess, onClose }: {
                 {/* Botón confirmar */}
                 <button
                     onClick={handleConfirm}
-                    disabled={loading || done || cantidadNum <= 0}
+                    disabled={loading || done || cantidadNum <= 0 || excede || loadingAlmacen || (stockAlmacen !== null && stockAlmacen <= 0)}
                     className="w-full py-3 rounded-2xl font-extrabold text-sm transition-all"
                     style={{
-                        backgroundColor: done ? '#10B981' : '#C8956C',
+                        backgroundColor: done ? '#10B981' : (stockAlmacen !== null && stockAlmacen <= 0) ? '#94A3B8' : '#C8956C',
                         color: '#fff',
-                        opacity: (loading || cantidadNum <= 0) && !done ? 0.6 : 1
+                        opacity: (loading || cantidadNum <= 0 || excede || loadingAlmacen) && !done ? 0.6 : 1
                     }}
                 >
-                    {done ? '✓ Abastecido' : loading ? 'Guardando…' : `Añadir ${cantidadNum > 0 ? (cantidadNum % 1 === 0 ? cantidadNum : cantidadNum.toFixed(2)) : ''} ${item.unidad_medida}`}
+                    {done
+                        ? '✓ Abastecido'
+                        : (stockAlmacen !== null && stockAlmacen <= 0)
+                            ? 'Almacén agotado'
+                            : loading
+                                ? 'Guardando…'
+                                : `Mover ${cantidadNum > 0 ? (cantidadNum % 1 === 0 ? cantidadNum : cantidadNum.toFixed(2)) : ''} ${item.unidad_medida} al puesto`
+                    }
                 </button>
+
+                {/* Info transacción */}
+                <p className="text-[9px] text-center mt-2" style={{ color: '#94A3B8' }}>
+                    El stock se mueve del almacén central al puesto de forma atómica (transacción)
+                </p>
             </div>
         </div>
     );
