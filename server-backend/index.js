@@ -2216,58 +2216,157 @@ app.get('/api/operador/stock/:puestoId', auth, async (req, res) => {
   }
 });
 
-// Operador: reabastecer una materia prima de su puesto
-app.post('/api/operador/stock/:puestoId/reabastecer', auth, async (req, res) => {
+// Operador: consultar stock disponible en almacén central para una materia prima
+app.get('/api/operador/stock/:puestoId/almacen/:materiaPrimaId', auth, async (req, res) => {
   try {
     const puestoId = Number(req.params.puestoId);
-    const { materia_prima_id, cantidad } = req.body;
+    const materiaPrimaId = Number(req.params.materiaPrimaId);
 
-    if (!materia_prima_id || cantidad === undefined || cantidad === null) {
-      return res.status(400).json({ error: 'materia_prima_id y cantidad son obligatorios' });
-    }
-    const cantidadNum = Number(cantidad);
-    if (isNaN(cantidadNum) || cantidadNum < 0) {
-      return res.status(400).json({ error: 'cantidad debe ser un número positivo' });
-    }
-
-    // Verificar que el operador pertenece a este puesto (o es gestor/admin)
+    // Verificar pertenencia al puesto
     if (req.user.rol === 'operador') {
       const [ops] = await db.query(
         'SELECT id FROM puesto_operadores WHERE puesto_id = ? AND usuario_id = ?',
         [puestoId, req.user.id]
       );
       if (ops.length === 0) {
+        return res.status(403).json({ error: 'No tienes permiso para ver el stock de este puesto' });
+      }
+    }
+
+    const [rows] = await db.query(
+      'SELECT id, nombre, unidad_medida, CAST(stock_actual AS FLOAT) AS stock_disponible FROM materias_primas WHERE id = ?',
+      [materiaPrimaId]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Materia prima no encontrada en almacén' });
+    }
+
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Operador: reabastecer una materia prima de su puesto (con TRANSACCIÓN)
+// Descuenta del almacén central (materias_primas) y sube en stock_puesto.
+// Si cualquier paso falla, se hace ROLLBACK y no se descuadra nada.
+app.post('/api/operador/stock/:puestoId/reabastecer', auth, async (req, res) => {
+  const conn = await db.getConnection();
+  try {
+    const puestoId = Number(req.params.puestoId);
+    const { materia_prima_id, cantidad } = req.body;
+
+    if (!materia_prima_id || cantidad === undefined || cantidad === null) {
+      conn.release();
+      return res.status(400).json({ error: 'materia_prima_id y cantidad son obligatorios' });
+    }
+    const cantidadNum = Number(cantidad);
+    if (isNaN(cantidadNum) || cantidadNum <= 0) {
+      conn.release();
+      return res.status(400).json({ error: 'cantidad debe ser un número positivo mayor que 0' });
+    }
+
+    // Verificar que el operador pertenece a este puesto (o es gestor/admin)
+    if (req.user.rol === 'operador') {
+      const [ops] = await conn.query(
+        'SELECT id FROM puesto_operadores WHERE puesto_id = ? AND usuario_id = ?',
+        [puestoId, req.user.id]
+      );
+      if (ops.length === 0) {
+        conn.release();
         return res.status(403).json({ error: 'No tienes permiso para reabastecer este puesto' });
       }
     }
 
-    // Leer stock actual y máximo
-    const [stockRows] = await db.query(
-      'SELECT stock_actual, stock_maximo FROM stock_puesto WHERE puesto_id = ? AND materia_prima_id = ?',
+    // ─── INICIO TRANSACCIÓN ───
+    await conn.beginTransaction();
+
+    // 1. Leer stock del almacén central (con FOR UPDATE para bloquear la fila)
+    const [almacenRows] = await conn.query(
+      'SELECT stock_actual FROM materias_primas WHERE id = ? FOR UPDATE',
+      [materia_prima_id]
+    );
+    if (almacenRows.length === 0) {
+      await conn.rollback();
+      conn.release();
+      return res.status(404).json({ error: 'Materia prima no encontrada en almacén central' });
+    }
+
+    const stockAlmacen = Number(almacenRows[0].stock_actual);
+    if (stockAlmacen <= 0) {
+      await conn.rollback();
+      conn.release();
+      return res.status(400).json({ error: 'No hay stock disponible en el almacén central' });
+    }
+    if (cantidadNum > stockAlmacen) {
+      await conn.rollback();
+      conn.release();
+      return res.status(400).json({
+        error: `Stock insuficiente en almacén. Disponible: ${stockAlmacen}`,
+        stock_disponible: stockAlmacen
+      });
+    }
+
+    // 2. Leer stock actual y máximo del puesto (con FOR UPDATE)
+    const [stockRows] = await conn.query(
+      'SELECT stock_actual, stock_maximo FROM stock_puesto WHERE puesto_id = ? AND materia_prima_id = ? FOR UPDATE',
       [puestoId, materia_prima_id]
     );
     if (stockRows.length === 0) {
-      return res.status(404).json({ error: 'Materia prima no encontrada en este puesto' });
+      await conn.rollback();
+      conn.release();
+      return res.status(404).json({ error: 'Materia prima no configurada para este puesto' });
     }
 
     const { stock_actual, stock_maximo } = stockRows[0];
-    const nuevoStock = Math.min(Number(stock_actual) + cantidadNum, Number(stock_maximo));
+    // Limitar la cantidad para no exceder el máximo del puesto
+    const cantidadReal = Math.min(cantidadNum, Number(stock_maximo) - Number(stock_actual));
+    if (cantidadReal <= 0) {
+      await conn.rollback();
+      conn.release();
+      return res.status(400).json({ error: 'El puesto ya está al máximo de capacidad para esta materia prima' });
+    }
 
-    await db.query(
-      'UPDATE stock_puesto SET stock_actual = ?, actualizado_en = NOW() WHERE puesto_id = ? AND materia_prima_id = ?',
-      [nuevoStock, puestoId, materia_prima_id]
+    const nuevoStockPuesto = Number(stock_actual) + cantidadReal;
+    const nuevoStockAlmacen = stockAlmacen - cantidadReal;
+
+    // 3. UPDATE 1: Descontar del almacén central
+    await conn.query(
+      'UPDATE materias_primas SET stock_actual = ? WHERE id = ?',
+      [nuevoStockAlmacen, materia_prima_id]
     );
+
+    // 4. UPDATE 2: Subir stock del puesto
+    await conn.query(
+      'UPDATE stock_puesto SET stock_actual = ?, actualizado_en = NOW() WHERE puesto_id = ? AND materia_prima_id = ?',
+      [nuevoStockPuesto, puestoId, materia_prima_id]
+    );
+
+    // 5. Registrar movimiento de stock para auditoría
+    await conn.query(
+      `INSERT INTO movimientos_stock (tipo, materia_prima_id, puesto_id_destino, cantidad, usuario_id, notas, creado_en)
+       VALUES ('reposicion', ?, ?, ?, ?, ?, NOW())`,
+      [materia_prima_id, puestoId, cantidadReal, req.user.id, `Reposición desde almacén central al puesto #${puestoId}`]
+    );
+
+    // ─── COMMIT ───
+    await conn.commit();
 
     res.json({
       success: true,
       materia_prima_id: Number(materia_prima_id),
-      stock_anterior: Number(stock_actual),
-      cantidad_añadida: cantidadNum,
-      stock_nuevo: nuevoStock,
-      stock_maximo: Number(stock_maximo)
+      stock_anterior_puesto: Number(stock_actual),
+      cantidad_movida: cantidadReal,
+      stock_nuevo_puesto: nuevoStockPuesto,
+      stock_maximo_puesto: Number(stock_maximo),
+      stock_anterior_almacen: stockAlmacen,
+      stock_nuevo_almacen: nuevoStockAlmacen
     });
   } catch (err) {
+    await conn.rollback();
     res.status(500).json({ error: err.message });
+  } finally {
+    conn.release();
   }
 });
 
