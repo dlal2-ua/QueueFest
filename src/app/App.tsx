@@ -62,6 +62,7 @@ import { OperatorOrderDetailScreen } from './screens/OperatorOrderDetailScreen';
 import { GestorScreen } from './screens/GestorScreen';
 import { AdminScreen } from './screens/AdminScreen';
 import { AdminDashboardScreen } from './screens/AdminDashboardScreen';
+import { StressDashboardScreen } from './screens/StressDashboardScreen';
 
 function AppRoutes() {
   const { user, isLoading } = useAuth();
@@ -108,6 +109,7 @@ function AppRoutes() {
   // Admin — envuelto en phone frame
   if (user.rol === 'administrador') {
     if (path === '/admin/dashboard') return <AdminDashboardScreen />;
+    if (path === '/admin/stress')    return <StressDashboardScreen />;
     return <AdminScreen />;
   }
 

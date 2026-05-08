@@ -17,26 +17,26 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-const express    = require('express');
-const mysql2     = require('mysql2/promise');
-const jwt        = require('jsonwebtoken');
-const cors       = require('cors');
-const fs         = require('fs');
-const net        = require('net');
+const express = require('express');
+const mysql2 = require('mysql2/promise');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
+const fs = require('fs');
+const net = require('net');
 const { Client } = require('ssh2');
 require('dotenv').config();
 
 // ─── Configuración ─────────────────────────────────────────────────────────
 
-const PORT       = process.env.DW_PORT || 3001;
+const PORT = process.env.DW_PORT || 3001;
 const LOCAL_PORT = 12346;          // distinto al 12345 del main
-const SSH_HOST   = '143.47.35.13';
-const SSH_USER   = 'ubuntu';
+const SSH_HOST = '143.47.35.13';
+const SSH_USER = 'ubuntu';
 const MYSQL_HOST = '10.0.0.5';
 const MYSQL_PORT = 3306;
 const MYSQL_USER = 'admin';
 const MYSQL_PASS = 'Proyecto_Seguro2026!';
-const MYSQL_DB   = 'queuefest_dw';
+const MYSQL_DB = 'queuefest_dw';
 const JWT_SECRET = 'queuefest_secret_2026';
 
 // ─── App ────────────────────────────────────────────────────────────────────
@@ -46,6 +46,7 @@ app.use(cors());
 app.use(express.json());
 
 let db;
+let dbRelacional; // Pool a la BD relacional queuefest (mismo túnel, distinta BD)
 
 // ─── Auth middleware ─────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ const auth = (req, res, next) => {
  */
 function buildFilters(query, { alias = 'fv', tiempoAlias = 'dt', puestoAlias = 'dp' } = {}) {
   const clauses = [];
-  const params  = [];
+  const params = [];
 
   const periodo = query.periodo || 'hoy';
   if (periodo === 'hoy') {
@@ -100,7 +101,7 @@ function buildFilters(query, { alias = 'fv', tiempoAlias = 'dt', puestoAlias = '
 
 app.get('/debug/db-info', async (req, res) => {
   try {
-    const [dbRow]   = await db.query('SELECT DATABASE() AS db');
+    const [dbRow] = await db.query('SELECT DATABASE() AS db');
     const [hostRow] = await db.query('SELECT @@hostname AS host, @@port AS port');
     res.json({
       database: dbRow[0]?.db,
@@ -752,10 +753,10 @@ app.get('/api/dashboard/clv', auth, async (req, res) => {
 app.get('/api/dashboard/prediccion', auth, async (req, res) => {
   try {
     const festivalFilter = req.query.festival_id ? 'AND fp.festival_key = ?' : '';
-    const tipoFilter     = req.query.tipo_puesto  ? 'AND dp.tipo = ?'       : '';
-    const pjParams       = [
+    const tipoFilter = req.query.tipo_puesto ? 'AND dp.tipo = ?' : '';
+    const pjParams = [
       ...(req.query.festival_id ? [Number(req.query.festival_id)] : []),
-      ...(req.query.tipo_puesto  ? [req.query.tipo_puesto] : []),
+      ...(req.query.tipo_puesto ? [req.query.tipo_puesto] : []),
     ];
 
     // Query 1: fila con la hora pico más alta (LIMIT 1, sin agregación)
@@ -782,9 +783,9 @@ app.get('/api/dashboard/prediccion', auth, async (req, res) => {
 
     const kipiBase = kipiRows[0] || {};
     const kpis = {
-      hora_pico:            kipiBase.hora_pico          ?? null,
-      pedidos_hora_pico:    kipiBase.pedidos_hora_pico  ?? null,
-      ingresos_hora_pico:   kipiBase.ingresos_hora_pico ?? null,
+      hora_pico: kipiBase.hora_pico ?? null,
+      pedidos_hora_pico: kipiBase.pedidos_hora_pico ?? null,
+      ingresos_hora_pico: kipiBase.ingresos_hora_pico ?? null,
       confianza_global_pct: confRow?.confianza_global_pct ?? 0,
     };
     const [por_hora] = await db.query(`
@@ -859,8 +860,8 @@ app.get('/api/dashboard/heatmap', auth, async (req, res) => {
     });
 
     const zonaCaliente = puestos[0]?.nombre || null;
-    const zonaFria     = puestos[puestos.length - 1]?.nombre || null;
-    const esperaAlta   = puestos[0]?.espera_min ?? null;
+    const zonaFria = puestos[puestos.length - 1]?.nombre || null;
+    const esperaAlta = puestos[0]?.espera_min ?? null;
 
     res.json({
       kpis: { zona_caliente: zonaCaliente, zona_fria: zonaFria, espera_zona_alta_min: esperaAlta },
@@ -869,6 +870,169 @@ app.get('/api/dashboard/heatmap', auth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PRUEBAS DE ESTRÉS — BD Relacional queuefest
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/stress/setup
+ * Crea la tabla proveedores (si no existe) y añade proveedor_id a
+ * movimientos_stock (si falta). Idempotente.
+ */
+app.post('/api/stress/setup', auth, async (req, res) => {
+  if (!dbRelacional) {
+    return res.status(503).json({ error: 'BD relacional no disponible aún' });
+  }
+  const log = [];
+  try {
+    // 1. Tabla proveedores
+    await dbRelacional.query(`
+      CREATE TABLE IF NOT EXISTS \`proveedores\` (
+        \`id\`                 int           NOT NULL AUTO_INCREMENT,
+        \`nombre\`             varchar(150)  NOT NULL,
+        \`nif_cif\`            varchar(20)   DEFAULT NULL,
+        \`contacto_nombre\`    varchar(100)  DEFAULT NULL,
+        \`email\`              varchar(255)  DEFAULT NULL,
+        \`telefono\`           varchar(20)   DEFAULT NULL,
+        \`localidad\`          varchar(100)  NOT NULL DEFAULT 'Desconocida',
+        \`provincia\`          varchar(100)  DEFAULT NULL,
+        \`pais\`               varchar(60)   NOT NULL DEFAULT 'España',
+        \`direccion\`          varchar(255)  DEFAULT NULL,
+        \`codigo_postal\`      varchar(10)   DEFAULT NULL,
+        \`web\`                varchar(255)  DEFAULT NULL,
+        \`categoria\`          enum('carnes','pescados','frutas_verduras','bebidas','lacteos','panaderia','limpieza','packaging','otro')
+                                            NOT NULL DEFAULT 'otro',
+        \`plazo_entrega_dias\` tinyint unsigned DEFAULT NULL,
+        \`valoracion\`         tinyint       DEFAULT NULL,
+        \`activo\`             tinyint(1)    NOT NULL DEFAULT '1',
+        \`notas\`              text          DEFAULT NULL,
+        \`creado_en\`          timestamp     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`actualizado_en\`     timestamp     NULL     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`uq_proveedores_nif\` (\`nif_cif\`),
+        KEY \`idx_prov_localidad\` (\`localidad\`),
+        KEY \`idx_prov_categoria\` (\`categoria\`),
+        KEY \`idx_prov_activo\`    (\`activo\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    `);
+    log.push('✓ Tabla proveedores verificada/creada');
+
+    // 2. Columna proveedor_id en movimientos_stock
+    const [cols] = await dbRelacional.query(`
+      SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME   = 'movimientos_stock'
+        AND COLUMN_NAME  = 'proveedor_id'
+      LIMIT 1
+    `);
+    if (cols.length === 0) {
+      await dbRelacional.query(`
+        ALTER TABLE \`movimientos_stock\`
+          ADD COLUMN \`proveedor_id\` int DEFAULT NULL
+            COMMENT 'Proveedor origen en movimientos de reposición',
+          ADD INDEX  \`idx_mv_proveedor\` (\`proveedor_id\`),
+          ADD CONSTRAINT \`fk_mv_proveedor\`
+            FOREIGN KEY (\`proveedor_id\`) REFERENCES \`proveedores\` (\`id\`)
+            ON DELETE SET NULL
+      `);
+      log.push('✓ Columna proveedor_id añadida a movimientos_stock');
+    } else {
+      log.push('✓ Columna proveedor_id ya existe en movimientos_stock');
+    }
+
+    res.json({ ok: true, log });
+  } catch (err) {
+    res.status(500).json({ error: err.message, log });
+  }
+});
+
+/**
+ * POST /api/stress/ejecutar
+ * Ejecuta la consulta compleja 30 veces midiendo tiempos y devuelve métricas.
+ * Se implementa en Node.js (sin stored procedure) para máxima compatibilidad.
+ */
+app.post('/api/stress/ejecutar', auth, async (req, res) => {
+  if (!dbRelacional) {
+    return res.status(503).json({ error: 'BD relacional no disponible aún' });
+  }
+
+  const ITERACIONES = 30;
+  const resultados = [];
+
+  // Consulta compleja de estrés (equivalente a la del stored procedure)
+  const QUERY_STRESS = `
+    SELECT
+      f.id  AS festival_id,
+      p.id  AS puesto_id,
+      pr.id AS proveedor_id,
+      mp.id AS materia_prima_id,
+      SUM(ms.cantidad)                     AS kg_suministrados,
+      SUM(ms.cantidad * mp.costo_unitario) AS coste_estimado_eur,
+      COUNT(ms.id)                         AS num_reposiciones
+    FROM movimientos_stock   ms
+      INNER JOIN proveedores     pr ON ms.proveedor_id      = pr.id
+      INNER JOIN materias_primas mp ON ms.materia_prima_id  = mp.id
+      INNER JOIN puestos         p  ON ms.puesto_id_destino = p.id
+      INNER JOIN festivales      f  ON p.festival_id        = f.id
+    WHERE
+        ms.tipo          = 'reposicion'
+        AND pr.categoria = 'carnes'
+        AND pr.activo    = 1
+        AND f.activo     = 1
+    GROUP BY f.id, p.id, pr.id, mp.id
+    HAVING SUM(ms.cantidad) > 0
+  `;
+
+  const globalInicio = Date.now();
+
+  for (let i = 1; i <= ITERACIONES; i++) {
+    const t0 = Date.now();
+    let filas = 0;
+    let error = null;
+    try {
+      const [rows] = await dbRelacional.query(QUERY_STRESS);
+      filas = rows.length;
+    } catch (err) {
+      error = err.message;
+    }
+    const duracion_ms = Date.now() - t0;
+    resultados.push({ iteracion: i, filas_devueltas: filas, duracion_ms, error });
+  }
+
+  const totalMs = Date.now() - globalInicio;
+  const duraciones = resultados.map(r => r.duracion_ms);
+  const media_ms = duraciones.reduce((a, b) => a + b, 0) / ITERACIONES;
+  const min_ms = Math.min(...duraciones);
+  const max_ms = Math.max(...duraciones);
+  const varianza = duraciones.reduce((a, b) => a + Math.pow(b - media_ms, 2), 0) / ITERACIONES;
+  const desv_tipica_ms = Math.sqrt(varianza);
+  const total_filas = resultados.reduce((a, r) => a + r.filas_devueltas, 0);
+  const errores = resultados.filter(r => r.error).length;
+
+  // Percentiles p50, p90, p95
+  const sorted = [...duraciones].sort((a, b) => a - b);
+  const p50 = sorted[Math.floor(ITERACIONES * 0.50)];
+  const p90 = sorted[Math.floor(ITERACIONES * 0.90)];
+  const p95 = sorted[Math.floor(ITERACIONES * 0.95)] ?? sorted[ITERACIONES - 1];
+
+  res.json({
+    resumen: {
+      total_iteraciones: ITERACIONES,
+      media_ms: Math.round(media_ms * 100) / 100,
+      min_ms,
+      max_ms,
+      desv_tipica_ms: Math.round(desv_tipica_ms * 100) / 100,
+      p50_ms: p50,
+      p90_ms: p90,
+      p95_ms: p95,
+      total_filas_procesadas: total_filas,
+      total_tiempo_real_ms: totalMs,
+      errores,
+    },
+    iteraciones: resultados,
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -905,16 +1069,26 @@ sshClient.on('ready', () => {
     console.log(`[DW] MySQL Forwarding en 127.0.0.1:${LOCAL_PORT} → ${MYSQL_HOST}:${MYSQL_PORT}`);
 
     db = mysql2.createPool({
-      host:     '127.0.0.1',
-      port:     LOCAL_PORT,
-      user:     MYSQL_USER,
+      host: '127.0.0.1',
+      port: LOCAL_PORT,
+      user: MYSQL_USER,
       password: MYSQL_PASS,
       database: MYSQL_DB,
     });
 
+    // Pool a la BD relacional (mismo túnel, misma IP MySQL, otra BD)
+    dbRelacional = mysql2.createPool({
+      host: '127.0.0.1',
+      port: LOCAL_PORT,
+      user: MYSQL_USER,
+      password: MYSQL_PASS,
+      database: 'queuefest',
+    });
+
     app.listen(PORT, () => {
       console.log(`[DW] ✓ Servidor AdminDashboard en http://localhost:${PORT}`);
-      console.log(`[DW] ✓ Base de datos: ${MYSQL_DB}`);
+      console.log(`[DW] ✓ Base de datos DW   : ${MYSQL_DB}`);
+      console.log(`[DW] ✓ Base de datos OLTP  : queuefest`);
     });
   });
 }).on('error', (err) => {

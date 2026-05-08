@@ -12,6 +12,7 @@ echo [2/3] Instalando dependencias del Backend (npm)
 cd server-backend
 call npm install
 
+
 echo.
 echo [3/3] Generando claves VAPID para notificaciones Push si no existen
 if not exist .env (
@@ -31,7 +32,7 @@ echo =========================================================
 pause
 
 :: Arrancar el backend en una nueva ventana
-start "Backend QueueFest" cmd /c "cd server-backend && node index.js && pause"
+start "Backend QueueFest" cmd /c "cd server-backend && node index.js && node index-adminDashboard.js && pause"
 
 :: Arrancar el frontend en la ventana actual (o en otra nueva)
 start "Frontend QueueFest" cmd /c "pnpm run dev && pause"

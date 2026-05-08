@@ -617,6 +617,16 @@ export function AdminScreen() {
             <span className="relative text-base transition-transform duration-300 group-hover:rotate-12 group-hover:scale-125">📊</span>
             <span className="relative text-[11px] font-bold text-gray-300 group-hover:text-white transition-colors duration-200">Dashboard</span>
           </button>
+
+          {/* Caja 3: Panel de control (pruebas de estrés) */}
+          <button
+            onClick={() => (window as any).navigateTo('/admin/stress')}
+            className="group relative flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-gray-800 border border-purple-600 rounded-lg overflow-hidden transition-all duration-300 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-900/50 hover:scale-105 active:scale-95"
+          >
+            <span className="absolute inset-0 bg-gradient-to-t from-purple-700 to-purple-500 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
+            <span className="relative text-base transition-transform duration-300 group-hover:scale-125">🧪</span>
+            <span className="relative text-[11px] font-bold text-gray-300 group-hover:text-white transition-colors duration-200">Panel de control</span>
+          </button>
         </div>
       </div>
 
