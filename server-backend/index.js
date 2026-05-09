@@ -4172,11 +4172,6 @@ app.get('/api/gestor/stock-minimos', auth, async (req, res) => {
   const { festival_id } = req.query;
   if (!festival_id) return res.status(400).json({ error: 'festival_id requerido' });
   try {
-    // DEBUG temporal
-    const [dbgPuestos] = await db.query('SELECT id, nombre, festival_id FROM puestos WHERE festival_id = ?', [festival_id]);
-    const [dbgStock]   = await db.query('SELECT COUNT(*) AS cnt FROM stock_puesto WHERE puesto_id IN (SELECT id FROM puestos WHERE festival_id = ?)', [festival_id]);
-    console.log(`[stock-minimos] festival_id=${festival_id} puestos=${dbgPuestos.length} stock_rows=${dbgStock[0].cnt}`, dbgPuestos.map(p=>p.nombre));
-
     const [rows] = await db.query(
       `SELECT p.id AS puesto_id, p.nombre AS puesto_nombre,
               sp.materia_prima_id, mp.nombre AS mp_nombre, mp.unidad_medida,
