@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Loader2 } from 'lucide-react';
+import { ChevronLeft, Loader2, MapPin, ChevronRight } from 'lucide-react';
 import { useNavigate } from '../utils/navigation';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { BottomNav } from '../components/BottomNav';
-import { updateProfile } from '../api';
+import { updateProfile, getDirecciones, type Address } from '../api';
 import { toast } from 'sonner';
 
 function normalizeDateInput(value?: string | null) {
@@ -23,13 +23,14 @@ export function PersonalInfoScreen() {
   const { t, isRTL } = useLanguage();
   const { user, refreshUser } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [defaultAddress, setDefaultAddress] = useState<Address | null>(null);
+  const [loadingAddress, setLoadingAddress] = useState(true);
 
   // Estado del formulario con todos los campos editables
   const [formData, setFormData] = useState({
     alias: user?.alias || '',
     telefono: user?.telefono || '',
     fecha_nacimiento: normalizeDateInput(user?.fecha_nacimiento),
-    ciudad: user?.ciudad || '',
     idioma_preferido: user?.idioma_preferido || 'es',
     festival_favorito: user?.festival_favorito || '',
     preferencias_dieteticas: user?.preferencias_dieteticas || '',
@@ -39,6 +40,23 @@ export function PersonalInfoScreen() {
     acepta_marketing: user?.acepta_marketing ?? false
   });
 
+  // Cargar dirección predeterminada
+  useEffect(() => {
+    const loadDefaultAddress = async () => {
+      try {
+        setLoadingAddress(true);
+        const addresses = await getDirecciones();
+        const defaultAddr = addresses.find(addr => addr.es_predeterminada);
+        setDefaultAddress(defaultAddr || null);
+      } catch (error) {
+        console.error('Error al cargar dirección:', error);
+      } finally {
+        setLoadingAddress(false);
+      }
+    };
+    loadDefaultAddress();
+  }, []);
+
   // Actualizar formData cuando cambie el usuario
   useEffect(() => {
     if (user) {
@@ -46,7 +64,6 @@ export function PersonalInfoScreen() {
         alias: user.alias || '',
         telefono: user.telefono || '',
         fecha_nacimiento: normalizeDateInput(user.fecha_nacimiento),
-        ciudad: user.ciudad || '',
         idioma_preferido: user.idioma_preferido || 'es',
         festival_favorito: user.festival_favorito || '',
         preferencias_dieteticas: user.preferencias_dieteticas || '',
@@ -83,6 +100,11 @@ export function PersonalInfoScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const formatAddress = (addr: Address) => {
+    const parts = [addr.calle, addr.numero, addr.piso].filter(Boolean).join(', ');
+    return `${parts}, ${addr.codigo_postal || ''} ${addr.ciudad}`.trim();
   };
 
   return (
@@ -162,16 +184,30 @@ export function PersonalInfoScreen() {
               />
             </div>
 
-            {/* Ciudad */}
+            {/* Dirección */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Ciudad de referencia</label>
-              <input
-                type="text"
-                value={formData.ciudad}
-                onChange={(e) => handleChange('ciudad', e.target.value)}
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                placeholder="Madrid, Barcelona, Valencia..."
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Dirección</label>
+              <button
+                type="button"
+                onClick={() => navigate('/addresses')}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-left hover:border-orange-500 transition-colors flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3 flex-1">
+                  <MapPin className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                  {loadingAddress ? (
+                    <span className="text-gray-400">Cargando...</span>
+                  ) : defaultAddress ? (
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">{defaultAddress.alias}</p>
+                      <p className="text-xs text-gray-500 truncate">{formatAddress(defaultAddress)}</p>
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">Sin dirección configurada</span>
+                  )}
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-orange-500 transition-colors flex-shrink-0" />
+              </button>
+              <p className="text-xs text-gray-400 mt-1">Toca para gestionar tus direcciones</p>
             </div>
           </div>
         </section>

@@ -1,8 +1,10 @@
-import { Eye, Plus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Eye, Plus, Heart } from 'lucide-react';
 import { formatPrice } from '../utils/formatPrice';
 import { toast } from 'sonner';
 import { useLanguage } from '../context/LanguageContext';
 import type { AddItemResult } from '../context/CartContext';
+import { checkFavorito, addFavorito, removeFavorito } from '../api';
 
 interface MenuItemProps {
   id: string;
@@ -24,6 +26,38 @@ export function MenuItem({ id, name, description, price, originalPrice, badge, p
   const { t } = useLanguage();
   const isOutOfStock = stock === 0;
   const isDisabled = disabled || isOutOfStock;
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  useEffect(() => {
+    const loadFavoriteStatus = async () => {
+      try {
+        const result = await checkFavorito(Number(id));
+        setIsFavorite(result.isFavorite);
+      } catch (error) {
+        console.error('Error al verificar favorito:', error);
+        setIsFavorite(false);
+      }
+    };
+    loadFavoriteStatus();
+  }, [id]);
+
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (isFavorite) {
+        await removeFavorito(Number(id));
+        setIsFavorite(false);
+        toast.success('Eliminado de favoritos');
+      } else {
+        await addFavorito(Number(id));
+        setIsFavorite(true);
+        toast.success('Añadido a favoritos');
+      }
+    } catch (error) {
+      console.error('Error al actualizar favorito:', error);
+      toast.error('Error al actualizar favorito');
+    }
+  };
 
   const handleAdd = () => {
     if (isDisabled) return;
@@ -68,6 +102,17 @@ export function MenuItem({ id, name, description, price, originalPrice, badge, p
         <img src={image} alt={name} className="w-20 h-20 rounded-lg object-cover" />
       )}
       <div className="flex items-center gap-2 self-end">
+        <button
+          onClick={handleToggleFavorite}
+          className={`w-10 h-10 rounded-2xl border flex items-center justify-center transition-colors ${
+            isFavorite
+              ? 'bg-rose-50 border-rose-200 text-rose-500 hover:bg-rose-100'
+              : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-rose-500'
+          }`}
+          title={isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+        >
+          <Heart className={`w-4 h-4 ${isFavorite ? 'fill-rose-500' : ''}`} />
+        </button>
         {onView && (
           <button
             onClick={onView}
