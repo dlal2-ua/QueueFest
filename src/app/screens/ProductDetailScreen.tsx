@@ -6,7 +6,7 @@ import { useCart } from '../context/CartContext';
 import { useLanguage } from '../context/LanguageContext';
 import { BottomNav } from '../components/BottomNav';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
-import { getProductos, getPuesto, buildImageUrl, getPuestoPromociones, getProductReviewEligibility, type ProductReviewEligibility } from '../api';
+import { getProductos, getPuesto, buildImageUrl, getPuestoPromociones, getProductReviewEligibility, type ProductReviewEligibility, checkFavorito, addFavorito, removeFavorito } from '../api';
 import { ReviewsList } from '../components/ReviewsList';
 import { formatPrice } from '../utils/formatPrice';
 import { getProductImage, isProductFavorite, toggleFavoriteProduct } from '../utils/productHelpers';
@@ -34,14 +34,25 @@ export function ProductDetailScreen() {
   const [activePromotion, setActivePromotion] = useState<any | null>(null);
   const [reviewEligibility, setReviewEligibility] = useState<ProductReviewEligibility | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isFavorite, setIsFavorite] = useState(() => isProductFavorite(String(id || '')));
+  const [isFavorite, setIsFavorite] = useState(false);
 
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const vendorId = searchParams.get('vendorId');
   const vendorType = (searchParams.get('vendorType') as 'food-truck' | 'bar' | null) || 'food-truck';
 
   useEffect(() => {
-    setIsFavorite(isProductFavorite(String(id || '')));
+    const loadFavoriteStatus = async () => {
+      if (!id) return;
+      try {
+        const result = await checkFavorito(Number(id));
+        setIsFavorite(result.isFavorite);
+      } catch (error) {
+        console.error('Error al verificar favorito:', error);
+        // Silenciar error si la tabla no existe, establecer como no favorito
+        setIsFavorite(false);
+      }
+    };
+    loadFavoriteStatus();
   }, [id]);
 
   useEffect(() => {
@@ -111,22 +122,23 @@ export function ProductDetailScreen() {
   );
   const isOutOfStock = product?.stock === 0;
 
-  const handleToggleFavorite = () => {
-    if (!product || !vendor) return;
+  const handleToggleFavorite = async () => {
+    if (!product) return;
 
-    const nextState = toggleFavoriteProduct({
-      id: product.id,
-      name: product.nombre,
-      description: product.descripcion,
-      price: standardDisplayPrice,
-      image: productImage,
-      vendorId: String(vendor.id),
-      vendorName: vendor.nombre || 'Puesto',
-      vendorType
-    });
-
-    setIsFavorite(nextState);
-    toast.success(nextState ? 'Producto anadido a favoritos' : 'Producto eliminado de favoritos');
+    try {
+      if (isFavorite) {
+        await removeFavorito(Number(product.id));
+        setIsFavorite(false);
+        toast.success('Producto eliminado de favoritos');
+      } else {
+        await addFavorito(Number(product.id));
+        setIsFavorite(true);
+        toast.success('Producto añadido a favoritos');
+      }
+    } catch (error) {
+      console.error('Error al actualizar favorito:', error);
+      toast.error('Error al actualizar favorito');
+    }
   };
 
   const handleAddToCart = () => {

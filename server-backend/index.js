@@ -4188,4 +4188,421 @@ app.post('/api/operador/decisiones/:id/ejecutar', auth, async (req, res) => {
   }
 });
 
+// ========================================
+// FAVORITOS DE PRODUCTOS
+// ========================================
+
+// GET /api/favoritos — Obtener productos favoritos del usuario autenticado
+app.get('/api/favoritos', auth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT
+        f.id,
+        f.producto_id,
+        f.creado_en,
+        p.nombre,
+        p.descripcion,
+        p.precio,
+        p.precio_dinamico,
+        p.stock,
+        p.foto_url,
+        p.puesto_id,
+        pu.nombre AS puesto_nombre,
+        pu.tipo AS puesto_tipo
+      FROM favoritos_productos f
+      INNER JOIN productos p ON p.id = f.producto_id
+      INNER JOIN puestos pu ON pu.id = p.puesto_id
+      WHERE f.usuario_id = ? AND p.activo = 1
+      ORDER BY f.creado_en DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error al obtener favoritos:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/favoritos — Agregar producto a favoritos
+app.post('/api/favoritos', auth, async (req, res) => {
+  try {
+    const { producto_id } = req.body;
+    if (!producto_id) {
+      return res.status(400).json({ error: 'producto_id es requerido' });
+    }
+
+    // Verificar que el producto existe
+    const [producto] = await db.query('SELECT id FROM productos WHERE id = ?', [producto_id]);
+    if (producto.length === 0) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+
+    // Verificar si ya está en favoritos
+    const [existing] = await db.query(
+      'SELECT id FROM favoritos_productos WHERE usuario_id = ? AND producto_id = ?',
+      [req.user.id, producto_id]
+    );
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'El producto ya está en favoritos' });
+    }
+
+    // Agregar a favoritos
+    const [result] = await db.query(
+      'INSERT INTO favoritos_productos (usuario_id, producto_id) VALUES (?, ?)',
+      [req.user.id, producto_id]
+    );
+
+    res.status(201).json({
+      id: result.insertId,
+      producto_id,
+      message: 'Producto agregado a favoritos'
+    });
+  } catch (err) {
+    console.error('Error al agregar favorito:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/favoritos/:productoId — Eliminar producto de favoritos
+app.delete('/api/favoritos/:productoId', auth, async (req, res) => {
+  try {
+    const [result] = await db.query(
+      'DELETE FROM favoritos_productos WHERE usuario_id = ? AND producto_id = ?',
+      [req.user.id, req.params.productoId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Favorito no encontrado' });
+    }
+
+    res.json({ message: 'Producto eliminado de favoritos' });
+  } catch (err) {
+    console.error('Error al eliminar favorito:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/favoritos/check/:productoId — Verificar si un producto está en favoritos
+app.get('/api/favoritos/check/:productoId', auth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT id FROM favoritos_productos WHERE usuario_id = ? AND producto_id = ?',
+      [req.user.id, req.params.productoId]
+    );
+    res.json({ isFavorite: rows.length > 0 });
+  } catch (err) {
+    console.error('Error al verificar favorito:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================
+// DIRECCIONES DEL USUARIO
+// ========================================
+
+// GET /api/direcciones — Obtener todas las direcciones del usuario
+app.get('/api/direcciones', auth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id, alias, calle, numero, piso, codigo_postal, ciudad, provincia, pais, es_predeterminada, fecha_creacion as creado_en
+       FROM direcciones
+       WHERE id_usuario = ?
+       ORDER BY es_predeterminada DESC, fecha_creacion DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error al obtener direcciones:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/direcciones — Crear nueva dirección
+app.post('/api/direcciones', auth, async (req, res) => {
+  try {
+    const { alias, calle, numero, piso, codigo_postal, ciudad, provincia, pais, es_predeterminada } = req.body;
+
+    if (!alias || !calle || !ciudad) {
+      return res.status(400).json({ error: 'alias, calle y ciudad son requeridos' });
+    }
+
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // Si es predeterminada, quitar el flag de las demás
+      if (es_predeterminada) {
+        await conn.query(
+          'UPDATE direcciones SET es_predeterminada = 0 WHERE id_usuario = ?',
+          [req.user.id]
+        );
+      }
+
+      const [result] = await conn.query(
+        `INSERT INTO direcciones (id_usuario, alias, calle, numero, piso, codigo_postal, ciudad, provincia, pais, es_predeterminada)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.user.id, alias, calle, numero || null, piso || null, codigo_postal || null, ciudad, provincia || null, pais || 'España', es_predeterminada ? 1 : 0]
+      );
+
+      await conn.commit();
+      res.status(201).json({ id: result.insertId, message: 'Dirección creada correctamente' });
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error('Error al crear dirección:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/direcciones/:id — Actualizar dirección existente
+app.put('/api/direcciones/:id', auth, async (req, res) => {
+  try {
+    const { alias, calle, numero, piso, codigo_postal, ciudad, provincia, pais, es_predeterminada } = req.body;
+
+    // Verificar que la dirección pertenece al usuario
+    const [existing] = await db.query(
+      'SELECT id FROM direcciones WHERE id = ? AND id_usuario = ?',
+      [req.params.id, req.user.id]
+    );
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'Dirección no encontrada' });
+    }
+
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // Si es predeterminada, quitar el flag de las demás
+      if (es_predeterminada) {
+        await conn.query(
+          'UPDATE direcciones SET es_predeterminada = 0 WHERE id_usuario = ? AND id != ?',
+          [req.user.id, req.params.id]
+        );
+      }
+
+      await conn.query(
+        `UPDATE direcciones
+         SET alias = ?, calle = ?, numero = ?, piso = ?, codigo_postal = ?,
+             ciudad = ?, provincia = ?, pais = ?, es_predeterminada = ?
+         WHERE id = ? AND id_usuario = ?`,
+        [alias, calle, numero, piso, codigo_postal, ciudad, provincia, pais, es_predeterminada ? 1 : 0, req.params.id, req.user.id]
+      );
+
+      await conn.commit();
+      res.json({ message: 'Dirección actualizada correctamente' });
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error('Error al actualizar dirección:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/direcciones/:id — Eliminar dirección
+app.delete('/api/direcciones/:id', auth, async (req, res) => {
+  try {
+    const [result] = await db.query(
+      'DELETE FROM direcciones WHERE id = ? AND id_usuario = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Dirección no encontrada' });
+    }
+
+    res.json({ message: 'Dirección eliminada correctamente' });
+  } catch (err) {
+    console.error('Error al eliminar dirección:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================
+// MONEDERO VIRTUAL
+// ========================================
+
+// GET /api/monedero — Obtener saldo del monedero y puntos royalty
+app.get('/api/monedero', auth, async (req, res) => {
+  try {
+    // Obtener saldo en euros
+    const [monedero] = await db.query(
+      'SELECT saldo_eur FROM monedero WHERE usuario_id = ?',
+      [req.user.id]
+    );
+
+    // Obtener puntos royalty
+    const [loyalty] = await db.query(
+      'SELECT puntos_total FROM loyalty WHERE usuario_id = ?',
+      [req.user.id]
+    );
+
+    res.json({
+      saldo_eur: monedero.length > 0 ? parseFloat(monedero[0].saldo_eur) : 0,
+      puntos_royalty: loyalty.length > 0 ? loyalty[0].puntos_total : 0
+    });
+  } catch (err) {
+    console.error('Error al obtener monedero:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/monedero/movimientos — Obtener historial de movimientos del monedero
+app.get('/api/monedero/movimientos', auth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id, tipo, cantidad, saldo_resultante, descripcion, creado_en
+       FROM movimientos_monedero
+       WHERE usuario_id = ?
+       ORDER BY creado_en DESC
+       LIMIT 100`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error al obtener movimientos:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/monedero/cargar — Cargar saldo al monedero (simulado)
+app.post('/api/monedero/cargar', auth, async (req, res) => {
+  try {
+    const { cantidad } = req.body;
+
+    if (!cantidad || cantidad <= 0) {
+      return res.status(400).json({ error: 'Cantidad debe ser mayor a 0' });
+    }
+
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // Crear registro de monedero si no existe
+      await conn.query(
+        'INSERT IGNORE INTO monedero (usuario_id, saldo_eur) VALUES (?, 0)',
+        [req.user.id]
+      );
+
+      // Actualizar saldo
+      await conn.query(
+        'UPDATE monedero SET saldo_eur = saldo_eur + ? WHERE usuario_id = ?',
+        [cantidad, req.user.id]
+      );
+
+      // Obtener nuevo saldo
+      const [monedero] = await conn.query(
+        'SELECT saldo_eur FROM monedero WHERE usuario_id = ?',
+        [req.user.id]
+      );
+      const nuevoSaldo = parseFloat(monedero[0].saldo_eur);
+
+      // Registrar movimiento
+      await conn.query(
+        `INSERT INTO movimientos_monedero (usuario_id, tipo, cantidad, saldo_resultante, descripcion)
+         VALUES (?, 'carga', ?, ?, ?)`,
+        [req.user.id, cantidad, nuevoSaldo, `Recarga de ${cantidad}€`]
+      );
+
+      await conn.commit();
+      res.json({
+        message: 'Saldo cargado correctamente',
+        nuevo_saldo: nuevoSaldo
+      });
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error('Error al cargar saldo:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/monedero/canjear-royalties — Canjear puntos royalty por euros
+app.post('/api/monedero/canjear-royalties', auth, async (req, res) => {
+  try {
+    const { puntos } = req.body;
+
+    if (!puntos || puntos <= 0) {
+      return res.status(400).json({ error: 'Puntos debe ser mayor a 0' });
+    }
+
+    // Tasa de conversión: 100 puntos = 1€
+    const TASA_CONVERSION = 100;
+    const euros = puntos / TASA_CONVERSION;
+
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // Verificar que el usuario tiene suficientes puntos
+      const [loyalty] = await conn.query(
+        'SELECT puntos_total FROM loyalty WHERE usuario_id = ?',
+        [req.user.id]
+      );
+      if (loyalty.length === 0 || loyalty[0].puntos_total < puntos) {
+        await conn.rollback();
+        return res.status(400).json({ error: 'Puntos insuficientes' });
+      }
+
+      // Descontar puntos royalty
+      await conn.query(
+        'UPDATE loyalty SET puntos_total = puntos_total - ?, puntos_canjeados_total = puntos_canjeados_total + ? WHERE usuario_id = ?',
+        [puntos, puntos, req.user.id]
+      );
+
+      // Crear registro de monedero si no existe
+      await conn.query(
+        'INSERT IGNORE INTO monedero (usuario_id, saldo_eur) VALUES (?, 0)',
+        [req.user.id]
+      );
+
+      // Agregar euros al monedero
+      await conn.query(
+        'UPDATE monedero SET saldo_eur = saldo_eur + ? WHERE usuario_id = ?',
+        [euros, req.user.id]
+      );
+
+      // Obtener nuevo saldo
+      const [monedero] = await conn.query(
+        'SELECT saldo_eur FROM monedero WHERE usuario_id = ?',
+        [req.user.id]
+      );
+      const nuevoSaldo = parseFloat(monedero[0].saldo_eur);
+
+      // Registrar movimiento
+      await conn.query(
+        `INSERT INTO movimientos_monedero (usuario_id, tipo, cantidad, saldo_resultante, descripcion)
+         VALUES (?, 'canje_royalties', ?, ?, ?)`,
+        [req.user.id, euros, nuevoSaldo, `Canje de ${puntos} royalties por ${euros.toFixed(2)}€`]
+      );
+
+      await conn.commit();
+      res.json({
+        message: 'Royalties canjeados correctamente',
+        euros_recibidos: euros,
+        nuevo_saldo: nuevoSaldo
+      });
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error('Error al canjear royalties:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Nota: El app.listen() se ejecuta dentro del callback sshClient.on('ready')

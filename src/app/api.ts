@@ -1133,3 +1133,168 @@ export const getDwClv = async (filters: Pick<DwFilters, 'festival_id'> = {}) => 
     if (!res.ok) throw new Error('Error al cargar CLV');
     return res.json();
 };
+
+// ══════════════════════════════════════════════════════════════════════════
+// FAVORITOS DE PRODUCTOS
+// ══════════════════════════════════════════════════════════════════════════
+
+export interface FavoriteProduct {
+    id: number;
+    producto_id: number;
+    creado_en: string;
+    nombre: string;
+    descripcion: string | null;
+    precio: number;
+    precio_dinamico: number | null;
+    stock: number;
+    foto_url: string | null;
+    puesto_id: number;
+    puesto_nombre: string;
+    puesto_tipo: 'barra' | 'foodtruck';
+}
+
+export const getFavoritos = async (): Promise<FavoriteProduct[]> => {
+    const res = await fetch(`${API_URL}/favoritos`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener favoritos'));
+    return res.json();
+};
+
+export const addFavorito = async (producto_id: number): Promise<{ id: number; producto_id: number; message: string }> => {
+    const res = await fetch(`${API_URL}/favoritos`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ producto_id })
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al agregar favorito'));
+    return res.json();
+};
+
+export const removeFavorito = async (producto_id: number): Promise<{ message: string }> => {
+    const res = await fetch(`${API_URL}/favoritos/${producto_id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al eliminar favorito'));
+    return res.json();
+};
+
+export const checkFavorito = async (producto_id: number): Promise<{ isFavorite: boolean }> => {
+    const res = await fetch(`${API_URL}/favoritos/check/${producto_id}`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al verificar favorito'));
+    return res.json();
+};
+
+// ══════════════════════════════════════════════════════════════════════════
+// DIRECCIONES DEL USUARIO
+// ══════════════════════════════════════════════════════════════════════════
+
+export interface Address {
+    id: number;
+    alias: string;
+    calle: string;
+    numero: string | null;
+    piso: string | null;
+    codigo_postal: string | null;
+    ciudad: string;
+    provincia: string | null;
+    pais: string;
+    es_predeterminada: boolean;
+    creado_en: string;
+}
+
+export interface AddressInput {
+    alias: string;
+    calle: string;
+    numero?: string;
+    piso?: string;
+    codigo_postal?: string;
+    ciudad: string;
+    provincia?: string;
+    pais?: string;
+    es_predeterminada?: boolean;
+}
+
+export const getDirecciones = async (): Promise<Address[]> => {
+    const res = await fetch(`${API_URL}/direcciones`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener direcciones'));
+    return res.json();
+};
+
+export const createDireccion = async (data: AddressInput): Promise<{ id: number; message: string }> => {
+    const res = await fetch(`${API_URL}/direcciones`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al crear dirección'));
+    return res.json();
+};
+
+export const updateDireccion = async (id: number, data: AddressInput): Promise<{ message: string }> => {
+    const res = await fetch(`${API_URL}/direcciones/${id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al actualizar dirección'));
+    return res.json();
+};
+
+export const deleteDireccion = async (id: number): Promise<{ message: string }> => {
+    const res = await fetch(`${API_URL}/direcciones/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al eliminar dirección'));
+    return res.json();
+};
+
+// ══════════════════════════════════════════════════════════════════════════
+// MONEDERO VIRTUAL
+// ══════════════════════════════════════════════════════════════════════════
+
+export interface WalletBalance {
+    saldo_eur: number;
+    puntos_royalty: number;
+}
+
+export interface WalletMovement {
+    id: number;
+    tipo: 'carga' | 'pago' | 'canje_royalties' | 'devolucion';
+    cantidad: number;
+    saldo_resultante: number;
+    descripcion: string;
+    creado_en: string;
+}
+
+export const getMonedero = async (): Promise<WalletBalance> => {
+    const res = await fetch(`${API_URL}/monedero`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener saldo del monedero'));
+    return res.json();
+};
+
+export const getMonederoMovimientos = async (): Promise<WalletMovement[]> => {
+    const res = await fetch(`${API_URL}/monedero/movimientos`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener movimientos'));
+    return res.json();
+};
+
+export const cargarMonedero = async (cantidad: number): Promise<{ message: string; nuevo_saldo: number }> => {
+    const res = await fetch(`${API_URL}/monedero/cargar`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ cantidad })
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar saldo'));
+    return res.json();
+};
+
+export const canjearRoyalties = async (puntos: number): Promise<{ message: string; euros_recibidos: number; nuevo_saldo: number }> => {
+    const res = await fetch(`${API_URL}/monedero/canjear-royalties`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ puntos })
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al canjear royalties'));
+    return res.json();
+};

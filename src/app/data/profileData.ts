@@ -27,7 +27,7 @@ interface RoyaltyTier {
 }
 
 const USER_PROFILE_STORAGE_KEY = 'userProfile';
-export const ROYALTY_REDEEM_RATE = 1000;
+export const ROYALTY_REDEEM_RATE = 100; // 100 puntos = 1€
 export const ROYALTY_REDEEM_VALUE = 1;
 export const ROYALTY_POINTS_PER_EURO = 100;
 export const ROYALTY_WELCOME_BONUS = 1000;

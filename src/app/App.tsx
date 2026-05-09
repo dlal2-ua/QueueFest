@@ -41,6 +41,9 @@ import { PersonalInfoScreen } from './screens/PersonalInfoScreen';
 import { PaymentMethodsScreen } from './screens/PaymentMethodsScreen';
 import { OrderHistoryScreen } from './screens/OrderHistoryScreen';
 import { FavoritesScreen } from './screens/FavoritesScreen';
+import { AddressesScreen } from './screens/AddressesScreen';
+import { AddressFormScreen } from './screens/AddressFormScreen';
+import { WalletScreen } from './screens/WalletScreen';
 import { HelpSupportScreen } from './screens/HelpSupportScreen';
 import { LanguageScreen } from './screens/LanguageScreen';
 import { RoyaltiesScreen } from './screens/RoyaltiesScreen';
@@ -76,6 +79,13 @@ function AppRoutes() {
       window.removeEventListener('navigation', handlePopState);
     };
   }, []);
+
+  // Redirect /profile/royalties to /wallet (unified monedero)
+  useEffect(() => {
+    if (currentPath === '/profile/royalties') {
+      (window as any).navigateTo('/wallet');
+    }
+  }, [currentPath]);
 
   (window as any).navigateTo = (path: string) => {
     window.history.pushState({}, '', path);
@@ -159,13 +169,18 @@ function AppRoutes() {
       {path === '/profile/favorites' && <FavoritesScreen />}
       {path === '/profile/support' && <HelpSupportScreen />}
       {path === '/profile/language' && <LanguageScreen />}
+      {path === '/addresses' && <AddressesScreen />}
+      {path === '/addresses/new' && <AddressFormScreen />}
+      {path.startsWith('/addresses/edit/') && <AddressFormScreen />}
+      {path === '/wallet' && <WalletScreen />}
       {path.startsWith('/track-order/') && <TrackOrderScreen />}
       {path.startsWith('/profile') && !path.includes('/profile/') && <ProfileScreen />}
       {!path.startsWith('/festival-select') && !path.startsWith('/selection') && !path.startsWith('/home')
         && !path.startsWith('/food-truck/') && !path.startsWith('/bar/') && !path.startsWith('/product/')
         && !path.startsWith('/reviews')
         && path !== '/offers' && path !== '/cart' && path !== '/payment' && path !== '/confirmation'
-        && !path.startsWith('/profile') && !path.startsWith('/track-order/') && <SelectionScreen />}
+        && !path.startsWith('/profile') && !path.startsWith('/track-order/')
+        && !path.startsWith('/addresses') && path !== '/wallet' && <SelectionScreen />}
     </PhoneFrameShell>
   );
 }

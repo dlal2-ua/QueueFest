@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '../utils/navigation';
-import { User, CreditCard, Clock, Heart, HelpCircle, ChevronRight, LogOut, Globe, Coins, Sparkles, Bell, Star } from 'lucide-react';
+import { User, CreditCard, Clock, Heart, HelpCircle, ChevronRight, LogOut, Globe, Coins, Sparkles, Bell, Star, Wallet } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { getLoyalty, type LoyaltyResponse } from '../api';
+import { getLoyalty, type LoyaltyResponse, getMonedero, type WalletBalance } from '../api';
 import { DEFAULT_ROYALTY_THRESHOLDS, getRoyaltyProgress, getRoyaltyTierStatus, getUserProfile } from '../data/profileData';
 
 export function ProfileScreen() {
@@ -12,6 +12,7 @@ export function ProfileScreen() {
   const { t, isRTL } = useLanguage();
   const { user, logout } = useAuth();
   const [loyalty, setLoyalty] = useState<LoyaltyResponse | null>(null);
+  const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null);
 
   const userProfile = useMemo(
     () =>
@@ -25,12 +26,15 @@ export function ProfileScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    getLoyalty()
-      .then((data) => {
-        if (!cancelled) setLoyalty(data);
+    Promise.all([getLoyalty(), getMonedero()])
+      .then(([loyaltyData, walletData]) => {
+        if (!cancelled) {
+          setLoyalty(loyaltyData);
+          setWalletBalance(walletData);
+        }
       })
       .catch((error) => {
-        console.error('Error cargando loyalty:', error);
+        console.error('Error cargando datos:', error);
         if (!cancelled) {
           setLoyalty({
             puntos_total: 0,
@@ -41,6 +45,10 @@ export function ProfileScreen() {
             activo: true,
             tier_thresholds: DEFAULT_ROYALTY_THRESHOLDS,
             movements: []
+          });
+          setWalletBalance({
+            saldo_eur: 0,
+            puntos_royalty: 0
           });
         }
       });
@@ -58,7 +66,7 @@ export function ProfileScreen() {
 
   const menuItems = [
     { icon: User, label: t('profile.personalInfo'), path: '/profile/info' },
-    { icon: Coins, label: t('loyalty.title'), path: '/profile/royalties' },
+    { icon: Wallet, label: 'Mi Monedero', path: '/wallet' },
     { icon: CreditCard, label: t('profile.paymentMethods'), path: '/profile/payments' },
     { icon: Clock, label: t('profile.orderHistory'), path: '/profile/orders' },
     { icon: Star, label: t('profile.reviews'), path: '/profile/reviews' },
@@ -98,30 +106,39 @@ export function ProfileScreen() {
 
       <div className="px-4 -mt-12 space-y-4">
         <button
-          onClick={() => navigate('/profile/royalties')}
-          className="w-full rounded-3xl bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 p-5 text-left text-white shadow-xl"
+          onClick={() => navigate('/wallet')}
+          className="w-full rounded-3xl bg-gradient-to-br from-yellow-400 via-orange-500 to-amber-600 p-6 text-left text-white shadow-xl hover:shadow-2xl transition-shadow"
         >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-white/80">{t('loyalty.availableBalance')}</p>
-              <p className="mt-2 text-4xl font-black tracking-tight">{balance}</p>
-              <p className="mt-2 text-sm text-white/85">{t('loyalty.pendingToConfirm').replace('{points}', String(pending))}</p>
-            </div>
-            <div className="rounded-2xl bg-white/20 p-3 backdrop-blur-sm">
-              <Coins className="h-7 w-7" />
+          <div className="flex items-start justify-between gap-4 mb-5">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Wallet className="h-5 w-5" />
+                <p className="text-sm font-medium text-white/90">Mi Monedero</p>
+              </div>
+              <p className="text-5xl font-black tracking-tight">{walletBalance?.saldo_eur.toFixed(2) || '0.00'}€</p>
+              <p className="mt-1 text-sm text-white/75">Saldo disponible</p>
             </div>
           </div>
 
-          <div className="mt-5 rounded-2xl bg-black/15 p-4 backdrop-blur-sm">
-            <div className="mb-2 flex items-center justify-between text-sm">
+          <div className="rounded-2xl bg-white/10 backdrop-blur-sm p-4 border border-white/20">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Coins className="h-5 w-5 text-amber-300" />
+                <span className="text-sm font-medium text-white/90">Puntos Royalty</span>
+              </div>
+              <span className="text-2xl font-bold">{balance}</span>
+            </div>
+
+            <div className="mb-2 flex items-center justify-between text-xs text-white/75">
               <span>{royaltyTier.currentTier}</span>
               <span>{royaltyTier.nextTier}</span>
             </div>
             <div className="h-2 rounded-full bg-white/20">
-              <div className="h-2 rounded-full bg-white transition-all" style={{ width: `${royaltyProgress}%` }} />
+              <div className="h-2 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all" style={{ width: `${royaltyProgress}%` }} />
             </div>
-            <p className="mt-2 text-sm text-white/85">
-              {t('loyalty.profileRemaining').replace('{points}', String(Math.max(0, royaltyTier.nextTierTarget - balance)))}
+            <p className="mt-2 text-xs text-white/75">
+              {pending > 0 && `${pending} puntos pendientes • `}
+              {Math.max(0, royaltyTier.nextTierTarget - balance)} puntos para {royaltyTier.nextTier}
             </p>
           </div>
         </button>
