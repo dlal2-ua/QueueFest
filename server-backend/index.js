@@ -3445,13 +3445,19 @@ async function getParametros() {
     const [rows] = await db.query('SELECT * FROM parametros LIMIT 1');
     const p = rows[0] || {};
     return {
-      umbral_cola: Number(p.umbral_cola) || 5,
-      umbral_ventas_bajas: Number(p.umbral_ventas_bajas) || 3,
-      porcentaje_subida: Number(p.porcentaje_subida) || 10,
-      porcentaje_bajada: Number(p.porcentaje_bajada) || 10,
+      umbral_cola:             Number(p.umbral_cola)              || 5,
+      umbral_ventas_bajas:     Number(p.umbral_ventas_bajas)      || 3,
+      porcentaje_subida:       Number(p.porcentaje_subida)        || 10,
+      porcentaje_bajada:       Number(p.porcentaje_bajada)        || 10,
+      pricing_dinamico_activo: p.pricing_dinamico_activo !== 0,
+      promociones_activas:     p.promociones_activas     !== 0,
     };
   } catch {
-    return { umbral_cola: 5, umbral_ventas_bajas: 3, porcentaje_subida: 10, porcentaje_bajada: 10 };
+    return {
+      umbral_cola: 5, umbral_ventas_bajas: 3,
+      porcentaje_subida: 10, porcentaje_bajada: 10,
+      pricing_dinamico_activo: true, promociones_activas: true,
+    };
   }
 }
 
@@ -3512,7 +3518,7 @@ async function insertarParAB(festival_id, puesto_id, productosLentos, pctBajada)
 
 // Evalúa todos los puestos del festival y genera decisiones según reglas reales
 async function generarDecisiones(festival_id) {
-  const { umbral_cola, umbral_ventas_bajas, porcentaje_subida, porcentaje_bajada } = await getParametros();
+  const { umbral_cola, umbral_ventas_bajas, porcentaje_bajada, pricing_dinamico_activo, promociones_activas } = await getParametros();
   const [puestos] = await db.query('SELECT * FROM puestos WHERE festival_id = ?', [festival_id]);
 
   for (const puesto of puestos) {
@@ -3548,8 +3554,8 @@ async function generarDecisiones(festival_id) {
       );
     }
 
-    // Regla 3: A/B descuento_producto — solo con ≥5 pedidos hoy (festival activo)
-    if (completados_hoy >= 5) {
+    // Regla 3: A/B descuento_producto — solo si pricing dinámico activo y ≥5 pedidos hoy
+    if (pricing_dinamico_activo && completados_hoy >= 5) {
       const [ventasPorProducto] = await db.query(
         `SELECT pr.id, pr.nombre, pr.precio,
                 COALESCE(SUM(pi.cantidad), 0) AS vendidos_hoy
@@ -3577,18 +3583,20 @@ async function generarDecisiones(festival_id) {
       }
     }
 
-    // Regla 4: activar_promocion — promociones inactivas en el puesto
-    const [promosInactivas] = await db.query(
-      `SELECT id, titulo, producto_id FROM promociones
-       WHERE puesto_id = ? AND (activa = 0 OR activa IS NULL)`,
-      [puesto.id]
-    );
-    for (const promo of promosInactivas) {
-      await insertarSiNoPendiente(
-        festival_id, 'activar_promocion',
-        `Promoción inactiva en "${puesto.nombre}": "${promo.titulo}". Activar para que los clientes puedan verla.`,
-        puesto.id, promo.producto_id ?? null
+    // Regla 4: activar_promocion — solo si promociones automáticas están activas
+    if (promociones_activas) {
+      const [promosInactivas] = await db.query(
+        `SELECT id, titulo, producto_id FROM promociones
+         WHERE puesto_id = ? AND (activa = 0 OR activa IS NULL)`,
+        [puesto.id]
       );
+      for (const promo of promosInactivas) {
+        await insertarSiNoPendiente(
+          festival_id, 'activar_promocion',
+          `Promoción inactiva en "${puesto.nombre}": "${promo.titulo}". Activar para que los clientes puedan verla.`,
+          puesto.id, promo.producto_id ?? null
+        );
+      }
     }
 
     // Regla 5: reposicion_stock — materia prima bajo mínimo en el puesto
@@ -4154,6 +4162,65 @@ app.post('/api/gestor/decisiones/:id/rechazar', auth, async (req, res) => {
       `UPDATE decisiones_automaticas SET estado = 'rechazada' WHERE id = ?`, [req.params.id]
     );
     res.json({ message: 'Decisión rechazada' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/gestor/stock-minimos?festival_id=X — lista puestos con sus stock_minimo por materia prima
+app.get('/api/gestor/stock-minimos', auth, async (req, res) => {
+  const { festival_id } = req.query;
+  if (!festival_id) return res.status(400).json({ error: 'festival_id requerido' });
+  try {
+    // DEBUG temporal
+    const [dbgPuestos] = await db.query('SELECT id, nombre, festival_id FROM puestos WHERE festival_id = ?', [festival_id]);
+    const [dbgStock]   = await db.query('SELECT COUNT(*) AS cnt FROM stock_puesto WHERE puesto_id IN (SELECT id FROM puestos WHERE festival_id = ?)', [festival_id]);
+    console.log(`[stock-minimos] festival_id=${festival_id} puestos=${dbgPuestos.length} stock_rows=${dbgStock[0].cnt}`, dbgPuestos.map(p=>p.nombre));
+
+    const [rows] = await db.query(
+      `SELECT p.id AS puesto_id, p.nombre AS puesto_nombre,
+              sp.materia_prima_id, mp.nombre AS mp_nombre, mp.unidad_medida,
+              ROUND(sp.stock_minimo, 2) AS stock_minimo,
+              ROUND(sp.stock_actual, 2) AS stock_actual
+       FROM puestos p
+       JOIN stock_puesto sp ON sp.puesto_id = p.id
+       JOIN materias_primas mp ON mp.id = sp.materia_prima_id
+       WHERE p.festival_id = ?
+       ORDER BY p.nombre, mp.nombre`,
+      [festival_id]
+    );
+    // Agrupar por puesto
+    const puestosMap = {};
+    for (const r of rows) {
+      if (!puestosMap[r.puesto_id]) {
+        puestosMap[r.puesto_id] = { puesto_id: r.puesto_id, puesto_nombre: r.puesto_nombre, items: [] };
+      }
+      puestosMap[r.puesto_id].items.push({
+        materia_prima_id: r.materia_prima_id,
+        mp_nombre:        r.mp_nombre,
+        unidad_medida:    r.unidad_medida,
+        stock_minimo:     Number(r.stock_minimo),
+        stock_actual:     Number(r.stock_actual),
+      });
+    }
+    res.json(Object.values(puestosMap));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/gestor/stock-minimos — actualiza stock_minimo de una materia prima en un puesto
+app.put('/api/gestor/stock-minimos', auth, async (req, res) => {
+  const { puesto_id, materia_prima_id, stock_minimo } = req.body;
+  if (puesto_id === undefined || materia_prima_id === undefined || stock_minimo === undefined)
+    return res.status(400).json({ error: 'puesto_id, materia_prima_id y stock_minimo requeridos' });
+  if (Number(stock_minimo) < 0) return res.status(400).json({ error: 'stock_minimo no puede ser negativo' });
+  try {
+    await db.query(
+      'UPDATE stock_puesto SET stock_minimo = ? WHERE puesto_id = ? AND materia_prima_id = ?',
+      [Number(stock_minimo), puesto_id, materia_prima_id]
+    );
+    res.json({ message: 'Stock mínimo actualizado' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

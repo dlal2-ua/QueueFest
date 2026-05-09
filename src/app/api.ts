@@ -798,6 +798,28 @@ export const actualizarParametros = async (data: any) => {
     return res.json();
 };
 
+// Gestor: stock mínimos por puesto (agrupado)
+export const getStockMinimos = async (festivalId: number) => {
+    const res = await fetch(`${API_URL}/gestor/stock-minimos?festival_id=${festivalId}`, { headers: headers() });
+    if (!res.ok) throw new Error('Error cargando stock mínimos');
+    return res.json() as Promise<{
+        puesto_id: number;
+        puesto_nombre: string;
+        items: { materia_prima_id: number; mp_nombre: string; unidad_medida: string; stock_minimo: number; stock_actual: number }[];
+    }[]>;
+};
+
+// Gestor: actualizar stock_minimo de una materia prima en un puesto
+export const updateStockMinimo = async (puesto_id: number, materia_prima_id: number, stock_minimo: number) => {
+    const res = await fetch(`${API_URL}/gestor/stock-minimos`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify({ puesto_id, materia_prima_id, stock_minimo }),
+    });
+    if (!res.ok) throw new Error('Error actualizando stock mínimo');
+    return res.json();
+};
+
 // ── Usuarios ──────────────────────────────────────────────────────────────
 
 // Obtiene TODOS los usuarios (sin filtro de rol)

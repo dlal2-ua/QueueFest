@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getModoAuto, setModoAuto } from '../api';
 import { toast } from 'sonner';
-import { Bot, Map, CheckSquare, Home, LayoutGrid, Tag, LogOut } from 'lucide-react';
+import { Bot, Map, CheckSquare, Home, LayoutGrid, Tag, LogOut, Settings2 } from 'lucide-react';
 
 import { WelcomeView }    from './gestor/WelcomeView';
 import { MainPanelView }  from './gestor/MainPanelView';
@@ -12,8 +12,9 @@ import { DecisionsView }  from './gestor/DecisionsView';
 import { StandsView }     from './gestor/StandsView';
 import { PromotionsView } from './gestor/PromotionsView';
 import { BotDashboardView } from './gestor/BotDashboardView';
+import { ConfigView }       from './gestor/ConfigView';
 
-type View = 'welcome' | 'main' | 'map' | 'decisions' | 'stands' | 'promotions' | 'bot';
+type View = 'welcome' | 'main' | 'map' | 'decisions' | 'stands' | 'promotions' | 'bot' | 'config';
 
 const NAV_ITEMS: { id: View; icon: typeof Map; label: string }[] = [
   { id: 'map',        icon: Map,         label: 'Mapa'        },
@@ -22,6 +23,7 @@ const NAV_ITEMS: { id: View; icon: typeof Map; label: string }[] = [
   { id: 'stands',     icon: LayoutGrid,  label: 'Puestos'     },
   { id: 'promotions', icon: Tag,         label: 'Promociones' },
   { id: 'bot',        icon: Bot,         label: 'Bot'         },
+  { id: 'config',     icon: Settings2,   label: 'Ajustes'     },
 ];
 
 export function GestorScreen() {
@@ -181,6 +183,10 @@ export function GestorScreen() {
               onToggleModo={handleToggleModo}
               navigate={navigate}
             />
+          )}
+
+          {view === 'config' && festivalId && (
+            <ConfigView festivalId={festivalId} />
           )}
 
         </div>
