@@ -17,13 +17,16 @@
  *   [Ctrl+C]   Detener completamente
  *
  * Comportamiento:
- *  - Crea pedidos con productos activos del puesto
- *  - Avanza estados de pedidos cada 5 segundos (pendiente→confirmado→preparando→listo→entregado)
+ *  - Crea pedidos con productos activos del puesto (NO avanza estados — eso lo hace kitchen-bot.js)
  *  - Prefiere productos con promoción activa (70% probabilidad)
  *  - Si la cola del puesto está alta, espera más entre pedidos
  *  - Si el puesto está cerrado, no ordena nada
  *  - Si el stock de materias primas es bajo, lo muestra como factor
  *  - Muestra un dashboard de factores que afectan al bot
+ *
+ * Nota: el avance de estados (pendiente→confirmado→...→entregado) lo gestiona
+ * kitchen-bot.js como un proceso independiente, para que también avancen los
+ * pedidos creados por usuarios reales desde la app.
  */
 
 import dotenv from 'dotenv';
@@ -54,16 +57,22 @@ const SPEED = get('--speed') || 'normal';
 const VERBOSE = has('--verbose');
 const DRY_RUN = has('--dry-run');
 
-// Intervalo base en ms entre ticks según velocidad
-const BASE_TICK = { slow: 8000, normal: 3500, fast: 1200 }[SPEED] || 3500;
-const STATE_TICK = 5000; // Avance de estados cada 5 segundos
+// Ritmo de llegada de clientes (ms entre clientes) según velocidad
+const ARRIVAL_INTERVAL_MS = { slow: 2500, normal: 1000, fast: 400 }[SPEED] || 1000;
 
-// Umbrales de cola
-const COLA_UMBRAL_PAUSE = 8;
-const COLA_UMBRAL_SLOW = 4;
-const COLA_SLOW_FACTOR = 2.5;
+// Si la cola del puesto elegido supera este umbral, el cliente se va sin comprar
+const COLA_ABANDONO = 8;
 
-// Flujo de estados de pedidos
+// Refrescar dashboard cada N clientes (ticks)
+const DASHBOARD_REFRESH = 30;
+
+// Pesos del scoring de atracción
+const SCORE_PROMO_BOOST = 0.6;       // +60% por promo activa
+const SCORE_QUEUE_PENALTY = 0.3;     // ÷ (1 + 0.3·cola)
+const SCORE_PRICE_BASE = 1.5;        // 1.5 - ratio_precio
+const SCORE_STOCK_VACIO = 0.7;       // × 0.7 si hay materias primas agotadas
+
+// Flujo de estados (referencia)
 const ESTADO_FLOW = ['pendiente', 'confirmado', 'preparando', 'listo', 'entregado'];
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
@@ -82,9 +91,7 @@ let db;
 // Estadísticas del bot
 const stats = {
     pedidosCreados: 0,
-    pedidosAvanzados: 0,
-    pedidosEntregados: 0,
-    pedidosCancelados: 0,
+    clientesPerdidos: 0,    // se fueron sin comprar (cola llena, sin productos)
     totalVentas: 0,
     ticksEjecutados: 0,
     pausas: 0,
@@ -97,7 +104,40 @@ let factoresPuesto = new Map();
 const privateKeyPath = process.env.SSH_PRIVATE_KEY_PATH;
 const tunnelPort = Number(process.env.BOT_TUNNEL_PORT || 12346);
 
+function buildPool() {
+    return mysql2.createPool({
+        host: '127.0.0.1',
+        port: tunnelPort,
+        user: 'admin',
+        password: 'Proyecto_Seguro2026!',
+        database: 'queuefest',
+        waitForConnections: true,
+        connectionLimit: 5,
+    });
+}
+
+function isTunnelOpen(port, host = '127.0.0.1', timeoutMs = 600) {
+    return new Promise((resolve) => {
+        const socket = new net.Socket();
+        let done = false;
+        const finish = (ok) => { if (done) return; done = true; socket.destroy(); resolve(ok); };
+        socket.setTimeout(timeoutMs);
+        socket.once('connect', () => finish(true));
+        socket.once('timeout', () => finish(false));
+        socket.once('error', () => finish(false));
+        socket.connect(port, host);
+    });
+}
+
 async function connectDB() {
+    // Si el admin dashboard (u otro proceso) ya tiene el túnel abierto en
+    // 127.0.0.1:tunnelPort, lo reutilizamos en lugar de abrir uno propio.
+    if (await isTunnelOpen(tunnelPort)) {
+        console.log(`🔌  Reutilizando túnel existente en 127.0.0.1:${tunnelPort}`);
+        db = buildPool();
+        return;
+    }
+
     let privateKey;
     try {
         privateKey = fs.readFileSync(privateKeyPath, 'utf8').replace(/\r\n/g, '\n');
@@ -118,15 +158,7 @@ async function connectDB() {
         sshClient.on('ready', () => {
             forwardServer.listen(tunnelPort, '127.0.0.1', () => {
                 console.log(`🔌  Túnel SSH listo (127.0.0.1:${tunnelPort} → 10.0.0.5:3306)`);
-                db = mysql2.createPool({
-                    host: '127.0.0.1',
-                    port: tunnelPort,
-                    user: 'admin',
-                    password: 'Proyecto_Seguro2026!',
-                    database: 'queuefest',
-                    waitForConnections: true,
-                    connectionLimit: 5,
-                });
+                db = buildPool();
                 resolve();
             });
         }).on('error', reject);
@@ -176,7 +208,7 @@ async function ensureUsers() {
 
 async function recargarPuestos() {
     const [rows] = await db.query(
-        'SELECT id, nombre, abierto FROM puestos WHERE festival_id = ?',
+        'SELECT id, nombre, abierto, num_empleados, capacidad_max, tiempo_servicio_medio FROM puestos WHERE festival_id = ?',
         [FESTIVAL_ID]
     );
     puestos = rows;
@@ -200,12 +232,12 @@ async function analizarFactores(puesto) {
          WHERE puesto_id = ? AND estado IN ('pendiente','confirmado','preparando')`,
         [puesto.id]
     );
-    if (cola >= COLA_UMBRAL_PAUSE) {
-        factores.push({ icono: '🔴', factor: `Cola saturada (${cola})`, efecto: `≥${COLA_UMBRAL_PAUSE} → no compra`, impacto: 'bloqueante' });
-    } else if (cola >= COLA_UMBRAL_SLOW) {
-        factores.push({ icono: '🟡', factor: `Cola alta (${cola})`, efecto: `Ritmo ×${COLA_SLOW_FACTOR} más lento`, impacto: 'ralentiza' });
+    if (cola >= COLA_ABANDONO) {
+        factores.push({ icono: '🔴', factor: `Cola saturada (${cola})`, efecto: `≥${COLA_ABANDONO} → clientes abandonan`, impacto: 'bloqueante' });
+    } else if (cola >= 4) {
+        factores.push({ icono: '🟡', factor: `Cola alta (${cola})`, efecto: 'Penaliza score → menos clientes', impacto: 'negativo' });
     } else {
-        factores.push({ icono: '🟢', factor: `Cola normal (${cola})`, efecto: 'Ritmo normal', impacto: 'neutral' });
+        factores.push({ icono: '🟢', factor: `Cola normal (${cola})`, efecto: 'Score sin penalización', impacto: 'positivo' });
     }
 
     // 3. Productos disponibles
@@ -276,8 +308,8 @@ function mostrarDashboard() {
     console.log('\n┌─────────────────────────────────────────────────────────────────┐');
     console.log('│          📊  DASHBOARD DE FACTORES DEL BOT                     │');
     console.log('├─────────────────────────────────────────────────────────────────┤');
-    console.log(`│  📦 Pedidos creados: ${String(stats.pedidosCreados).padEnd(6)} │  ⏩ Avanzados: ${String(stats.pedidosAvanzados).padEnd(6)} │  ✅ Entregados: ${String(stats.pedidosEntregados).padEnd(4)}│`);
-    console.log(`│  💰 Ventas totales:  ${String(stats.totalVentas.toFixed(2) + '€').padEnd(6)} │  🔄 Ticks: ${String(stats.ticksEjecutados).padEnd(9)} │  ⏸️  Pausas: ${String(stats.pausas).padEnd(6)}│`);
+    console.log(`│  📦 Pedidos creados: ${String(stats.pedidosCreados).padEnd(6)} │  💰 Ventas: ${String(stats.totalVentas.toFixed(2) + '€').padEnd(10)} │  🚶 Perdidos: ${String(stats.clientesPerdidos).padEnd(4)}│`);
+    console.log(`│  👥 Clientes simulados: ${String(stats.ticksEjecutados).padEnd(38)}│`);
     console.log('├─────────────────────────────────────────────────────────────────┤');
 
     for (const puesto of puestos) {
@@ -320,29 +352,104 @@ async function getProductos(puestoId) {
     return rows;
 }
 
-// ─── Crear un pedido ──────────────────────────────────────────────────────────
-async function crearPedido(puesto) {
-    const cola = await getCola(puesto.id);
+// ─── Scoring de atracción de un puesto ────────────────────────────────────────
+// Devuelve un nº positivo: cuanto mayor, más probable que un cliente lo elija.
+async function calcularScore(puesto) {
+    let score = 1.0;
 
-    if (cola >= COLA_UMBRAL_PAUSE) {
-        verb(`[${puesto.nombre}] Cola saturada (${cola} pedidos) — esperando`);
-        return { skip: true, delay: 0 };
+    // 1. Promociones activas → boost (palanca principal del gestor)
+    const [[{ promos }]] = await db.query(
+        'SELECT COUNT(*) AS promos FROM promociones WHERE puesto_id = ? AND activa = 1',
+        [puesto.id]
+    );
+    score *= 1 + SCORE_PROMO_BOOST * Number(promos);
+
+    // 2. Precio dinámico medio respecto al base (ratio < 1 → atrae más)
+    const [[{ ratio }]] = await db.query(
+        `SELECT COALESCE(AVG(COALESCE(precio_dinamico, precio) / NULLIF(precio, 0)), 1) AS ratio
+         FROM productos WHERE puesto_id = ? AND activo = 1`,
+        [puesto.id]
+    );
+    const r = Number(ratio) || 1;
+    score *= Math.max(0.2, SCORE_PRICE_BASE - r);
+
+    // 3. Cola actual → penaliza (la gente real evita esperar)
+    const cola = await getCola(puesto.id);
+    score /= 1 + SCORE_QUEUE_PENALTY * cola;
+
+    // 4. Materias primas agotadas → menos variedad, menos atractivo
+    const [[{ agotadas }]] = await db.query(
+        'SELECT COUNT(*) AS agotadas FROM stock_puesto WHERE puesto_id = ? AND stock_actual <= 0',
+        [puesto.id]
+    );
+    if (Number(agotadas) > 0) score *= SCORE_STOCK_VACIO;
+
+    return { score: Math.max(0.01, score), cola };
+}
+
+// Selección por ruleta ponderada
+function elegirPonderado(scored) {
+    const total = scored.reduce((s, p) => s + p.score, 0);
+    if (total <= 0) return null;
+    let r = Math.random() * total;
+    for (const p of scored) {
+        r -= p.score;
+        if (r <= 0) return p;
+    }
+    return scored[scored.length - 1];
+}
+
+// ─── Llegada de un cliente ────────────────────────────────────────────────────
+async function simularCliente() {
+    if (paused) return;
+    tick++;
+    stats.ticksEjecutados++;
+
+    // Refrescar dashboard cada N clientes
+    if (tick % DASHBOARD_REFRESH === 1) {
+        await recargarPuestos();
+        for (const p of puestos) await analizarFactores(p);
+        mostrarDashboard();
     }
 
-    const prods = await getProductos(puesto.id);
+    // Solo puestos abiertos en este momento (releído de BD: respeta el botón pánico)
+    const [puestosAbiertos] = await db.query(
+        'SELECT id, nombre, num_empleados FROM puestos WHERE festival_id = ? AND abierto = 1',
+        [FESTIVAL_ID]
+    );
+    if (puestosAbiertos.length === 0) {
+        verb('No hay puestos abiertos — cliente no compra');
+        return;
+    }
+
+    // Score de cada puesto
+    const scored = [];
+    for (const p of puestosAbiertos) {
+        const { score, cola } = await calcularScore(p);
+        scored.push({ ...p, score, cola });
+    }
+
+    // Elegir destino
+    const elegido = elegirPonderado(scored);
+    if (!elegido) return;
+
+    // Cliente abandona si la cola es ya inviable
+    if (elegido.cola >= COLA_ABANDONO) {
+        stats.clientesPerdidos++;
+        verb(`Cliente abandona ${elegido.nombre}: cola ${elegido.cola} ≥ ${COLA_ABANDONO}`);
+        return;
+    }
+
+    // Productos del puesto elegido
+    const prods = await getProductos(elegido.id);
     if (prods.length === 0) {
-        verb(`[${puesto.nombre}] Sin productos activos`);
-        return { skip: true, delay: 0 };
+        stats.clientesPerdidos++;
+        verb(`Cliente abandona ${elegido.nombre}: sin productos`);
+        return;
     }
 
     const conPromo = prods.filter(p => p.tiene_promo);
-    let pool;
-    if (conPromo.length > 0 && Math.random() < 0.70) {
-        pool = conPromo;
-        verb(`[${puesto.nombre}] Eligiendo de ${conPromo.length} producto(s) con promo`);
-    } else {
-        pool = prods;
-    }
+    const pool = (conPromo.length > 0 && Math.random() < 0.70) ? conPromo : prods;
 
     const numItems = randInt(1, Math.min(3, pool.length));
     const seleccion = [...pool].sort(() => Math.random() - 0.5).slice(0, numItems);
@@ -357,41 +464,37 @@ async function crearPedido(puesto) {
         return { producto_id: p.id, cantidad: qty, precio_unitario: precio, tiene_promo: !!p.tiene_promo };
     });
 
-    if (!DRY_RUN) {
-        const userId = rand(userIds);
-        const [res] = await db.query(
-            `INSERT INTO pedidos (usuario_id, puesto_id, estado, total, creado_en)
-       VALUES (?, ?, 'pendiente', ?, NOW())`,
-            [userId, puesto.id, total.toFixed(2)]
-        );
-        const pedidoId = res.insertId;
-
-        for (const item of items) {
-            await db.query(
-                'INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?)',
-                [pedidoId, item.producto_id, item.cantidad, item.precio_unitario]
-            );
-        }
-
-        // Descontar stock de materias primas
-        await descontarMateriaPrima(puesto.id, items);
-
-        stats.pedidosCreados++;
-        stats.totalVentas += total;
-
-        const promos = items.filter(i => i.tiene_promo).length;
-        log(
-            '🛒',
-            `Pedido #${pedidoId} en ${puesto.nombre}`,
-            `${items.length} ítem(s) · ${total.toFixed(2)}€` +
-            (promos > 0 ? ` · 🎟️ ${promos} con promo` : '') +
-            ` · cola=${cola}`
-        );
-    } else {
-        verb(`[DRY] Pedido en ${puesto.nombre}: ${items.length} ítem(s) · ${total.toFixed(2)}€`);
+    if (DRY_RUN) {
+        verb(`[DRY] Cliente → ${elegido.nombre}: ${items.length} ítem(s), ${total.toFixed(2)}€ (score=${elegido.score.toFixed(2)})`);
+        return;
     }
 
-    return { skip: false, delay: cola >= COLA_UMBRAL_SLOW ? BASE_TICK * (COLA_SLOW_FACTOR - 1) : 0 };
+    const userId = rand(userIds);
+    const [res] = await db.query(
+        `INSERT INTO pedidos (usuario_id, puesto_id, estado, total, creado_en)
+         VALUES (?, ?, 'pendiente', ?, NOW())`,
+        [userId, elegido.id, total.toFixed(2)]
+    );
+    const pedidoId = res.insertId;
+
+    for (const item of items) {
+        await db.query(
+            'INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?)',
+            [pedidoId, item.producto_id, item.cantidad, item.precio_unitario]
+        );
+    }
+    await descontarMateriaPrima(elegido.id, items);
+
+    stats.pedidosCreados++;
+    stats.totalVentas += total;
+
+    const promos = items.filter(i => i.tiene_promo).length;
+    log('🛒',
+        `Cliente → ${elegido.nombre} #${pedidoId}`,
+        `${items.length} ít · ${total.toFixed(2)}€` +
+        (promos > 0 ? ` · 🎟️ ${promos}` : '') +
+        ` · cola=${elegido.cola} · score=${elegido.score.toFixed(2)}`
+    );
 }
 
 async function descontarMateriaPrima(puestoId, items) {
@@ -414,94 +517,6 @@ async function descontarMateriaPrima(puestoId, items) {
     }
 }
 
-// ─── Avanzar estados de pedidos cada 5 segundos ──────────────────────────────
-async function avanzarEstados() {
-    if (paused || DRY_RUN) return;
-
-    let totalAvanzados = 0;
-
-    // Para cada estado no terminal, avanzar al siguiente
-    for (let i = 0; i < ESTADO_FLOW.length - 1; i++) {
-        const estadoActual = ESTADO_FLOW[i];
-        const estadoSiguiente = ESTADO_FLOW[i + 1];
-
-        // Avanzar los pedidos más antiguos de este estado (máximo 3 por tick para simular realismo)
-        const [rows] = await db.query(
-            `SELECT id, puesto_id FROM pedidos
-             WHERE estado = ? AND puesto_id IN (SELECT id FROM puestos WHERE festival_id = ?)
-             ORDER BY creado_en ASC
-             LIMIT 4`,
-            [estadoActual, FESTIVAL_ID]
-        );
-
-        for (const pedido of rows) {
-            await db.query(
-                'UPDATE pedidos SET estado = ? WHERE id = ?',
-                [estadoSiguiente, pedido.id]
-            );
-            totalAvanzados++;
-
-            if (estadoSiguiente === 'entregado') {
-                stats.pedidosEntregados++;
-            }
-
-            const emoji = {
-                'confirmado': '✅',
-                'preparando': '👨‍🍳',
-                'listo': '🔔',
-                'entregado': '🎉',
-            }[estadoSiguiente];
-
-            log(emoji, `Pedido #${pedido.id}`, `${estadoActual} → ${estadoSiguiente}`);
-        }
-    }
-
-    if (totalAvanzados > 0) {
-        stats.pedidosAvanzados += totalAvanzados;
-        verb(`${totalAvanzados} pedido(s) avanzados de estado`);
-    }
-}
-
-// ─── Main loop ─────────────────────────────────────────────────────────────────
-async function runTick() {
-    if (paused) return 0;
-
-    tick++;
-    stats.ticksEjecutados++;
-
-    // Recargar puestos y analizar factores cada 10 ticks
-    if (tick % 10 === 1) {
-        await recargarPuestos();
-        for (const puesto of puestos) {
-            await analizarFactores(puesto);
-        }
-        mostrarDashboard();
-    }
-
-    if (puestos.length === 0) {
-        log('⚠️', 'No hay puestos en este festival');
-        return 0;
-    }
-
-    let extraDelay = 0;
-
-    for (const puesto of puestos) {
-        if (!puesto.abierto) {
-            verb(`[${puesto.nombre}] Cerrado — no se compra`);
-            continue;
-        }
-
-        try {
-            const result = await crearPedido(puesto);
-            if (result.delay > 0) extraDelay = Math.max(extraDelay, result.delay);
-        } catch (err) {
-            log('💥', `Error en ${puesto.nombre}`, err.message);
-        }
-    }
-
-    return extraDelay;
-}
-
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 async function main() {
     console.log('\n╔═══════════════════════════════════════════════════════════╗');
@@ -512,12 +527,11 @@ async function main() {
     console.log('║    [Ctrl+C]  →  Detener completamente                    ║');
     console.log('╚═══════════════════════════════════════════════════════════╝\n');
     console.log(`  Festival ID : ${FESTIVAL_ID}`);
-    console.log(`  Velocidad   : ${SPEED}  (tick base: ${BASE_TICK}ms)`);
+    console.log(`  Velocidad   : ${SPEED}  (un cliente cada ${ARRIVAL_INTERVAL_MS}ms)`);
     console.log(`  Modo        : ${DRY_RUN ? '🧪 DRY RUN' : '💾 ESCRITURA'}`);
-    console.log(`  Cola pausa  : ≥ ${COLA_UMBRAL_PAUSE} pedidos pendientes → espera`);
-    console.log(`  Cola lento  : ≥ ${COLA_UMBRAL_SLOW} pedidos pendientes → ritmo ×${COLA_SLOW_FACTOR}`);
-    console.log(`  Estados     : ${ESTADO_FLOW.join(' → ')}`);
-    console.log(`  Avance      : Cada ${STATE_TICK / 1000}s se avanzan estados de pedidos`);
+    console.log(`  Modelo      : 1 cliente llega → elige puesto (ruleta ponderada) → elige productos`);
+    console.log(`  Abandono    : Si la cola del puesto elegido ≥ ${COLA_ABANDONO}, el cliente se va`);
+    console.log(`  Estados     : ${ESTADO_FLOW.join(' → ')}  (los avanza kitchen-bot.js)`);
     console.log('');
 
     // Configurar captura de teclas
@@ -555,37 +569,21 @@ async function main() {
 
     console.log('🚀  Bot iniciado. Pulsa [ESPACIO] para pausar/reanudar.\n');
 
-    // Loop principal: crear pedidos
-    const orderLoop = async () => {
+    // Loop principal: un cliente llega cada ARRIVAL_INTERVAL_MS y decide
+    const clientLoop = async () => {
         try {
-            const extra = await runTick();
-            const next = BASE_TICK + extra;
-            verb(`Próximo tick en ${next}ms`);
-            setTimeout(orderLoop, next);
+            await simularCliente();
         } catch (err) {
-            log('💥', 'Error en tick principal', err.message);
-            setTimeout(orderLoop, BASE_TICK);
+            log('💥', 'Error simulando cliente', err.message);
         }
+        setTimeout(clientLoop, ARRIVAL_INTERVAL_MS);
     };
-
-    // Loop secundario: avanzar estados cada 5 segundos
-    const stateLoop = async () => {
-        try {
-            await avanzarEstados();
-        } catch (err) {
-            log('💥', 'Error avanzando estados', err.message);
-        }
-        setTimeout(stateLoop, STATE_TICK);
-    };
-
-    // Iniciar ambos loops
-    orderLoop();
-    setTimeout(stateLoop, STATE_TICK); // Primera ejecución tras 5s
+    clientLoop();
 }
 
 process.on('SIGINT', () => {
     console.log('\n\n🛑  Bot detenido.');
-    console.log(`📊  Resumen final: ${stats.pedidosCreados} pedidos creados, ${stats.pedidosEntregados} entregados, ${stats.totalVentas.toFixed(2)}€ en ventas\n`);
+    console.log(`📊  Resumen final: ${stats.pedidosCreados} pedidos creados, ${stats.totalVentas.toFixed(2)}€ en ventas, ${stats.clientesPerdidos} clientes perdidos\n`);
     process.exit(0);
 });
 
