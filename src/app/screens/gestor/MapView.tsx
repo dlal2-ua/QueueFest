@@ -8,7 +8,12 @@ interface PuestoMapa {
   abierto: boolean; pos_x: number | null; pos_y: number | null;
   pedidos_activos: number; espera_min: number; ingresos_hoy: number;
 }
-interface Props { festivalId: number; festivalNombre: string; navigate: (v: string) => void; }
+interface Props {
+  festivalId: number;
+  festivalNombre: string;
+  navigate: (v: string) => void;
+  highlightedPuestoId?: number | null; // IS-248: animar puesto cuando se aprueba una decisión
+}
 
 /* ── Isometric constants ───────────────────────────────────────────── */
 const TW = 40, TH = 20, OX = 230, OY = 80;

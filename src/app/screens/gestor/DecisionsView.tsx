@@ -9,6 +9,8 @@ interface Props {
   festivalNombre: string;
   modoAuto: boolean;
   onToggleModo: () => void;
+  onDecisionApproved?: (puestoId: number | null) => void;
+  compact?: boolean; // omite header propio cuando está embebido en SplitView
 }
 
 interface GrupoDecision {
@@ -33,7 +35,7 @@ function agruparDecisiones(decisiones: Decision[]): GrupoDecision[] {
   return grupos;
 }
 
-export function DecisionsView({ festivalId, festivalNombre, modoAuto, onToggleModo }: Props) {
+export function DecisionsView({ festivalId, festivalNombre, modoAuto, onToggleModo, onDecisionApproved, compact }: Props) {
   const [decisiones, setDecisiones] = useState<Decision[]>([]);
   const [loading, setLoading]       = useState(false);
   const [procesandoId, setProcesandoId] = useState<number | null>(null);
@@ -61,6 +63,8 @@ export function DecisionsView({ festivalId, festivalNombre, modoAuto, onToggleMo
     try {
       await aprobarDecision(id);
       toast.success('Decisión aprobada');
+      const decision = decisiones.find(d => d.id === id);
+      if (decision) onDecisionApproved?.(decision.puesto_id);
       cargar();
     } catch {
       setDecisiones(prev);
@@ -173,22 +177,24 @@ export function DecisionsView({ festivalId, festivalNombre, modoAuto, onToggleMo
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: '#FDF6EE' }}>
       <div className="px-4 py-4 space-y-4 pb-8">
 
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-base font-extrabold" style={{ color: '#2C1810' }}>Decisiones</h2>
-            <p className="text-[11px]" style={{ color: '#8B6650' }}>{festivalNombre}</p>
+        {/* Header — oculto en modo compact (SplitView pone su propio header) */}
+        {!compact && (
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-base font-extrabold" style={{ color: '#2C1810' }}>Decisiones</h2>
+              <p className="text-[11px]" style={{ color: '#8B6650' }}>{festivalNombre}</p>
+            </div>
+            <button
+              onClick={cargar}
+              disabled={loading}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors disabled:opacity-40"
+              style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', color: '#A67C52' }}
+            >
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+              Actualizar
+            </button>
           </div>
-          <button
-            onClick={cargar}
-            disabled={loading}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors disabled:opacity-40"
-            style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0', color: '#A67C52' }}
-          >
-            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </button>
-        </div>
+        )}
 
         {/* Toggle modo automático */}
         <div
