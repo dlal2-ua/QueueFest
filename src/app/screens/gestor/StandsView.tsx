@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getMapaPuestos, getPedidosPuesto } from '../../api';
 import { useGestorSSE } from '../../hooks/useGestorSSE';
-import { ChevronLeft, BarChart2, MapPin, ChevronRight } from 'lucide-react';
+import { ChevronLeft, BarChart2, MapPin, ChevronRight, RefreshCw } from 'lucide-react';
 import { formatWait } from '../../utils/formatTime';
 
 /* ─── Tipos ────────────────────────────────────────────────────────────── */
@@ -46,9 +46,18 @@ function ListaPuestos({ festivalId, onSelect }: ListaProps) {
   const [puestos, setPuestos] = useState<PuestoMapa[]>([]);
   const [metrica, setMetrica] = useState<MetricKey>('pedidos_activos');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const cargar = useCallback(() => {
     getMapaPuestos(festivalId).then(d => { if (Array.isArray(d)) setPuestos(d); }).catch(() => {});
+  }, [festivalId]);
+
+  // Refresh manual: el bot escribe pedidos directo a la BD sin pasar por el
+  // backend, así que SSE no se entera. El botón da feedback inmediato.
+  const refrescar = useCallback(async () => {
+    setRefreshing(true);
+    try { await getMapaPuestos(festivalId).then(d => { if (Array.isArray(d)) setPuestos(d); }); }
+    finally { setTimeout(() => setRefreshing(false), 400); }
   }, [festivalId]);
 
   useEffect(() => {
@@ -75,10 +84,21 @@ function ListaPuestos({ festivalId, onSelect }: ListaProps) {
             <BarChart2 className="w-4 h-4" style={{ color: '#A67C52' }} />
             Puestos
           </h2>
-          <div className="flex items-center gap-2 text-[10px] font-semibold" style={{ color: '#8B6650' }}>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />Libre</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />Mod.</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Sat.</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-[10px] font-semibold" style={{ color: '#8B6650' }}>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />Libre</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />Mod.</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Sat.</span>
+            </div>
+            <button
+              onClick={refrescar}
+              disabled={refreshing}
+              title="Refrescar"
+              className="p-1.5 rounded-full hover:bg-white/60 transition-colors disabled:opacity-50"
+              style={{ color: '#A67C52' }}
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
           </div>
         </div>
 
@@ -176,21 +196,28 @@ function DetallePuesto({ puesto, onBack, navigate }: DetalleProps) {
       .finally(() => setLoading(false));
   }, [puesto.id]);
 
-  const hoy = new Date().toDateString();
-  const pedidosHoy = pedidos.filter(p => new Date(p.creado_en).toDateString() === hoy);
+  // La BD guarda creado_en en UTC y el backend filtra "hoy" con CURDATE() (UTC).
+  // Comparamos en UTC para evitar que pedidos hechos justo antes de medianoche
+  // UTC desaparezcan al cambiar de día en la zona horaria local.
+  const utcDay = (d: Date) => d.toISOString().slice(0, 10);
+  const hoy = utcDay(new Date());
+  const pedidosHoy = pedidos.filter(p => utcDay(new Date(p.creado_en)) === hoy);
   const ingresos   = pedidosHoy.reduce((s, p) => s + Number(p.total || 0), 0);
-  const activos    = pedidosHoy.filter(p => !['entregado','cancelado'].includes(p.estado)).length;
+
+  // "Pedidos activos" son los no-terminales actuales, da igual el día (es lo
+  // mismo que muestra el popup del mapa).
+  const activos = pedidos.filter(p => !['entregado','cancelado'].includes(p.estado)).length;
 
   const ingresosPorHora: number[] = Array(24).fill(0);
-  pedidosHoy.forEach(p => { ingresosPorHora[new Date(p.creado_en).getHours()] += Number(p.total || 0); });
+  pedidosHoy.forEach(p => { ingresosPorHora[new Date(p.creado_en).getUTCHours()] += Number(p.total || 0); });
   const maxH = Math.max(...ingresosPorHora, 1);
 
   const ultimos7 = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() - (6 - i));
-    const key = d.toDateString();
+    const d = new Date(); d.setUTCDate(d.getUTCDate() - (6 - i));
+    const key = utcDay(d);
     return {
       label: d.toLocaleDateString('es-ES', { weekday: 'short' }),
-      total: pedidos.filter(p => new Date(p.creado_en).toDateString() === key)
+      total: pedidos.filter(p => utcDay(new Date(p.creado_en)) === key)
                     .reduce((s, p) => s + Number(p.total || 0), 0),
     };
   });
