@@ -1,0 +1,51 @@
+Para conectarnos en remoto lo hacemos por SSH a través de DBeaver o MySQL Workbench. Es muy fácil, solo seguid estos pasos.
+
+---------------------------------------------------------
+1. DATOS DE CONEXIÓN QUE VAS A NECESITAR:
+---------------------------------------------------------
+* IP del Servidor: 143.47.35.13
+* Usuario SSH: ubuntu
+* Archivo de clave privada: (Os lo paso por privado. No lo subáis a GitHub ni lo compartáis).
+
+* IP de la Base de Datos interna: 10.0.0.5
+* Puerto: 3306
+* Usuario de la BD: admin
+* Contraseña de la BD: Proyecto_Seguro2026!
+
+---------------------------------------------------------
+2. DBEAVER:
+---------------------------------------------------------
+Configuración del Túnel SSH:
+1. "Nueva Conexión" -> "MySQL".
+2. NO rellenes la pantalla principal todavía. Ve primero a la pestaña de la izquierda que dice "SSH".
+3. Marca la casilla "Usar túnel SSH".
+4. "Host/IP": 143.47.35.13
+5. "User/Usuario": ubuntu
+6. "Authentication Method" : "Public Key".
+7. "Private Key" : selecciona el .key que os he pasao
+
+Configurar la Base de Datos:
+1. Vuelve a la pestaña "Principal/General".
+2. "Server Host": 10.0.0.5
+3. "Port": 3306
+4. "Database/Base de datos": en blanco .
+5. "Username" : admin
+6. "Password" : pon la contraseña de la BD q he puesto arriba.
+
+Dale a "Probar conexión". Si todo está bien, saldrá en verde y ya puedes darle a Finalizar.
+
+---------------------------------------------------------
+2. CÓMO CONFIGURARLO EN MYSQL WORKBENCH:
+---------------------------------------------------------
+1. Abre Workbench y dale al símbolo "+" junto a MySQL Connections.
+2. Ponle un nombre a la conexión.
+3. "Connection Method": "Standard TCP/IP over SSH"
+4. SSH Hostname: 143.47.35.13
+5. SSH Username: ubuntu
+6. SSH Key File: Busca y selecciona el archivo .key que os he pasado.
+7. MySQL Hostname: 10.0.0.5
+8. MySQL Server Port: 3306
+9. Username: admin
+10. Password: Haz clic en "Store in Vault..." y pon la contraseña de la BD.
+
+* Dale a "Test Connection". Si te pide confirmar la huella del servidor SSH, dile que "Yes/OK" y listo.

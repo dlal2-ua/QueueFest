@@ -1,0 +1,13 @@
+En este documento presento una propuesta de cambios de la base de datos, analiza y realiza los cambios de la manera más óptima y coherente con el modelo relacional actual.
+
+Entiendo que los comentarios o reseñas se hacen sobre el foodtruck cuando YA se ha hecho el pedido, por lo tanto habrá que crear una tabla de comentarios que relacione USER + PEDIDO + FOODTRUCK (si no es así, proponed otras cosas). Y aquí está la magia, he pensado que cuando el usuario da reseña aparte del típico comentario y las estrellas dar opción de valorar los productos por separado de 2 formas distintas:
+- La primera, que de manera opcional, cuando el usuario pone una reseña le aparezca un recuadro por cada producto con sus respectivas estrellas (una general y otra por servicio/personal/rapidez como google maps) para opinar si quiere
+- La segunda, que si no pone nada, una IA analice la reseña y si menciona algunos de los productos que ha comprado, que automáticamente cree una reseña del producto y lo añada (y las estrellas las pone también o que se pongan las mismas de la reseña general)
+De esta manera nosotros como empresa tenemos más datos de qué funciona bien o no, si solo valoramos foodtrucks no sabemos si es bueno en rapidez pero malo en las burgers. 
+
+Por otro lado cuando el usuario haga reseñas, le sumarán puntos en royalties, así que no sé si deberíamos meter alguna relación con royalties como cuántos puntos suma la reseña (un campo en la tabla "Reseña") o cómo hacerlo. Además que no es lo mismo hacer una reseña de 5 estrellas al foodtruck y ya, que poner estrellas, poner comentario, poner comentarios concretos a las burgers... por lo que deberíamos tener una tabla de equivalencia (que ns si es otra tabla) o simplemente sumar +50 por cada cosa que hace.
+
+- Crear tabla comentarios con campos: id, estrellas general, comentario, estrellas servicio/rapidez/comida de foodtruck, royalties sumados, relación con USER, relación con PEDIDO y relación con COMENTARIOS (por todas las reseñas de productos que salen de aquí) (entiendo que relación con foodtruck no hace falta porque ya se sabe con pedido y es 1..1 con foodtruck)
+- Crear tabla (o la misma) para comentarios a productos con: id, estrellas, relación con PRODUCTO, relación con PEDIDO (o con COMENTARIO inicial), comentario
+- No sé si tabla relacionada de royalties con comentarios, o con movimientos de royalties
+- No sé si tabla aparte con cuanto sumar por cada accion o directamente sumar algo fijo como 50 + 20pt*cosa_que_haga

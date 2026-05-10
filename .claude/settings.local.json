@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Program Files/MySQL//**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Bash(chmod 600 \"/c/Users/javip/Downloads/ssh-key-2026-03-03.key\")",
+      "Bash('/c/Program Files/MySQL/MySQL Server 9.1/bin/mysql.exe' -h 127.0.0.1 -P 13306 -u admin -pProyecto_Seguro2026! queuefest -e 'SHOW TABLES;')",
+      "Bash('/c/Program Files/MySQL/MySQL Server 9.1/bin/mysql.exe' -h 127.0.0.1 -P 13306 -u admin -pProyecto_Seguro2026! queuefest -e ' *)",
+      "Bash('/c/Program Files/MySQL/MySQL Server 9.1/bin/mysql.exe' -h 127.0.0.1 -P 13306 -u admin -pProyecto_Seguro2026! queuefest -e 'SHOW CREATE TABLE alertas_stock\\\\G; SHOW CREATE TABLE puesto_operadores\\\\G;')",
+      "Bash('/c/Program Files/MySQL/MySQL Server 9.1/bin/mysql.exe' -h 127.0.0.1 -P 13306 -u admin -pProyecto_Seguro2026! queuefest -e 'SHOW COLUMNS FROM usuarios; SHOW COLUMNS FROM loyalty;')",
+      "Bash('/c/Program Files/MySQL/MySQL Server 9.1/bin/mysql.exe' -h 127.0.0.1 -P 13306 -u admin -pProyecto_Seguro2026! queuefest)",
+      "Bash(pkill -f \"ssh.*143.47.35.13\")",
+      "Bash('/c/Program Files/MySQL/MySQL Server 9.1/bin/mysql.exe' -h 127.0.0.1 -P 13306 -u admin -pProyecto_Seguro2026! -e 'SHOW DATABASES;')",
+      "Bash('/c/Program Files/MySQL/MySQL Server 9.1/bin/mysql.exe' -h 127.0.0.1 -P 13306 -u admin -pProyecto_Seguro2026!)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash('/c/Program Files/MySQL/MySQL Server 9.1/bin/mysql.exe' -h 127.0.0.1 -P 13306 -u admin -pProyecto_Seguro2026! queuefest_dw -e ' *)"
+    ]
+  }
+}
