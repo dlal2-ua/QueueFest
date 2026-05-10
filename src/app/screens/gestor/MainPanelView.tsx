@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getEstadisticas } from '../../api';
+import { useGestorSSE } from '../../hooks/useGestorSSE';
 import { ChevronLeft, Store, Euro, Map, ShoppingBag, Clock, LogOut, Tag } from 'lucide-react';
 import { formatWait } from '../../utils/formatTime';
 
@@ -24,6 +25,7 @@ export function MainPanelView({ festivalId, festivalNombre, onChangeFestival, on
     const iv = setInterval(cargarStats, 30000);
     return () => clearInterval(iv);
   }, []); // eslint-disable-line
+  useGestorSSE(festivalId, (type) => { if (type === 'order_changed') cargarStats(); });
 
   const metricas = [
     { icon: Store,       valor: stats?.puestos_abiertos ?? '—', label: 'Puestos activos',   color: '#A67C52' },

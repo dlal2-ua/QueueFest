@@ -23,11 +23,10 @@ export function SplitView({ festivalId, festivalNombre, modoAuto, onToggleModo, 
   }, []);
 
   return (
-    <div className="flex flex-1 overflow-hidden" style={{ backgroundColor: '#FDF6EE' }}>
+    <div className="flex flex-row flex-1 overflow-hidden" style={{ backgroundColor: '#FDF6EE' }}>
 
-      {/* ── Mitad izquierda: Mapa ──────────────────────────────────────── */}
-      <div className="w-1/2 flex flex-col overflow-hidden border-r" style={{ borderColor: '#E8D5C0' }}>
-        {/* MapView ya tiene su propio header/controles */}
+      {/* ── Izquierda: Mapa fijo ───────────────────────────────────────── */}
+      <div className="flex-shrink-0 overflow-hidden border-r" style={{ width: '55%', borderColor: '#E8D5C0' }}>
         <MapView
           festivalId={festivalId}
           festivalNombre={festivalNombre}
@@ -36,9 +35,8 @@ export function SplitView({ festivalId, festivalNombre, modoAuto, onToggleModo, 
         />
       </div>
 
-      {/* ── Mitad derecha: Decisiones ──────────────────────────────────── */}
-      <div className="w-1/2 flex flex-col overflow-hidden">
-        {/* Header propio del panel de decisiones */}
+      {/* ── Derecha: Decisiones con scroll propio ─────────────────────── */}
+      <div className="flex flex-col overflow-hidden" style={{ width: '45%' }}>
         <div
           className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b"
           style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}

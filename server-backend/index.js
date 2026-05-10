@@ -31,6 +31,29 @@ paymentsModule.registerWebhookRoute(app, () => db);
 
 app.use(express.json());
 
+// ==================== SSE EVENT BUS ====================
+const sseClients = new Map(); // Map<festivalId, Set<res>>
+
+function sseAddClient(festivalId, res) {
+  if (!sseClients.has(festivalId)) sseClients.set(festivalId, new Set());
+  sseClients.get(festivalId).add(res);
+}
+function sseRemoveClient(festivalId, res) {
+  const set = sseClients.get(festivalId);
+  if (!set) return;
+  set.delete(res);
+  if (!set.size) sseClients.delete(festivalId);
+}
+function sseEmit(festivalId, type) {
+  const clients = sseClients.get(Number(festivalId));
+  if (!clients || !clients.size) return;
+  const payload = `data: ${JSON.stringify({ type })}\n\n`;
+  for (const res of [...clients]) {
+    try { res.write(payload); } catch { sseRemoveClient(Number(festivalId), res); }
+  }
+}
+// ==================== FIN SSE EVENT BUS ====================
+
 //Debug temporal
 app.get('/debug/uploads-check', (req, res) => {
   const uploadsPath = path.join(__dirname, 'uploads');
@@ -1737,6 +1760,8 @@ app.post('/api/pedidos', auth, async (req, res) => {
       [puntos, pedidoId]
     );
     await conn.commit();
+    const [_pF] = await conn.query('SELECT festival_id FROM puestos WHERE id = ?', [puesto_id]);
+    if (_pF[0]?.festival_id) { sseEmit(_pF[0].festival_id, 'order_changed'); sseEmit(_pF[0].festival_id, 'decision_changed'); }
     await evaluateWaitZeroTriggerForPuesto(Number(puesto_id), 'pedido_creado');
     res.json({ pedido_id: pedidoId, puntos_ganados: puntos });
   } catch (err) {
@@ -2718,6 +2743,8 @@ app.patch('/api/pedidos/:id/estado', auth, async (req, res) => {
     }
 
     await db.query('UPDATE pedidos SET estado = ? WHERE id = ?', [nuevo_estado, pedidoId]);
+    const [_pF2] = await db.query('SELECT festival_id FROM puestos WHERE id = ?', [pedido.puesto_id]);
+    if (_pF2[0]?.festival_id) { sseEmit(_pF2[0].festival_id, 'order_changed'); sseEmit(_pF2[0].festival_id, 'decision_changed'); }
     await evaluateWaitZeroTriggerForPuesto(Number(pedido.puesto_id), 'pedido_estado_actualizado');
 
     res.json({ message: 'Estado actualizado correctamente' });
@@ -4076,6 +4103,23 @@ app.put('/api/gestor/modo-auto', auth, async (req, res) => {
   }
 });
 
+// GET /api/gestor/eventos?festival_id=X&token=JWT  — SSE stream
+app.get('/api/gestor/eventos', (req, res) => {
+  const { festival_id, token } = req.query;
+  if (!festival_id || !token) return res.status(400).end();
+  try { jwt.verify(token, JWT_SECRET); } catch { return res.status(401).end(); }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const festId = Number(festival_id);
+  sseAddClient(festId, res);
+  const hb = setInterval(() => { try { res.write(':hb\n\n'); } catch {} }, 25000);
+  req.on('close', () => { clearInterval(hb); sseRemoveClient(festId, res); });
+});
+
 // GET /api/gestor/decisiones?festival_id=X
 app.get('/api/gestor/decisiones', auth, async (req, res) => {
   const { festival_id } = req.query;
@@ -4102,6 +4146,7 @@ app.get('/api/gestor/decisiones', auth, async (req, res) => {
           `UPDATE decisiones_automaticas SET estado = 'ejecutada' WHERE id = ?`, [d.id]
         );
       }
+      if (pendientes.length > 0) sseEmit(Number(festival_id), 'decision_changed');
     }
 
     // 4. Evaluar ganadores de pares A/B maduros (>30 min ejecutados)
@@ -4142,6 +4187,7 @@ app.post('/api/gestor/decisiones/:id/aprobar', auth, async (req, res) => {
     await db.query(
       `UPDATE decisiones_automaticas SET estado = 'aprobada' WHERE id = ?`, [req.params.id]
     );
+    sseEmit(decision.festival_id, 'decision_changed');
     res.json({ message: 'Decisión aprobada y ejecutada' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4152,7 +4198,7 @@ app.post('/api/gestor/decisiones/:id/aprobar', auth, async (req, res) => {
 app.post('/api/gestor/decisiones/:id/rechazar', auth, async (req, res) => {
   try {
     const [rows] = await db.query(
-      'SELECT estado FROM decisiones_automaticas WHERE id = ?', [req.params.id]
+      'SELECT estado, festival_id FROM decisiones_automaticas WHERE id = ?', [req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Decisión no encontrada' });
     if (rows[0].estado !== 'pendiente')
@@ -4161,6 +4207,7 @@ app.post('/api/gestor/decisiones/:id/rechazar', auth, async (req, res) => {
     await db.query(
       `UPDATE decisiones_automaticas SET estado = 'rechazada' WHERE id = ?`, [req.params.id]
     );
+    sseEmit(rows[0].festival_id, 'decision_changed');
     res.json({ message: 'Decisión rechazada' });
   } catch (err) {
     res.status(500).json({ error: err.message });

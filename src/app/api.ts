@@ -604,6 +604,16 @@ export const rechazarDecision = async (id: number) => {
     return res.json();
 };
 
+// SSE stream de eventos del panel gestor — devuelve función de cleanup
+export function subscribeGestorEventos(festivalId: number, onEvent: (type: string) => void): () => void {
+    const token = localStorage.getItem('token');
+    if (!token) return () => {};
+    const url = `${API_URL}/gestor/eventos?festival_id=${festivalId}&token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
+    es.onmessage = (e) => { try { onEvent(JSON.parse(e.data).type); } catch {} };
+    return () => es.close();
+}
+
 // Puestos del festival con posición en el mapa y métricas en tiempo real
 export const getMapaPuestos = async (festivalId: number) => {
     const res = await fetch(`${API_URL}/gestor/mapa?festival_id=${festivalId}`, { headers: headers() });

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { getMapaPuestos, getPedidosPuesto } from '../../api';
+import { useGestorSSE } from '../../hooks/useGestorSSE';
 import { ChevronLeft, BarChart2, MapPin, ChevronRight } from 'lucide-react';
 import { formatWait } from '../../utils/formatTime';
 
@@ -46,17 +47,20 @@ function ListaPuestos({ festivalId, onSelect }: ListaProps) {
   const [metrica, setMetrica] = useState<MetricKey>('pedidos_activos');
   const [loading, setLoading] = useState(true);
 
+  const cargar = useCallback(() => {
+    getMapaPuestos(festivalId).then(d => { if (Array.isArray(d)) setPuestos(d); }).catch(() => {});
+  }, [festivalId]);
+
   useEffect(() => {
     setLoading(true);
     getMapaPuestos(festivalId)
       .then(data => setPuestos(Array.isArray(data) ? data : []))
       .catch(console.error)
       .finally(() => setLoading(false));
-    const iv = setInterval(() => {
-      getMapaPuestos(festivalId).then(d => { if (Array.isArray(d)) setPuestos(d); }).catch(() => {});
-    }, 30000);
+    const iv = setInterval(cargar, 30000);
     return () => clearInterval(iv);
-  }, [festivalId]);
+  }, [festivalId, cargar]);
+  useGestorSSE(festivalId, (type) => { if (type === 'order_changed') cargar(); });
 
   const values = puestos.map(p => p[metrica] ?? 0);
   const max    = Math.max(...values, 1);

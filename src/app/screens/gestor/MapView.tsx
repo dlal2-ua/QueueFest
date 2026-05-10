@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getMapaPuestos } from '../../api';
+import { useGestorSSE } from '../../hooks/useGestorSSE';
 import { ChevronLeft, RefreshCw, Plus, Minus, X } from 'lucide-react';
 import { formatWait } from '../../utils/formatTime';
 
@@ -187,6 +188,7 @@ export function MapView({ festivalId, navigate }: Props) {
   },[festivalId]);
 
   useEffect(()=>{ load(); const iv=setInterval(load,30000); return()=>clearInterval(iv); },[load]);
+  useGestorSSE(festivalId, (type) => { if (type === 'order_changed') load(); });
 
   const onMD=(e:React.MouseEvent)=>{dragRef.current={active:true,sx:e.clientX,sy:e.clientY,tx:tf.x,ty:tf.y};};
   const onMM=(e:React.MouseEvent)=>{

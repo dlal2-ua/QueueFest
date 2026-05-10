@@ -3,24 +3,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getModoAuto, setModoAuto } from '../api';
 import { toast } from 'sonner';
-import { Bot, Map, CheckSquare, Home, LayoutGrid, Tag, LogOut, Settings2, LayoutPanelLeft } from 'lucide-react';
+import { Bot, Home, LayoutGrid, Tag, LogOut, Settings2, LayoutPanelLeft } from 'lucide-react';
 
 import { WelcomeView }    from './gestor/WelcomeView';
 import { MainPanelView }  from './gestor/MainPanelView';
-import { MapView }        from './gestor/MapView';
-import { DecisionsView }  from './gestor/DecisionsView';
 import { StandsView }     from './gestor/StandsView';
 import { PromotionsView } from './gestor/PromotionsView';
 import { BotDashboardView } from './gestor/BotDashboardView';
 import { ConfigView }       from './gestor/ConfigView';
 import { SplitView }        from './gestor/SplitView';
 
-type View = 'welcome' | 'main' | 'map' | 'decisions' | 'stands' | 'promotions' | 'bot' | 'config' | 'split';
+type View = 'welcome' | 'main' | 'stands' | 'promotions' | 'bot' | 'config' | 'split';
 
-const NAV_ITEMS: { id: View; icon: typeof Map; label: string }[] = [
+const NAV_ITEMS: { id: View; icon: typeof Home; label: string }[] = [
   { id: 'split',      icon: LayoutPanelLeft, label: 'Mapa + Decisiones' },
-  { id: 'map',        icon: Map,             label: 'Mapa'              },
-  { id: 'decisions',  icon: CheckSquare,     label: 'Decisiones'        },
   { id: 'main',       icon: Home,            label: 'Inicio'            },
   { id: 'stands',     icon: LayoutGrid,      label: 'Puestos'           },
   { id: 'promotions', icon: Tag,             label: 'Promociones'       },
@@ -83,11 +79,11 @@ export function GestorScreen() {
 
   // ── Main app layout ──────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: '#FDF6EE' }}>
+    <div className="h-screen flex overflow-hidden" style={{ backgroundColor: '#FDF6EE' }}>
 
       {/* ── Sidebar — desktop only ──────────────────────────────────────── */}
       <aside
-        className="hidden md:flex flex-col w-56 min-h-screen flex-shrink-0 border-r"
+        className="hidden md:flex flex-col w-56 h-screen flex-shrink-0 border-r"
         style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}
       >
         {/* Brand */}
@@ -139,7 +135,7 @@ export function GestorScreen() {
       </aside>
 
       {/* ── Content area ────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden">
         <div className="flex-1 overflow-hidden flex flex-col">
 
           {view === 'main' && festivalId && (
@@ -149,23 +145,6 @@ export function GestorScreen() {
               onChangeFestival={() => setView('welcome')}
               onLogout={logout}
               navigate={navigate}
-            />
-          )}
-
-          {view === 'map' && festivalId && (
-            <MapView
-              festivalId={festivalId}
-              festivalNombre={festivalNombre}
-              navigate={navigate}
-            />
-          )}
-
-          {view === 'decisions' && festivalId && (
-            <DecisionsView
-              festivalId={festivalId}
-              festivalNombre={festivalNombre}
-              modoAuto={modoAuto}
-              onToggleModo={handleToggleModo}
             />
           )}
 

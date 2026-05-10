@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { getDecisiones, aprobarDecision, rechazarDecision } from '../../api';
+import { useGestorSSE } from '../../hooks/useGestorSSE';
 import { DecisionCard, type Decision } from '../../components/DecisionCard';
 import { BarChart2, RefreshCw, Zap, Hand, Trophy, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -55,6 +56,7 @@ export function DecisionsView({ festivalId, festivalNombre, modoAuto, onToggleMo
   }, [festivalId]);
 
   useState(() => { cargar(); });
+  useGestorSSE(festivalId, (type) => { if (type === 'decision_changed') cargar(); });
 
   const handleAprobar = async (id: number) => {
     const prev = decisiones;
@@ -295,7 +297,7 @@ export function DecisionsView({ festivalId, festivalNombre, modoAuto, onToggleMo
         {decisiones.length === 0 && loaded && (
           <div className="text-center py-12" style={{ color: '#C8956C', opacity: 0.4 }}>
             <BarChart2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">No se han generado decisiones todavía.<br />Pulsa Actualizar para evaluar el festival.</p>
+            <p className="text-sm">No se han generado decisiones todavía.</p>
           </div>
         )}
 
