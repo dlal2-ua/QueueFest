@@ -347,7 +347,7 @@ export function AdminDashboardScreen() {
                 {section === 'loyalty'    && <SeccionLoyalty data={data} />}
                 {section === 'promos'     && <SeccionPromos data={data} />}
                 {section === 'clv'        && <SeccionCLV data={data} />}
-                {section === 'prediccion' && <SeccionPrediccion data={data} />}
+                {section === 'prediccion' && <SeccionPrediccionAvanzada data={data} />}
                 {section === 'heatmap'    && <SeccionHeatmap data={data} festivalId={festivalId} />}
               </>
             )}
@@ -1108,6 +1108,146 @@ function SeccionCLV({ data }: { data: any }) {
 }
 
 /* ─── SECCIÓN 11: PREDICCIÓN ────────────────────────────────────────────── */
+function SeccionPrediccionAvanzada({ data }: { data: any }) {
+  if (!data) return <EmptyState message="No hay datos de prediccion disponibles." />;
+  const k = data.kpis || {};
+  const porHora: any[] = (data.por_hora || []).map((h: any) => ({
+    ...h,
+    hora_label: h.hora != null ? h.hora + 'h' : '-'
+  }));
+  const seguimiento: any[] = (data.seguimiento || []).map((p: any) => ({
+    ...p,
+    etiqueta: p.etiqueta || (p.hora != null ? p.hora + 'h' : '-')
+  }));
+  const historico: any[] = data.historico_festivales || [];
+  const topProds: any[] = data.productos_top_predichos || [];
+  const chartData = seguimiento.length > 0 ? seguimiento : porHora;
+  const estado = k.estado_cumplimiento || 'pendiente';
+  const estadoCls =
+    estado === 'cumpliendo' ? 'bg-green-100 text-green-700'
+    : estado === 'en_riesgo' ? 'bg-amber-100 text-amber-700'
+    : estado === 'desviada' ? 'bg-red-100 text-red-700'
+    : 'bg-gray-100 text-gray-600';
+  const estadoLabel =
+    estado === 'cumpliendo' ? 'Cumpliendo'
+    : estado === 'en_riesgo' ? 'En riesgo'
+    : estado === 'desviada' ? 'Desviada'
+    : 'Pendiente';
+
+  return (
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard label="Hora pico prevista" value={k.hora_pico != null ? k.hora_pico + ':00h' : '-'} />
+        <KpiCard label="Pedidos en pico" value={fmtN(k.pedidos_hora_pico)} />
+        <KpiCard label="Ingresos en pico" value={fmtE(k.ingresos_hora_pico)} />
+        <KpiCard label="Confianza modelo" value={fmtPct(k.confianza_global_pct)} />
+        <KpiCard
+          label="Precision historica"
+          value={fmtPct(k.precision_global_pct)}
+          sub={`${fmtN(k.aciertos)} de ${fmtN(k.predicciones_evaluadas)} evaluadas`}
+          subClass={Number(k.precision_global_pct || 0) >= 70 ? 'text-green-600' : 'text-amber-600'}
+        />
+        <KpiCard
+          label="Estado actual"
+          value={estadoLabel}
+          sub={`Tolerancia +/-${fmtPct(k.tolerancia_acierto_pct)}`}
+          subClass={estado === 'cumpliendo' ? 'text-green-600' : estado === 'desviada' ? 'text-red-500' : 'text-amber-600'}
+        />
+        <KpiCard label="Pedidos real vs pred." value={`${fmtN(k.pedidos_real_total)} / ${fmtN(k.pedidos_predichos_total)}`} />
+        <KpiCard label="Ingresos real vs pred." value={`${fmtE(k.ingresos_real_total)} / ${fmtE(k.ingresos_predichos_total)}`} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {chartData.length > 0 && (
+          <SectionCard
+            title="Seguimiento de la prediccion"
+            action={<span className={`px-2 py-1 rounded-full text-[10px] font-bold ${estadoCls}`}>{estadoLabel}</span>}
+          >
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData} margin={{ top: 10, right: 55, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey={seguimiento.length > 0 ? 'etiqueta' : 'hora_label'} tick={{ fontSize: 9 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 9 }} tickFormatter={v => Math.round(Number(v)).toLocaleString('es-ES')} width={55} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: TEAL }} width={40} />
+                <Tooltip />
+                <Line yAxisId="left" type="monotone" dataKey="ingresos_real" stroke={BLUE} dot={false} strokeWidth={2} name="Ingresos real" />
+                <Line yAxisId="left" type="monotone" dataKey="ingresos_predichos" stroke={BLUE} dot={false} strokeWidth={2} strokeDasharray="5 5" name="Ingresos pred." opacity={0.5} />
+                <Line yAxisId="right" type="monotone" dataKey="pedidos_real" stroke={TEAL} dot={false} strokeWidth={1.5} name="Pedidos real" />
+                <Line yAxisId="right" type="monotone" dataKey="pedidos_predichos" stroke={AMBER} dot={false} strokeWidth={1.5} strokeDasharray="4 4" name="Pedidos pred." />
+              </LineChart>
+            </ResponsiveContainer>
+            <ChartLegend items={[
+              { color: BLUE, label: 'Ingresos real' },
+              { color: BLUE + '80', label: 'Ingresos pred.' },
+              { color: TEAL, label: 'Pedidos real' },
+              { color: AMBER, label: 'Pedidos pred.' },
+            ]} />
+          </SectionCard>
+        )}
+
+        {porHora.length > 0 && (
+          <SectionCard title="Cumplimiento por hora">
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={porHora} margin={{ top: 10, right: 20, bottom: 5, left: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="hora_label" tick={{ fontSize: 9 }} />
+                <YAxis tick={{ fontSize: 9 }} tickFormatter={v => Math.round(Number(v)) + '%'} width={38} />
+                <Tooltip formatter={(value: any) => fmtPct(Number(value))} />
+                <Bar dataKey="error_pedidos_pct" name="Error pedidos" radius={[4, 4, 0, 0]} fill={AMBER} />
+                <Bar dataKey="error_ingresos_pct" name="Error ingresos" radius={[4, 4, 0, 0]} fill={RED} />
+              </BarChart>
+            </ResponsiveContainer>
+          </SectionCard>
+        )}
+
+        {topProds.length > 0 && (
+          <SectionCard title="Puestos mas demandados (prediccion)">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={topProds} layout="vertical" margin={{ top: 5, right: 45, bottom: 5, left: 5 }}>
+                <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => v + ' uds'} />
+                <YAxis type="category" dataKey="nombre" tick={{ fontSize: 10 }} width={95} />
+                <Tooltip />
+                <Bar dataKey="unidades_predichas" radius={4} name="Unidades predichas">
+                  {topProds.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length] + '99'} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </SectionCard>
+        )}
+
+        {historico.length > 0 && (
+          <SectionCard title="Historico de aciertos por festival">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left py-1 px-1 text-gray-400">Festival</th>
+                    <th className="text-right py-1 px-1 text-gray-400">Precision</th>
+                    <th className="text-right py-1 px-1 text-gray-400">Aciertos</th>
+                    <th className="text-right py-1 px-1 text-gray-400">Error pedidos</th>
+                    <th className="text-right py-1 px-1 text-gray-400">Error ingresos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historico.map((f: any) => (
+                    <tr key={f.festival_id} className="border-b border-gray-50">
+                      <td className="py-1 px-1 font-semibold text-gray-800">{f.festival_nombre || '-'}</td>
+                      <td className="py-1 px-1 text-right font-bold">{fmtPct(f.precision_pct)}</td>
+                      <td className="py-1 px-1 text-right">{fmtN(f.aciertos)} / {fmtN(f.predicciones_evaluadas)}</td>
+                      <td className="py-1 px-1 text-right">{fmtPct(f.error_medio_pedidos_pct)}</td>
+                      <td className="py-1 px-1 text-right">{fmtPct(f.error_medio_ingresos_pct)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SeccionPrediccion({ data }: { data: any }) {
   if (!data) return <EmptyState message="No hay datos de predicción disponibles." />;
   const k = data.kpis || {};
