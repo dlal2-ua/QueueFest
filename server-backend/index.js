@@ -2903,6 +2903,222 @@ app.get('/api/gestor/estadisticas', auth, async (req, res) => {
 // ==================== FESTIVALES PÚBLICOS ====================
 // Sin auth — usado en la pantalla de selección de festival del usuario
 
+function estimateLostSalesForBucket(row) {
+  const pedidos = Number(row.pedidos || 0);
+  const ingresos = Number(row.ingresos || 0);
+  const empleados = Math.max(Number(row.num_empleados || 1), 1);
+  const servicioMin = Math.max(Number(row.tiempo_servicio_medio || 3), 1);
+  const capacidadHora = empleados * (60 / servicioMin);
+  const umbralSaturacion = capacidadHora * 0.85;
+  const pedidosPerdidos = Math.max(0, Math.ceil(pedidos - umbralSaturacion));
+  const ticketMedio = pedidos > 0 ? ingresos / pedidos : 0;
+
+  return {
+    capacidad_hora: capacidadHora,
+    pedidos_perdidos_estimados: pedidosPerdidos,
+    valor_perdido_estimado: pedidosPerdidos * ticketMedio
+  };
+}
+
+app.get('/api/gestor/post-evento/informe', auth, requireRoles('gestor', 'administrador'), async (req, res) => {
+  const festivalId = req.query.festival_id ? Number(req.query.festival_id) : null;
+  if (!festivalId) return res.status(400).json({ error: 'festival_id requerido' });
+
+  try {
+    const [[festival]] = await db.query(
+      'SELECT id, nombre, fecha_inicio, fecha_fin, activo FROM festivales WHERE id = ?',
+      [festivalId]
+    );
+    if (!festival) return res.status(404).json({ error: 'Festival no encontrado' });
+
+    const [ventasPorPuestoHora] = await db.query(
+      `SELECT
+         pu.id AS puesto_id,
+         pu.nombre AS puesto_nombre,
+         pu.tipo,
+         pu.num_empleados,
+         pu.capacidad_max,
+         pu.tiempo_servicio_medio,
+         DATE(pe.creado_en) AS fecha,
+         HOUR(pe.creado_en) AS hora,
+         DATE_FORMAT(pe.creado_en, '%Y-%m-%d %H:00:00') AS orden,
+         DATE_FORMAT(pe.creado_en, '%d/%m %H:00') AS etiqueta,
+         COUNT(*) AS pedidos,
+         COALESCE(SUM(pe.total), 0) AS ingresos
+       FROM pedidos pe
+       INNER JOIN puestos pu ON pu.id = pe.puesto_id
+       WHERE pu.festival_id = ?
+         AND pe.estado NOT IN ('cancelado')
+       GROUP BY
+         pu.id, pu.nombre, pu.tipo, pu.num_empleados, pu.capacidad_max, pu.tiempo_servicio_medio,
+         DATE(pe.creado_en), HOUR(pe.creado_en), orden, etiqueta
+       ORDER BY orden ASC, pu.nombre ASC`,
+      [festivalId]
+    );
+
+    const [unidadesPorHora] = await db.query(
+      `SELECT
+         DATE_FORMAT(pe.creado_en, '%Y-%m-%d %H:00:00') AS orden,
+         COALESCE(SUM(pi.cantidad), 0) AS unidades
+       FROM pedidos pe
+       INNER JOIN puestos pu ON pu.id = pe.puesto_id
+       INNER JOIN pedido_items pi ON pi.pedido_id = pe.id
+       WHERE pu.festival_id = ?
+         AND pe.estado NOT IN ('cancelado')
+       GROUP BY orden`,
+      [festivalId]
+    );
+
+    const unidadesByHour = new Map(
+      unidadesPorHora.map((row) => [row.orden, Number(row.unidades || 0)])
+    );
+
+    const hourlyMap = new Map();
+    const lostByPuestoMap = new Map();
+
+    ventasPorPuestoHora.forEach((row) => {
+      const estimation = estimateLostSalesForBucket(row);
+      const currentHour = hourlyMap.get(row.orden) || {
+        orden: row.orden,
+        etiqueta: row.etiqueta,
+        pedidos: 0,
+        ingresos: 0,
+        unidades: unidadesByHour.get(row.orden) || 0,
+        capacidad_hora: 0,
+        pedidos_perdidos_estimados: 0,
+        valor_perdido_estimado: 0
+      };
+
+      currentHour.pedidos += Number(row.pedidos || 0);
+      currentHour.ingresos += Number(row.ingresos || 0);
+      currentHour.capacidad_hora += estimation.capacidad_hora;
+      currentHour.pedidos_perdidos_estimados += estimation.pedidos_perdidos_estimados;
+      currentHour.valor_perdido_estimado += estimation.valor_perdido_estimado;
+      hourlyMap.set(row.orden, currentHour);
+
+      const currentPuesto = lostByPuestoMap.get(row.puesto_id) || {
+        puesto_id: row.puesto_id,
+        puesto_nombre: row.puesto_nombre,
+        tipo: row.tipo,
+        pedidos_perdidos_estimados: 0,
+        valor_perdido_estimado: 0,
+        horas_saturadas: 0
+      };
+      currentPuesto.pedidos_perdidos_estimados += estimation.pedidos_perdidos_estimados;
+      currentPuesto.valor_perdido_estimado += estimation.valor_perdido_estimado;
+      if (estimation.pedidos_perdidos_estimados > 0) currentPuesto.horas_saturadas += 1;
+      lostByPuestoMap.set(row.puesto_id, currentPuesto);
+    });
+
+    const ventas_por_hora = [...hourlyMap.values()].sort((a, b) => String(a.orden).localeCompare(String(b.orden)));
+
+    const [productos_top] = await db.query(
+      `SELECT
+         pr.id AS producto_id,
+         pr.nombre,
+         pu.nombre AS puesto_nombre,
+         pu.tipo AS puesto_tipo,
+         COALESCE(SUM(pi.cantidad), 0) AS unidades,
+         COALESCE(SUM(COALESCE(pi.importe_total, pi.cantidad * pi.precio_unitario)), 0) AS ingresos,
+         COUNT(DISTINCT pe.id) AS pedidos
+       FROM pedido_items pi
+       INNER JOIN pedidos pe ON pe.id = pi.pedido_id
+       INNER JOIN productos pr ON pr.id = pi.producto_id
+       INNER JOIN puestos pu ON pu.id = pe.puesto_id
+       WHERE pu.festival_id = ?
+         AND pe.estado NOT IN ('cancelado')
+       GROUP BY pr.id, pr.nombre, pu.nombre, pu.tipo
+       ORDER BY unidades DESC, ingresos DESC, pedidos DESC
+       LIMIT 12`,
+      [festivalId]
+    );
+
+    const [barrasRaw] = await db.query(
+      `SELECT
+         pu.id AS puesto_id,
+         pu.nombre,
+         pu.tipo,
+         pu.num_empleados,
+         pu.capacidad_max,
+         pu.tiempo_servicio_medio,
+         COUNT(pe.id) AS pedidos,
+         COALESCE(SUM(pe.total), 0) AS ingresos,
+         COUNT(DISTINCT DATE_FORMAT(pe.creado_en, '%Y-%m-%d %H')) AS horas_con_ventas
+       FROM puestos pu
+       LEFT JOIN pedidos pe ON pe.puesto_id = pu.id AND pe.estado NOT IN ('cancelado')
+       WHERE pu.festival_id = ?
+         AND pu.tipo = 'barra'
+       GROUP BY pu.id, pu.nombre, pu.tipo, pu.num_empleados, pu.capacidad_max, pu.tiempo_servicio_medio
+       ORDER BY ingresos DESC, pedidos DESC`,
+      [festivalId]
+    );
+
+    const barras_eficientes = barrasRaw.map((barra) => {
+      const pedidos = Number(barra.pedidos || 0);
+      const ingresos = Number(barra.ingresos || 0);
+      const empleados = Math.max(Number(barra.num_empleados || 1), 1);
+      const servicioMin = Math.max(Number(barra.tiempo_servicio_medio || 3), 1);
+      const horas = Math.max(Number(barra.horas_con_ventas || 0), 1);
+      const capacidadHora = empleados * (60 / servicioMin);
+      const capacidadPeriodo = capacidadHora * horas;
+      const lost = lostByPuestoMap.get(barra.puesto_id);
+
+      return {
+        ...barra,
+        pedidos,
+        ingresos,
+        ticket_medio: pedidos > 0 ? ingresos / pedidos : 0,
+        ingresos_por_empleado: ingresos / empleados,
+        pedidos_por_empleado: pedidos / empleados,
+        capacidad_hora: capacidadHora,
+        eficiencia_pct: capacidadPeriodo > 0 ? Math.min((pedidos / capacidadPeriodo) * 100, 999) : 0,
+        pedidos_perdidos_estimados: lost?.pedidos_perdidos_estimados || 0,
+        valor_perdido_estimado: lost?.valor_perdido_estimado || 0,
+        horas_saturadas: lost?.horas_saturadas || 0
+      };
+    }).sort((a, b) => {
+      const scoreB = Number(b.ingresos_por_empleado || 0) + Number(b.eficiencia_pct || 0) * 10;
+      const scoreA = Number(a.ingresos_por_empleado || 0) + Number(a.eficiencia_pct || 0) * 10;
+      return scoreB - scoreA;
+    });
+
+    const totalIngresos = ventas_por_hora.reduce((sum, row) => sum + Number(row.ingresos || 0), 0);
+    const totalPedidos = ventas_por_hora.reduce((sum, row) => sum + Number(row.pedidos || 0), 0);
+    const totalUnidades = ventas_por_hora.reduce((sum, row) => sum + Number(row.unidades || 0), 0);
+    const pedidosPerdidos = ventas_por_hora.reduce((sum, row) => sum + Number(row.pedidos_perdidos_estimados || 0), 0);
+    const valorPerdido = ventas_por_hora.reduce((sum, row) => sum + Number(row.valor_perdido_estimado || 0), 0);
+    const horaPico = [...ventas_por_hora].sort((a, b) => Number(b.ingresos || 0) - Number(a.ingresos || 0))[0] || null;
+    const ventas_perdidas_por_puesto = [...lostByPuestoMap.values()]
+      .filter((row) => Number(row.pedidos_perdidos_estimados || 0) > 0)
+      .sort((a, b) => Number(b.valor_perdido_estimado || 0) - Number(a.valor_perdido_estimado || 0));
+
+    res.json({
+      festival,
+      generado_en: new Date().toISOString(),
+      kpis: {
+        ingresos_total: totalIngresos,
+        pedidos_total: totalPedidos,
+        ticket_medio: totalPedidos > 0 ? totalIngresos / totalPedidos : 0,
+        unidades_vendidas: totalUnidades,
+        horas_con_ventas: ventas_por_hora.length,
+        hora_pico: horaPico?.etiqueta || null,
+        ingresos_hora_pico: horaPico?.ingresos || 0,
+        pedidos_perdidos_estimados: pedidosPerdidos,
+        valor_ventas_perdidas_estimado: valorPerdido,
+        horas_saturadas_estimadas: ventas_por_hora.filter((row) => Number(row.pedidos_perdidos_estimados || 0) > 0).length,
+        barras_analizadas: barras_eficientes.length
+      },
+      ventas_por_hora,
+      productos_top,
+      barras_eficientes,
+      ventas_perdidas_por_puesto,
+      metodologia_ventas_perdidas: 'Estimacion read-only: pedidos por hora frente al 85% de la capacidad teorica de servicio de cada puesto.'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/festivales', async (req, res) => {
   try {
     const [rows] = await db.query(

@@ -585,6 +585,82 @@ export const evaluarBotCompras = async (festivalId: number) => {
     return res.json();
 };
 
+export interface PostEventoInforme {
+    festival: {
+        id: number;
+        nombre: string;
+        fecha_inicio: string;
+        fecha_fin: string;
+        activo: boolean | number;
+    };
+    generado_en: string;
+    kpis: {
+        ingresos_total: number;
+        pedidos_total: number;
+        ticket_medio: number;
+        unidades_vendidas: number;
+        horas_con_ventas: number;
+        hora_pico: string | null;
+        ingresos_hora_pico: number;
+        pedidos_perdidos_estimados: number;
+        valor_ventas_perdidas_estimado: number;
+        horas_saturadas_estimadas: number;
+        barras_analizadas: number;
+    };
+    ventas_por_hora: Array<{
+        orden: string;
+        etiqueta: string;
+        pedidos: number;
+        ingresos: number;
+        unidades: number;
+        capacidad_hora: number;
+        pedidos_perdidos_estimados: number;
+        valor_perdido_estimado: number;
+    }>;
+    productos_top: Array<{
+        producto_id: number;
+        nombre: string;
+        puesto_nombre: string;
+        puesto_tipo: string;
+        unidades: number;
+        ingresos: number;
+        pedidos: number;
+    }>;
+    barras_eficientes: Array<{
+        puesto_id: number;
+        nombre: string;
+        tipo: string;
+        num_empleados: number;
+        capacidad_max: number;
+        tiempo_servicio_medio: number;
+        pedidos: number;
+        ingresos: number;
+        ticket_medio: number;
+        ingresos_por_empleado: number;
+        pedidos_por_empleado: number;
+        capacidad_hora: number;
+        eficiencia_pct: number;
+        pedidos_perdidos_estimados: number;
+        valor_perdido_estimado: number;
+        horas_saturadas: number;
+    }>;
+    ventas_perdidas_por_puesto: Array<{
+        puesto_id: number;
+        puesto_nombre: string;
+        tipo: string;
+        pedidos_perdidos_estimados: number;
+        valor_perdido_estimado: number;
+        horas_saturadas: number;
+    }>;
+    metodologia_ventas_perdidas: string;
+}
+
+export const getPostEventoInforme = async (festivalId: number): Promise<PostEventoInforme> => {
+    const res = await fetch(`${API_URL}/gestor/post-evento/informe?festival_id=${festivalId}`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al cargar el informe post-evento'));
+    return res.json();
+};
+
 export const aprobarDecision = async (id: number) => {
     const res = await fetch(`${API_URL}/gestor/decisiones/${id}/aprobar`, {
         method: 'POST',

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getModoAuto, setModoAuto } from '../api';
 import { toast } from 'sonner';
-import { Bot, Home, LayoutGrid, Tag, LogOut, Settings2, LayoutPanelLeft } from 'lucide-react';
+import { BarChart2, Bot, Home, LayoutGrid, Tag, LogOut, Settings2, LayoutPanelLeft } from 'lucide-react';
 
 import { WelcomeView }    from './gestor/WelcomeView';
 import { MainPanelView }  from './gestor/MainPanelView';
@@ -12,8 +12,9 @@ import { PromotionsView } from './gestor/PromotionsView';
 import { BotDashboardView } from './gestor/BotDashboardView';
 import { ConfigView }       from './gestor/ConfigView';
 import { SplitView }        from './gestor/SplitView';
+import { PostEventReportView } from './gestor/PostEventReportView';
 
-type View = 'welcome' | 'main' | 'stands' | 'promotions' | 'bot' | 'config' | 'split';
+type View = 'welcome' | 'main' | 'stands' | 'promotions' | 'bot' | 'report' | 'config' | 'split';
 
 const NAV_ITEMS: { id: View; icon: typeof Home; label: string }[] = [
   { id: 'split',      icon: LayoutPanelLeft, label: 'Mapa + Decisiones' },
@@ -21,6 +22,7 @@ const NAV_ITEMS: { id: View; icon: typeof Home; label: string }[] = [
   { id: 'stands',     icon: LayoutGrid,      label: 'Puestos'           },
   { id: 'promotions', icon: Tag,             label: 'Promociones'       },
   { id: 'bot',        icon: Bot,             label: 'Bot'               },
+  { id: 'report',     icon: BarChart2,       label: 'Informe'           },
   { id: 'config',     icon: Settings2,       label: 'Ajustes'           },
 ];
 
@@ -164,6 +166,10 @@ export function GestorScreen() {
               onToggleModo={handleToggleModo}
               navigate={navigate}
             />
+          )}
+
+          {view === 'report' && festivalId && (
+            <PostEventReportView festivalId={festivalId} festivalNombre={festivalNombre} />
           )}
 
           {view === 'config' && festivalId && (

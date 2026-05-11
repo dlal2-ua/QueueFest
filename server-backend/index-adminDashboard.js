@@ -69,11 +69,11 @@ const auth = (req, res, next) => {
  *   dt  → dim_tiempo   (JOIN requerido si periodo != 'todo')
  *   dp  → dim_puesto   (JOIN requerido si tipo_puesto está presente)
  */
-function buildFilters(query, { alias = 'fv', tiempoAlias = 'dt', puestoAlias = 'dp' } = {}) {
+function buildFilters(query, { alias = 'fv', tiempoAlias = 'dt', puestoAlias = 'dp', defaultPeriodo = 'hoy' } = {}) {
   const clauses = [];
   const params = [];
 
-  const periodo = query.periodo || 'hoy';
+  const periodo = query.periodo || defaultPeriodo;
   if (periodo === 'hoy') {
     clauses.push(`${tiempoAlias}.fecha = CURDATE()`);
   } else if (periodo === 'sem') {
@@ -751,6 +751,250 @@ app.get('/api/dashboard/clv', auth, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 app.get('/api/dashboard/prediccion', auth, async (req, res) => {
+  try {
+    const TOLERANCIA_ACIERTO_PCT = 20;
+    const predFilters = buildFilters(req.query, {
+      alias: 'fp',
+      tiempoAlias: 'dt',
+      puestoAlias: 'dp',
+      defaultPeriodo: 'todo'
+    });
+    const realFilters = buildFilters(req.query, {
+      alias: 'fv',
+      tiempoAlias: 'dt',
+      puestoAlias: 'dp',
+      defaultPeriodo: 'todo'
+    });
+
+    const historicoQuery = { ...req.query };
+    delete historicoQuery.festival_id;
+    const predHistFilters = buildFilters(historicoQuery, {
+      alias: 'fp',
+      tiempoAlias: 'dt',
+      puestoAlias: 'dp',
+      defaultPeriodo: 'todo'
+    });
+    const realHistFilters = buildFilters(historicoQuery, {
+      alias: 'fv',
+      tiempoAlias: 'dt',
+      puestoAlias: 'dp',
+      defaultPeriodo: 'todo'
+    });
+
+    const comparisonCte = (predClause, realClause) => `
+      WITH pred AS (
+        SELECT
+          fp.festival_key,
+          df.nombre AS festival_nombre,
+          fp.tiempo_key,
+          dt.fecha,
+          dt.hora,
+          fp.puesto_key,
+          SUM(fp.pedidos_predichos) AS pedidos_predichos,
+          SUM(fp.ingresos_predichos) AS ingresos_predichos,
+          AVG(fp.confianza_pct) AS confianza_pct
+        FROM fact_prediccion fp
+        JOIN dim_tiempo dt ON dt.tiempo_key = fp.tiempo_key
+        JOIN dim_festival df ON df.festival_key = fp.festival_key
+        LEFT JOIN dim_puesto dp ON dp.puesto_key = fp.puesto_key
+        ${predClause}
+        GROUP BY fp.festival_key, df.nombre, fp.tiempo_key, dt.fecha, dt.hora, fp.puesto_key
+      ),
+      actual AS (
+        SELECT
+          fv.festival_key,
+          fv.tiempo_key,
+          fv.puesto_key,
+          COUNT(DISTINCT fv.pedido_id) AS pedidos_real,
+          COALESCE(SUM(fv.importe_linea), 0) AS ingresos_real
+        FROM fact_ventas fv
+        JOIN dim_tiempo dt ON dt.tiempo_key = fv.tiempo_key
+        JOIN dim_puesto dp ON dp.puesto_key = fv.puesto_key
+        ${realClause}
+        GROUP BY fv.festival_key, fv.tiempo_key, fv.puesto_key
+      ),
+      comparativa AS (
+        SELECT
+          p.*,
+          COALESCE(r.pedidos_real, 0) AS pedidos_real,
+          COALESCE(r.ingresos_real, 0) AS ingresos_real,
+          CASE
+            WHEN TIMESTAMP(p.fecha, MAKETIME(p.hora, 0, 0)) <= NOW() THEN 1
+            ELSE 0
+          END AS evaluada,
+          CASE
+            WHEN p.pedidos_predichos = 0 AND COALESCE(r.pedidos_real, 0) = 0 THEN 0
+            WHEN p.pedidos_predichos = 0 THEN 100
+            ELSE ABS(COALESCE(r.pedidos_real, 0) - p.pedidos_predichos) * 100.0 / NULLIF(p.pedidos_predichos, 0)
+          END AS error_pedidos_pct,
+          CASE
+            WHEN p.ingresos_predichos = 0 AND COALESCE(r.ingresos_real, 0) = 0 THEN 0
+            WHEN p.ingresos_predichos = 0 THEN 100
+            ELSE ABS(COALESCE(r.ingresos_real, 0) - p.ingresos_predichos) * 100.0 / NULLIF(p.ingresos_predichos, 0)
+          END AS error_ingresos_pct
+        FROM pred p
+        LEFT JOIN actual r
+          ON r.festival_key = p.festival_key
+         AND r.tiempo_key = p.tiempo_key
+         AND (r.puesto_key <=> p.puesto_key)
+      )
+    `;
+
+    const cteParams = [...predFilters.params, ...realFilters.params];
+
+    const [[summary = {}]] = await db.query(`
+      ${comparisonCte(predFilters.clause, realFilters.clause)}
+      SELECT
+        COUNT(*) AS slots_prediccion,
+        COALESCE(SUM(evaluada), 0) AS predicciones_evaluadas,
+        COALESCE(SUM(CASE
+          WHEN evaluada = 1
+           AND error_pedidos_pct <= ?
+           AND error_ingresos_pct <= ? THEN 1 ELSE 0 END), 0) AS aciertos,
+        COALESCE(AVG(confianza_pct), 0) AS confianza_global_pct,
+        COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_pedidos_pct END), 0) AS desviacion_pedidos_pct,
+        COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_ingresos_pct END), 0) AS desviacion_ingresos_pct,
+        COALESCE(SUM(pedidos_predichos), 0) AS pedidos_predichos_total,
+        COALESCE(SUM(pedidos_real), 0) AS pedidos_real_total,
+        COALESCE(SUM(ingresos_predichos), 0) AS ingresos_predichos_total,
+        COALESCE(SUM(ingresos_real), 0) AS ingresos_real_total
+      FROM comparativa
+    `, [...cteParams, TOLERANCIA_ACIERTO_PCT, TOLERANCIA_ACIERTO_PCT]);
+
+    const [por_hora] = await db.query(`
+      ${comparisonCte(predFilters.clause, realFilters.clause)}
+      SELECT
+        hora,
+        COALESCE(SUM(pedidos_predichos), 0) AS pedidos_predichos,
+        COALESCE(SUM(pedidos_real), 0) AS pedidos_real,
+        COALESCE(SUM(ingresos_predichos), 0) AS ingresos_predichos,
+        COALESCE(SUM(ingresos_real), 0) AS ingresos_real,
+        COALESCE(AVG(confianza_pct), 0) AS confianza_pct,
+        COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_pedidos_pct END), 0) AS error_pedidos_pct,
+        COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_ingresos_pct END), 0) AS error_ingresos_pct,
+        COALESCE(SUM(evaluada), 0) AS predicciones_evaluadas,
+        COALESCE(SUM(CASE
+          WHEN evaluada = 1
+           AND error_pedidos_pct <= ?
+           AND error_ingresos_pct <= ? THEN 1 ELSE 0 END), 0) AS aciertos,
+        CASE
+          WHEN COALESCE(SUM(evaluada), 0) = 0 THEN 'pendiente'
+          WHEN COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_pedidos_pct END), 0) <= ?
+           AND COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_ingresos_pct END), 0) <= ? THEN 'cumpliendo'
+          WHEN COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_pedidos_pct END), 0) <= 35
+           AND COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_ingresos_pct END), 0) <= 35 THEN 'en_riesgo'
+          ELSE 'desviada'
+        END AS estado
+      FROM comparativa
+      GROUP BY hora
+      ORDER BY hora
+    `, [...cteParams, TOLERANCIA_ACIERTO_PCT, TOLERANCIA_ACIERTO_PCT, TOLERANCIA_ACIERTO_PCT, TOLERANCIA_ACIERTO_PCT]);
+
+    const [seguimiento] = await db.query(`
+      ${comparisonCte(predFilters.clause, realFilters.clause)}
+      SELECT
+        fecha,
+        hora,
+        CONCAT(DATE_FORMAT(fecha, '%d/%m'), ' ', LPAD(hora, 2, '0'), ':00') AS etiqueta,
+        COALESCE(SUM(pedidos_predichos), 0) AS pedidos_predichos,
+        COALESCE(SUM(pedidos_real), 0) AS pedidos_real,
+        COALESCE(SUM(ingresos_predichos), 0) AS ingresos_predichos,
+        COALESCE(SUM(ingresos_real), 0) AS ingresos_real,
+        COALESCE(AVG(confianza_pct), 0) AS confianza_pct,
+        COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_pedidos_pct END), 0) AS error_pedidos_pct,
+        COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_ingresos_pct END), 0) AS error_ingresos_pct,
+        COALESCE(SUM(evaluada), 0) AS predicciones_evaluadas,
+        COALESCE(SUM(CASE
+          WHEN evaluada = 1
+           AND error_pedidos_pct <= ?
+           AND error_ingresos_pct <= ? THEN 1 ELSE 0 END), 0) AS aciertos
+      FROM comparativa
+      GROUP BY fecha, hora
+      ORDER BY fecha ASC, hora ASC
+      LIMIT 72
+    `, [...cteParams, TOLERANCIA_ACIERTO_PCT, TOLERANCIA_ACIERTO_PCT]);
+
+    const histCteParams = [...predHistFilters.params, ...realHistFilters.params];
+    const [historico_festivales] = await db.query(`
+      ${comparisonCte(predHistFilters.clause, realHistFilters.clause)}
+      SELECT
+        festival_key AS festival_id,
+        festival_nombre,
+        COUNT(*) AS slots_prediccion,
+        COALESCE(SUM(evaluada), 0) AS predicciones_evaluadas,
+        COALESCE(SUM(CASE
+          WHEN evaluada = 1
+           AND error_pedidos_pct <= ?
+           AND error_ingresos_pct <= ? THEN 1 ELSE 0 END), 0) AS aciertos,
+        COALESCE(
+          SUM(CASE
+            WHEN evaluada = 1
+             AND error_pedidos_pct <= ?
+             AND error_ingresos_pct <= ? THEN 1 ELSE 0 END) * 100.0
+          / NULLIF(SUM(evaluada), 0), 0
+        ) AS precision_pct,
+        COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_pedidos_pct END), 0) AS error_medio_pedidos_pct,
+        COALESCE(AVG(CASE WHEN evaluada = 1 THEN error_ingresos_pct END), 0) AS error_medio_ingresos_pct,
+        COALESCE(SUM(pedidos_predichos), 0) AS pedidos_predichos,
+        COALESCE(SUM(pedidos_real), 0) AS pedidos_real,
+        COALESCE(SUM(ingresos_predichos), 0) AS ingresos_predichos,
+        COALESCE(SUM(ingresos_real), 0) AS ingresos_real
+      FROM comparativa
+      GROUP BY festival_key, festival_nombre
+      ORDER BY precision_pct DESC, predicciones_evaluadas DESC, festival_nombre
+    `, [...histCteParams, TOLERANCIA_ACIERTO_PCT, TOLERANCIA_ACIERTO_PCT, TOLERANCIA_ACIERTO_PCT, TOLERANCIA_ACIERTO_PCT]);
+
+    const [productos_top_predichos] = await db.query(`
+      SELECT dp.nombre,
+             COALESCE(SUM(fp.pedidos_predichos), 0) AS unidades_predichas
+      FROM fact_prediccion fp
+      JOIN dim_tiempo  dt ON dt.tiempo_key  = fp.tiempo_key
+      LEFT JOIN dim_puesto dp ON dp.puesto_key = fp.puesto_key
+      ${predFilters.clause}
+      GROUP BY fp.puesto_key, dp.nombre
+      ORDER BY unidades_predichas DESC
+      LIMIT 6
+    `, predFilters.params);
+
+    const pico = [...por_hora].sort((a, b) => Number(b.pedidos_predichos || 0) - Number(a.pedidos_predichos || 0))[0] || {};
+    const evaluadas = Number(summary.predicciones_evaluadas || 0);
+    const aciertos = Number(summary.aciertos || 0);
+    const precisionGlobal = evaluadas > 0 ? (aciertos * 100) / evaluadas : 0;
+    const desviacionMedia = (Number(summary.desviacion_pedidos_pct || 0) + Number(summary.desviacion_ingresos_pct || 0)) / 2;
+    const estadoCumplimiento = evaluadas === 0
+      ? 'pendiente'
+      : desviacionMedia <= TOLERANCIA_ACIERTO_PCT
+        ? 'cumpliendo'
+        : desviacionMedia <= 35
+          ? 'en_riesgo'
+          : 'desviada';
+
+    const kpis = {
+      hora_pico: pico.hora ?? null,
+      pedidos_hora_pico: pico.pedidos_predichos ?? null,
+      ingresos_hora_pico: pico.ingresos_predichos ?? null,
+      confianza_global_pct: summary.confianza_global_pct ?? 0,
+      precision_global_pct: precisionGlobal,
+      aciertos,
+      predicciones_evaluadas: evaluadas,
+      slots_prediccion: Number(summary.slots_prediccion || 0),
+      desviacion_pedidos_pct: summary.desviacion_pedidos_pct ?? 0,
+      desviacion_ingresos_pct: summary.desviacion_ingresos_pct ?? 0,
+      pedidos_predichos_total: summary.pedidos_predichos_total ?? 0,
+      pedidos_real_total: summary.pedidos_real_total ?? 0,
+      ingresos_predichos_total: summary.ingresos_predichos_total ?? 0,
+      ingresos_real_total: summary.ingresos_real_total ?? 0,
+      estado_cumplimiento: estadoCumplimiento,
+      tolerancia_acierto_pct: TOLERANCIA_ACIERTO_PCT
+    };
+
+    res.json({ kpis, por_hora, seguimiento, historico_festivales, productos_top_predichos });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/dashboard/prediccion-simple', auth, async (req, res) => {
   try {
     const festivalFilter = req.query.festival_id ? 'AND fp.festival_key = ?' : '';
     const tipoFilter = req.query.tipo_puesto ? 'AND dp.tipo = ?' : '';
