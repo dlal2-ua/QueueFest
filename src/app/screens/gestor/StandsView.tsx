@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { getMapaPuestos, getPedidosPuesto } from '../../api';
-import { ChevronLeft, BarChart2, MapPin, ChevronRight } from 'lucide-react';
+import { getMapaPuestos, getPedidosPuesto, getAllProductosFestival, getProductosPuesto, asignarProductoAPuesto, quitarProductoDePuesto, type ProductoFestival } from '../../api';
+import { ChevronLeft, BarChart2, MapPin, ChevronRight, Search, ShoppingCart } from 'lucide-react';
 import { formatWait } from '../../utils/formatTime';
+import { toast } from 'sonner';
 
 /* ─── Tipos ────────────────────────────────────────────────────────────── */
 interface PuestoMapa {
@@ -156,13 +157,18 @@ function ListaPuestos({ festivalId, onSelect }: ListaProps) {
 /* ─── Sub-vista 5B: Detalle del puesto ─────────────────────────────────── */
 interface DetalleProps {
   puesto: PuestoMapa;
+  festivalId: number;
   onBack: () => void;
   navigate: (v: string) => void;
 }
 
-function DetallePuesto({ puesto, onBack, navigate }: DetalleProps) {
+function DetallePuesto({ puesto, festivalId, onBack, navigate }: DetalleProps) {
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [todosLosProductos, setTodosLosProductos] = useState<ProductoFestival[]>([]);
+  const [productosDelPuesto, setProductosDelPuesto] = useState<number[]>([]);
+  const [buscador, setBuscador] = useState('');
+  const [loadingProductos, setLoadingProductos] = useState(true);
 
   useEffect(() => {
     setLoading(true);
@@ -171,6 +177,49 @@ function DetallePuesto({ puesto, onBack, navigate }: DetalleProps) {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [puesto.id]);
+
+  useEffect(() => {
+    const cargarProductos = async () => {
+      try {
+        setLoadingProductos(true);
+        const [todos, delPuesto] = await Promise.all([
+          getAllProductosFestival(festivalId),
+          getProductosPuesto(puesto.id)
+        ]);
+        setTodosLosProductos(todos);
+        setProductosDelPuesto(delPuesto);
+      } catch (err) {
+        console.error('Error al cargar productos:', err);
+        toast.error('Error al cargar productos');
+      } finally {
+        setLoadingProductos(false);
+      }
+    };
+    cargarProductos();
+  }, [festivalId, puesto.id]);
+
+  const handleToggleProducto = async (productoId: number) => {
+    const estaAsignado = productosDelPuesto.includes(productoId);
+
+    try {
+      if (estaAsignado) {
+        await quitarProductoDePuesto(puesto.id, productoId);
+        setProductosDelPuesto(prev => prev.filter(id => id !== productoId));
+        toast.success('Producto quitado del puesto');
+      } else {
+        await asignarProductoAPuesto(puesto.id, productoId);
+        setProductosDelPuesto(prev => [...prev, productoId]);
+        toast.success('Producto asignado al puesto');
+      }
+    } catch (err: any) {
+      console.error('Error al toggle producto:', err);
+      toast.error(err.message || 'Error al actualizar producto');
+    }
+  };
+
+  const productosFiltrados = todosLosProductos.filter(p =>
+    p.nombre.toLowerCase().includes(buscador.toLowerCase())
+  );
 
   const hoy = new Date().toDateString();
   const pedidosHoy = pedidos.filter(p => new Date(p.creado_en).toDateString() === hoy);
@@ -274,6 +323,97 @@ function DetallePuesto({ puesto, onBack, navigate }: DetalleProps) {
               </div>
             </div>
 
+            {/* GEST-015: Selección de productos */}
+            <div className="rounded-2xl p-4 border" style={{ backgroundColor: '#FFF3E4', borderColor: '#E8D5C0' }}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold flex items-center gap-2" style={{ color: '#2C1810' }}>
+                  <ShoppingCart className="w-4 h-4" style={{ color: '#A67C52' }} />
+                  Productos del puesto ({productosDelPuesto.length})
+                </h3>
+              </div>
+
+              {/* Buscador */}
+              <div className="mb-3 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#C8956C' }} />
+                <input
+                  type="text"
+                  value={buscador}
+                  onChange={(e) => setBuscador(e.target.value)}
+                  placeholder="Buscar producto..."
+                  className="w-full pl-10 pr-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: '#E8D5C0', color: '#2C1810' }}
+                />
+              </div>
+
+              {/* Cards de productos */}
+              {loadingProductos ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="h-24 rounded-xl animate-pulse" style={{ backgroundColor: '#E8D5C0' }} />
+                  ))}
+                </div>
+              ) : productosFiltrados.length === 0 ? (
+                <div className="text-center py-6 text-xs" style={{ color: '#C8956C' }}>
+                  {buscador ? 'No se encontraron productos' : 'No hay productos en el festival'}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 max-h-96 overflow-y-auto">
+                  {productosFiltrados.map(producto => {
+                    const estaSeleccionado = productosDelPuesto.includes(producto.id);
+                    return (
+                      <button
+                        key={producto.id}
+                        onClick={() => handleToggleProducto(producto.id)}
+                        className="relative rounded-xl border overflow-hidden transition-all active:scale-95"
+                        style={{
+                          borderColor: estaSeleccionado ? '#4CAF88' : '#E8D5C0',
+                          backgroundColor: '#FFF',
+                          borderWidth: estaSeleccionado ? '2px' : '1px'
+                        }}
+                      >
+                        {/* Capa verde si está seleccionado */}
+                        {estaSeleccionado && (
+                          <div
+                            className="absolute inset-0 pointer-events-none"
+                            style={{ backgroundColor: 'rgba(76, 175, 136, 0.15)' }}
+                          />
+                        )}
+
+                        {/* Foto del producto */}
+                        {producto.foto_url ? (
+                          <div className="h-20 bg-cover bg-center" style={{ backgroundImage: `url(${producto.foto_url})` }} />
+                        ) : (
+                          <div className="h-20 flex items-center justify-center" style={{ backgroundColor: '#E8D5C0' }}>
+                            <ShoppingCart className="w-6 h-6" style={{ color: '#C8956C' }} />
+                          </div>
+                        )}
+
+                        {/* Info del producto */}
+                        <div className="p-2">
+                          <p className="text-xs font-bold line-clamp-1" style={{ color: '#2C1810' }}>
+                            {producto.nombre}
+                          </p>
+                          <p className="text-xs font-semibold" style={{ color: '#A67C52' }}>
+                            {Number(producto.precio).toFixed(2)}€
+                          </p>
+                        </div>
+
+                        {/* Indicador de selección */}
+                        {estaSeleccionado && (
+                          <div
+                            className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                            style={{ backgroundColor: '#4CAF88' }}
+                          >
+                            ✓
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {/* Botón localizar */}
             <button
               onClick={() => navigate('map')}
@@ -301,7 +441,7 @@ export function StandsView({ festivalId, navigate }: Props) {
   const [seleccionado, setSeleccionado] = useState<PuestoMapa | null>(null);
 
   if (seleccionado) {
-    return <DetallePuesto puesto={seleccionado} onBack={() => setSeleccionado(null)} navigate={navigate} />;
+    return <DetallePuesto puesto={seleccionado} festivalId={festivalId} onBack={() => setSeleccionado(null)} navigate={navigate} />;
   }
   return <ListaPuestos festivalId={festivalId} onSelect={setSeleccionado} />;
 }

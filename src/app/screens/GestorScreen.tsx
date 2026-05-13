@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getModoAuto, setModoAuto } from '../api';
 import { toast } from 'sonner';
-import { Bot, Map, CheckSquare, Home, LayoutGrid, Tag, LogOut } from 'lucide-react';
+import { Bot, Map, CheckSquare, Home, LayoutGrid, Tag, LogOut, Package, Layers } from 'lucide-react';
 
 import { WelcomeView }    from './gestor/WelcomeView';
 import { MainPanelView }  from './gestor/MainPanelView';
@@ -12,8 +12,10 @@ import { DecisionsView }  from './gestor/DecisionsView';
 import { StandsView }     from './gestor/StandsView';
 import { PromotionsView } from './gestor/PromotionsView';
 import { BotDashboardView } from './gestor/BotDashboardView';
+import { ProvidersView } from './gestor/ProvidersView';
+import { MaterialsProductsView } from './gestor/MaterialsProductsView';
 
-type View = 'welcome' | 'main' | 'map' | 'decisions' | 'stands' | 'promotions' | 'bot';
+type View = 'welcome' | 'main' | 'map' | 'decisions' | 'stands' | 'promotions' | 'bot' | 'providers' | 'materials';
 
 const NAV_ITEMS: { id: View; icon: typeof Map; label: string }[] = [
   { id: 'map',        icon: Map,         label: 'Mapa'        },
@@ -21,6 +23,8 @@ const NAV_ITEMS: { id: View; icon: typeof Map; label: string }[] = [
   { id: 'main',       icon: Home,        label: 'Inicio'      },
   { id: 'stands',     icon: LayoutGrid,  label: 'Puestos'     },
   { id: 'promotions', icon: Tag,         label: 'Promociones' },
+  { id: 'providers',  icon: Package,     label: 'Proveedores' },
+  { id: 'materials',  icon: Layers,      label: 'Productos'   },
   { id: 'bot',        icon: Bot,         label: 'Bot'         },
 ];
 
@@ -171,6 +175,14 @@ export function GestorScreen() {
 
           {view === 'promotions' && festivalId && (
             <PromotionsView festivalId={festivalId} festivalNombre={festivalNombre} />
+          )}
+
+          {view === 'providers' && festivalId && (
+            <ProvidersView festivalId={festivalId} />
+          )}
+
+          {view === 'materials' && festivalId && (
+            <MaterialsProductsView festivalId={festivalId} />
           )}
 
           {view === 'bot' && festivalId && (

@@ -4605,4 +4605,356 @@ app.post('/api/monedero/canjear-royalties', auth, async (req, res) => {
   }
 });
 
+// ========================================
+// MATERIAS PRIMAS
+// ========================================
+
+// GET /api/materias-primas — Listar todas las materias primas
+app.get('/api/materias-primas', auth, async (req, res) => {
+  try {
+    const [materias] = await db.query(`
+      SELECT id, nombre, unidad_medida, stock_actual, stock_minimo, costo_unitario, activo
+      FROM materias_primas
+      WHERE activo = 1
+      ORDER BY nombre
+    `);
+    res.json(materias);
+  } catch (err) {
+    console.error('Error al obtener materias primas:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================
+// GEST-014: GESTIÓN DE PROVEEDORES
+// ========================================
+
+// GET /api/proveedores — Listar todos los proveedores
+app.get('/api/proveedores', auth, async (req, res) => {
+  try {
+    const [proveedores] = await db.query(`
+      SELECT
+        p.*,
+        COUNT(DISTINCT ms.materia_prima_id) as num_materias_primas
+      FROM proveedores p
+      LEFT JOIN movimientos_stock ms ON p.id = ms.proveedor_id
+      WHERE p.activo = 1
+      GROUP BY p.id
+      ORDER BY p.nombre
+    `);
+    res.json(proveedores);
+  } catch (err) {
+    console.error('Error al obtener proveedores:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/proveedores/:id — Obtener detalle de un proveedor con historial de materias
+app.get('/api/proveedores/:id', auth, async (req, res) => {
+  try {
+    const [proveedor] = await db.query(
+      'SELECT * FROM proveedores WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (proveedor.length === 0) {
+      return res.status(404).json({ error: 'Proveedor no encontrado' });
+    }
+
+    // Materias primas suministradas históricamente según movimientos_stock
+    const [materias] = await db.query(`
+      SELECT
+        mp.id as materia_prima_id,
+        mp.nombre as materia_prima_nombre,
+        mp.unidad_medida,
+        SUM(ms.cantidad) as cantidad_total,
+        MAX(ms.creado_en) as ultimo_movimiento
+      FROM movimientos_stock ms
+      JOIN materias_primas mp ON ms.materia_prima_id = mp.id
+      WHERE ms.proveedor_id = ?
+      GROUP BY mp.id, mp.nombre, mp.unidad_medida
+      ORDER BY mp.nombre
+    `, [req.params.id]);
+
+    res.json({ ...proveedor[0], materias_primas: materias });
+  } catch (err) {
+    console.error('Error al obtener proveedor:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/proveedores — Crear nuevo proveedor
+app.post('/api/proveedores', auth, async (req, res) => {
+  const { nombre, nif_cif, email, telefono, localidad, provincia, pais, direccion, codigo_postal, categoria, plazo_entrega_dias, notas } = req.body;
+
+  if (!nombre || !nif_cif) {
+    return res.status(400).json({ error: 'Nombre y NIF/CIF son obligatorios' });
+  }
+
+  try {
+    const [result] = await db.query(
+      `INSERT INTO proveedores
+       (nombre, nif_cif, email, telefono, localidad, provincia, pais, direccion, codigo_postal, categoria, plazo_entrega_dias, notas, activo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [nombre, nif_cif, email || null, telefono || null, localidad || null, provincia || null, pais || 'España',
+       direccion || null, codigo_postal || null, categoria || null, plazo_entrega_dias || 2, notas || null]
+    );
+
+    res.status(201).json({ id: result.insertId, message: 'Proveedor creado correctamente' });
+  } catch (err) {
+    console.error('Error al crear proveedor:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/proveedores/:id — Actualizar proveedor
+app.put('/api/proveedores/:id', auth, async (req, res) => {
+  const { nombre, nif_cif, email, telefono, localidad, provincia, pais, direccion, codigo_postal, categoria, plazo_entrega_dias, valoracion, notas } = req.body;
+
+  if (!nombre || !nif_cif) {
+    return res.status(400).json({ error: 'Nombre y NIF/CIF son obligatorios' });
+  }
+
+  try {
+    const [result] = await db.query(
+      `UPDATE proveedores
+       SET nombre = ?, nif_cif = ?, email = ?, telefono = ?, localidad = ?, provincia = ?,
+           pais = ?, direccion = ?, codigo_postal = ?, categoria = ?, plazo_entrega_dias = ?,
+           valoracion = ?, notas = ?
+       WHERE id = ?`,
+      [nombre, nif_cif, email || null, telefono || null, localidad || null, provincia || null,
+       pais || 'España', direccion || null, codigo_postal || null, categoria || null,
+       plazo_entrega_dias || 2, valoracion || null, notas || null, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Proveedor no encontrado' });
+    }
+
+    res.json({ message: 'Proveedor actualizado correctamente' });
+  } catch (err) {
+    console.error('Error al actualizar proveedor:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/proveedores/:id — Dar de baja proveedor (soft delete)
+app.delete('/api/proveedores/:id', auth, async (req, res) => {
+  try {
+    const [result] = await db.query(
+      'UPDATE proveedores SET activo = 0 WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Proveedor no encontrado' });
+    }
+
+    res.json({ message: 'Proveedor dado de baja correctamente' });
+  } catch (err) {
+    console.error('Error al dar de baja proveedor:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================
+// GEST-013: MATERIAS PRIMAS Y PRODUCTOS DEL FESTIVAL
+// ========================================
+
+// GET /api/festival/:id/materias-primas — Materias primas del festival
+// GET /api/festival/:id/productos — Productos del festival con su composición
+app.get('/api/festival/:id/productos', auth, async (req, res) => {
+  try {
+    const [productos] = await db.query(`
+      SELECT
+        p.id, p.nombre, p.descripcion, p.precio, p.foto_url, p.puesto_id,
+        pu.nombre as puesto_nombre
+      FROM productos p
+      JOIN puestos pu ON p.puesto_id = pu.id
+      WHERE pu.festival_id = ? AND p.activo = 1
+      ORDER BY p.nombre
+    `, [req.params.id]);
+    res.json(productos);
+  } catch (err) {
+    console.error('Error al obtener productos del festival:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/producto/:id/composicion — Obtener composición de un producto
+app.get('/api/producto/:id/composicion', auth, async (req, res) => {
+  try {
+    const [composicion] = await db.query(`
+      SELECT
+        pmp.id, pmp.producto_id, pmp.materia_prima_id, pmp.cantidad_por_unidad,
+        mp.nombre as materia_prima_nombre, mp.unidad_medida
+      FROM producto_materias_primas pmp
+      JOIN materias_primas mp ON pmp.materia_prima_id = mp.id
+      WHERE pmp.producto_id = ?
+      ORDER BY mp.nombre
+    `, [req.params.id]);
+    res.json(composicion);
+  } catch (err) {
+    console.error('Error al obtener composición del producto:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/festival/:id/productos — Crear producto con composición
+app.post('/api/festival/:id/productos', auth, async (req, res) => {
+  const { nombre, descripcion, precio, foto_url, puesto_id, composicion } = req.body;
+
+  if (!nombre || !precio || !puesto_id) {
+    return res.status(400).json({ error: 'Nombre, precio y puesto son obligatorios' });
+  }
+
+  if (!composicion || composicion.length === 0) {
+    return res.status(400).json({ error: 'El producto debe tener al menos una materia prima' });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Verificar que el puesto pertenece al festival
+    const [puesto] = await conn.query(
+      'SELECT id FROM puestos WHERE id = ? AND festival_id = ?',
+      [puesto_id, req.params.id]
+    );
+
+    if (puesto.length === 0) {
+      await conn.rollback();
+      conn.release();
+      return res.status(400).json({ error: 'El puesto no pertenece a este festival' });
+    }
+
+    // Verificar que todas las materias primas existen
+    const materiaIds = composicion.map(c => c.materia_prima_id);
+    const [materiasExistentes] = await conn.query(
+      `SELECT id FROM materias_primas WHERE id IN (?) AND activo = 1`,
+      [materiaIds]
+    );
+
+    if (materiasExistentes.length !== materiaIds.length) {
+      await conn.rollback();
+      conn.release();
+      return res.status(400).json({ error: 'Una o más materias primas no existen' });
+    }
+
+    // Crear producto
+    const [productoResult] = await conn.query(
+      `INSERT INTO productos (puesto_id, nombre, descripcion, precio, foto_url, activo)
+       VALUES (?, ?, ?, ?, ?, 1)`,
+      [puesto_id, nombre, descripcion || null, precio, foto_url || null]
+    );
+
+    const productoId = productoResult.insertId;
+
+    // Insertar composición
+    for (const comp of composicion) {
+      await conn.query(
+        `INSERT INTO producto_materias_primas (producto_id, materia_prima_id, cantidad_por_unidad)
+         VALUES (?, ?, ?)`,
+        [productoId, comp.materia_prima_id, comp.cantidad]
+      );
+    }
+
+    await conn.commit();
+    res.status(201).json({
+      message: 'Producto creado correctamente',
+      id: productoId
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Error al crear producto:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    conn.release();
+  }
+});
+
+// GET /api/puestos — Listar puestos (para selector de puesto al crear producto)
+app.get('/api/puestos', auth, async (req, res) => {
+  try {
+    const [puestos] = await db.query(`
+      SELECT id, nombre, tipo, festival_id
+      FROM puestos
+      WHERE activo = 1
+      ORDER BY nombre
+    `);
+    res.json(puestos);
+  } catch (err) {
+    console.error('Error al obtener puestos:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================
+// GEST-015: SELECCIÓN DE PRODUCTOS DEL PUESTO
+// ========================================
+
+// GET /api/festival/:festivalId/productos-all — Todos los productos del festival
+app.get('/api/festival/:festivalId/productos-all', auth, async (req, res) => {
+  try {
+    const [productos] = await db.query(`
+      SELECT p.id, p.nombre, p.descripcion, p.precio, p.foto_url, p.puesto_id
+      FROM productos p
+      JOIN puestos pu ON p.puesto_id = pu.id
+      WHERE pu.festival_id = ? AND p.activo = 1
+      ORDER BY p.nombre
+    `, [req.params.festivalId]);
+    res.json(productos);
+  } catch (err) {
+    console.error('Error al obtener todos los productos del festival:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/puesto/:puestoId/productos — IDs de productos asignados a un puesto
+app.get('/api/puesto/:puestoId/productos', auth, async (req, res) => {
+  try {
+    const [productos] = await db.query(`
+      SELECT p.id
+      FROM productos p
+      WHERE p.puesto_id = ? AND p.activo = 1
+    `, [req.params.puestoId]);
+    res.json(productos.map(p => p.id));
+  } catch (err) {
+    console.error('Error al obtener productos del puesto:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/puesto/:puestoId/productos/:productoId — Asignar producto al puesto
+app.post('/api/puesto/:puestoId/productos/:productoId', auth, async (req, res) => {
+  try {
+    // Actualizar el puesto_id del producto
+    await db.query(
+      'UPDATE productos SET puesto_id = ? WHERE id = ?',
+      [req.params.puestoId, req.params.productoId]
+    );
+
+    res.json({ message: 'Producto asignado al puesto correctamente' });
+  } catch (err) {
+    console.error('Error al asignar producto:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/puesto/:puestoId/productos/:productoId — Quitar producto del puesto
+app.delete('/api/puesto/:puestoId/productos/:productoId', auth, async (req, res) => {
+  try {
+    // Desasignar producto del puesto poniendo puesto_id a NULL
+    await db.query(
+      'UPDATE productos SET puesto_id = NULL WHERE id = ? AND puesto_id = ?',
+      [req.params.productoId, req.params.puestoId]
+    );
+
+    res.json({ message: 'Producto quitado del puesto correctamente' });
+  } catch (err) {
+    console.error('Error al quitar producto:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Nota: El app.listen() se ejecuta dentro del callback sshClient.on('ready')

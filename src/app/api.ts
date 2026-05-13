@@ -1298,3 +1298,190 @@ export const canjearRoyalties = async (puntos: number): Promise<{ message: strin
     if (!res.ok) throw new Error(await parseApiError(res, 'Error al canjear royalties'));
     return res.json();
 };
+
+// ==================== GEST-014: PROVEEDORES ====================
+
+export interface Proveedor {
+    id: number;
+    nombre: string;
+    nif_cif: string;
+    email?: string;
+    telefono?: string;
+    localidad?: string;
+    provincia?: string;
+    pais?: string;
+    direccion?: string;
+    codigo_postal?: string;
+    categoria?: string;
+    plazo_entrega_dias?: number;
+    valoracion?: number;
+    activo: number;
+    notas?: string;
+    num_materias_primas?: number;
+    materias_primas?: MateriaPrimaProveedor[];
+}
+
+export interface MateriaPrimaProveedor {
+    materia_prima_id: number;
+    materia_prima_nombre: string;
+    unidad_medida: string;
+    cantidad_total: number;
+    ultimo_movimiento: string;
+}
+
+export const getProveedores = async (): Promise<Proveedor[]> => {
+    const res = await fetch(`${API_URL}/proveedores`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener proveedores'));
+    return res.json();
+};
+
+export const getProveedor = async (id: number): Promise<Proveedor> => {
+    const res = await fetch(`${API_URL}/proveedores/${id}`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener proveedor'));
+    return res.json();
+};
+
+export const crearProveedor = async (data: Partial<Proveedor>): Promise<{ id: number; message: string }> => {
+    const res = await fetch(`${API_URL}/proveedores`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al crear proveedor'));
+    return res.json();
+};
+
+export const actualizarProveedor = async (id: number, data: Partial<Proveedor>): Promise<{ message: string }> => {
+    const res = await fetch(`${API_URL}/proveedores/${id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al actualizar proveedor'));
+    return res.json();
+};
+
+export const darDeBajaProveedor = async (id: number): Promise<{ message: string }> => {
+    const res = await fetch(`${API_URL}/proveedores/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al dar de baja proveedor'));
+    return res.json();
+};
+
+export interface MateriaPrima {
+    id: number;
+    nombre: string;
+    unidad_medida: string;
+    stock_actual: number;
+    stock_minimo: number;
+    costo_unitario: number;
+    activo: number;
+}
+
+export const getMateriasPrimas = async (): Promise<MateriaPrima[]> => {
+    const res = await fetch(`${API_URL}/materias-primas`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener materias primas'));
+    return res.json();
+};
+
+// ==================== GEST-013: MATERIAS PRIMAS Y PRODUCTOS DEL FESTIVAL ====================
+
+export interface FestivalProducto {
+    id: number;
+    nombre: string;
+    descripcion?: string;
+    precio: number;
+    foto_url?: string;
+    puesto_id: number;
+    puesto_nombre: string;
+}
+
+export interface ProductoComposicion {
+    id: number;
+    producto_id: number;
+    materia_prima_id: number;
+    cantidad_por_unidad: number;
+    materia_prima_nombre: string;
+    unidad_medida: string;
+}
+
+export interface Puesto {
+    id: number;
+    nombre: string;
+    tipo: string;
+}
+
+export const getFestivalProductos = async (festivalId: number): Promise<FestivalProducto[]> => {
+    const res = await fetch(`${API_URL}/festival/${festivalId}/productos`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener productos del festival'));
+    return res.json();
+};
+
+export const getProductoComposicion = async (productoId: number): Promise<ProductoComposicion[]> => {
+    const res = await fetch(`${API_URL}/producto/${productoId}/composicion`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener composición del producto'));
+    return res.json();
+};
+
+export const createProductoWithComposition = async (
+    festivalId: number,
+    data: {
+        nombre: string;
+        descripcion?: string;
+        precio: number;
+        foto_url?: string;
+        puesto_id: number;
+        composicion: Array<{ materia_prima_id: number; cantidad: number }>;
+    }
+): Promise<{ message: string; id: number }> => {
+    const res = await fetch(`${API_URL}/festival/${festivalId}/productos`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al crear producto'));
+    return res.json();
+};
+
+// ==================== GEST-015: SELECCIÓN DE PRODUCTOS DEL PUESTO ====================
+
+export interface ProductoFestival {
+    id: number;
+    nombre: string;
+    descripcion?: string;
+    precio: number;
+    foto_url?: string;
+    puesto_id: number;
+}
+
+export const getAllProductosFestival = async (festivalId: number): Promise<ProductoFestival[]> => {
+    const res = await fetch(`${API_URL}/festival/${festivalId}/productos-all`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener productos del festival'));
+    return res.json();
+};
+
+export const getProductosPuesto = async (puestoId: number): Promise<number[]> => {
+    const res = await fetch(`${API_URL}/puesto/${puestoId}/productos`, { headers: headers() });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al obtener productos del puesto'));
+    return res.json();
+};
+
+export const asignarProductoAPuesto = async (puestoId: number, productoId: number): Promise<{ message: string }> => {
+    const res = await fetch(`${API_URL}/puesto/${puestoId}/productos/${productoId}`, {
+        method: 'POST',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al asignar producto'));
+    return res.json();
+};
+
+export const quitarProductoDePuesto = async (puestoId: number, productoId: number): Promise<{ message: string }> => {
+    const res = await fetch(`${API_URL}/puesto/${puestoId}/productos/${productoId}`, {
+        method: 'DELETE',
+        headers: headers()
+    });
+    if (!res.ok) throw new Error(await parseApiError(res, 'Error al quitar producto'));
+    return res.json();
+};
