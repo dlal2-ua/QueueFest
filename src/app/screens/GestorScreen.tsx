@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getModoAuto, setModoAuto } from '../api';
 import { toast } from 'sonner';
-import { BarChart2, Bot, Home, LayoutGrid, Tag, LogOut, Settings2, LayoutPanelLeft } from 'lucide-react';
+import { BarChart2, Bot, Map, CheckSquare, Home, LayoutGrid, Tag, LogOut, Settings2, LayoutPanelLeft, Package, Layers } from 'lucide-react';
 
 import { WelcomeView }    from './gestor/WelcomeView';
 import { MainPanelView }  from './gestor/MainPanelView';
@@ -13,14 +13,18 @@ import { BotDashboardView } from './gestor/BotDashboardView';
 import { ConfigView }       from './gestor/ConfigView';
 import { SplitView }        from './gestor/SplitView';
 import { PostEventReportView } from './gestor/PostEventReportView';
+import { ProvidersView } from './gestor/ProvidersView';
+import { MaterialsProductsView } from './gestor/MaterialsProductsView';
 
-type View = 'welcome' | 'main' | 'stands' | 'promotions' | 'bot' | 'report' | 'config' | 'split';
+type View = 'welcome' | 'main' | 'stands' | 'promotions' | 'bot' | 'report' | 'config' | 'split' | 'providers' | 'materials';
 
 const NAV_ITEMS: { id: View; icon: typeof Home; label: string }[] = [
   { id: 'split',      icon: LayoutPanelLeft, label: 'Mapa + Decisiones' },
   { id: 'main',       icon: Home,            label: 'Inicio'            },
   { id: 'stands',     icon: LayoutGrid,      label: 'Puestos'           },
   { id: 'promotions', icon: Tag,             label: 'Promociones'       },
+  { id: 'providers',  icon: Package,         label: 'Proveedores'       },
+  { id: 'materials',  icon: Layers,          label: 'Productos'         },
   { id: 'bot',        icon: Bot,             label: 'Bot'               },
   { id: 'report',     icon: BarChart2,       label: 'Informe'           },
   { id: 'config',     icon: Settings2,       label: 'Ajustes'           },
@@ -156,6 +160,14 @@ export function GestorScreen() {
 
           {view === 'promotions' && festivalId && (
             <PromotionsView festivalId={festivalId} festivalNombre={festivalNombre} />
+          )}
+
+          {view === 'providers' && festivalId && (
+            <ProvidersView festivalId={festivalId} />
+          )}
+
+          {view === 'materials' && festivalId && (
+            <MaterialsProductsView festivalId={festivalId} />
           )}
 
           {view === 'bot' && festivalId && (
